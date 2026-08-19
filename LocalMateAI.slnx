@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="LocalMateAI.API/LocalMateAI.API.csproj" />
+  <Project Path="LocalMateAI.Application/LocalMateAI.Application.csproj" />
+  <Project Path="LocalMateAI.Domain/LocalMateAI.Domain.csproj" />
+</Solution>
