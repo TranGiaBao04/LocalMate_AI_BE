@@ -162,31 +162,21 @@ LocalMateAI/
 |---|---|
 | [.NET 10 SDK](https://dotnet.microsoft.com/download) | Bắt buộc — kiểm tra bằng `dotnet --version` |
 | [Visual Studio 2026](https://visualstudio.microsoft.com/) hoặc VS Code | IDE để mở solution |
-| **PostgreSQL 17.11** (bắt buộc đúng version 17.x) | Cài native, xem hướng dẫn bên dưới |
-| **PostGIS 3.5.6** (bắt buộc đúng version 3.5.x) | Cài kèm PostgreSQL qua Stack Builder |
+| Docker Desktop | Chạy PostgreSQL 17 + PostGIS 3.5 thống nhất qua `compose.yaml` |
 | [Git](https://git-scm.com/) | Quản lý version |
-| EF Core CLI tool | Xem hướng dẫn cài ở mục 5.4 — **không tự có sẵn**, phải cài riêng |
+| EF Core CLI tool | Khôi phục bằng local tool manifest ở mục 5.4 |
 
-> **Cả nhóm bắt buộc dùng đúng cùng 1 version PostgreSQL/PostGIS** để tránh lệch hành vi giữa các máy (khác version dễ gây lỗi khó debug khi chạy migration hoặc query dữ liệu địa lý). Không tự ý cài bản mới hơn (ví dụ PostgreSQL 18) dù đó là bản mới nhất — lý do chọn 17 thay vì 18 là để đảm bảo tương thích ổn định với các managed database provider (Supabase, Neon, Railway...) lúc deploy sau này, vì một số provider tại thời điểm hiện tại vẫn chưa hỗ trợ đầy đủ PostgreSQL 18.
+> Team dùng Docker để thống nhất PostgreSQL 17 + PostGIS 3.5. Native PostgreSQL 18 trên máy cá nhân không dùng làm database phát triển của dự án.
 
-**Hướng dẫn cài PostgreSQL 17.11 + PostGIS 3.5.6 trên Windows:**
+**Khởi tạo database bằng Docker:**
 
-1. Tải installer tại [EnterpriseDB Downloads](https://www.enterprisedb.com/downloads/postgres-postgresql-downloads) — chọn đúng **Windows x86-64, version 17.11**.
-2. Chạy installer, trong quá trình cài tick chọn cài kèm **Stack Builder**.
-3. Đặt password cho user `postgres` — **ghi nhớ lại**, dùng cho connection string ở bước 5.5. Giữ port mặc định `5432`.
-4. Sau khi cài xong, Stack Builder tự mở (hoặc mở thủ công từ Start Menu) → chọn instance PostgreSQL 17 vừa cài → mục **Spatial Extensions** → chọn **PostGIS Bundle 3.5.x** → cài.
-5. Kiểm tra lại đúng version đã cài — mở `psql` hoặc pgAdmin, chạy:
-   ```sql
-   SELECT version();
-   SELECT PostGIS_version();
+1. Sao chép `.env.example` thành `.env`, thay `POSTGRES_PASSWORD` bằng mật khẩu local riêng.
+2. Chạy `docker compose up -d database`. Container dùng image `postgis/postgis:17-3.5`, expose cổng host `5433` mặc định để không xung đột PostgreSQL native ở `5432`.
+3. Đợi healthcheck thành công, rồi kiểm tra:
+   ```bash
+   docker compose exec database psql -U localmate -d localmateai -c "SELECT version(); SELECT PostGIS_version();"
    ```
-   Kết quả phải hiển thị đúng `17.x` và `3.5.x`. Nếu lệch version, gỡ cài lại đúng bản trước khi tiếp tục.
-6. Tạo database cho project và bật extension PostGIS:
-   ```sql
-   CREATE DATABASE localmateai;
-   \c localmateai
-   CREATE EXTENSION postgis;
-   ```
+4. Compose mount script khởi tạo `docker/postgres/init/01-enable-postgis.sql`; PostGIS được bật khi volume database mới được tạo. Không commit `.env` hoặc mật khẩu local.
 
 ### 5.2. Clone repository
 
@@ -204,15 +194,15 @@ Lệnh này tự động tải toàn bộ NuGet package đã khai báo trong cá
 
 ### 5.4. Cài EF Core CLI tool (bắt buộc, riêng cho từng máy)
 
-Đây là công cụ dòng lệnh dùng để chạy migration — **không nằm trong package của project**, nên mỗi thành viên phải tự cài 1 lần trên máy mình, kể cả khi đã `dotnet restore` xong:
+Đây là công cụ dòng lệnh dùng để chạy migration. Project pin version trong local tool manifest để cả nhóm không dùng nhầm major version:
 
 ```bash
-dotnet tool install --global dotnet-ef
+dotnet tool restore
 ```
 
 Kiểm tra cài thành công:
 ```bash
-dotnet ef --version
+dotnet tool run dotnet-ef --version
 ```
 
 ### 5.5. Cấu hình connection string bằng User Secrets
@@ -221,15 +211,14 @@ dotnet ef --version
 
 ```bash
 cd LocalMateAI.API
-dotnet user-secrets init
-dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Host=localhost;Database=localmateai;Username=postgres;Password=<mật_khẩu_của_bạn>"
+dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Host=localhost;Port=5433;Database=localmateai;Username=localmate;Password=<mật_khẩu_.env>"
 ```
 
 ### 5.6. Chạy migration để tạo database
 
 ```bash
-dotnet ef migrations add InitialCreate --project LocalMateAI.Application --startup-project LocalMateAI.API
-dotnet ef database update --project LocalMateAI.Application --startup-project LocalMateAI.API
+dotnet tool run dotnet-ef migrations add <MigrationName> --project LocalMateAI.Application --startup-project LocalMateAI.API --context AppDbContext
+dotnet tool run dotnet-ef database update --project LocalMateAI.Application --startup-project LocalMateAI.API --context AppDbContext
 ```
 
 > `--project` chỉ định project chứa `AppDbContext` (`LocalMateAI.Application`), `--startup-project` chỉ định project chạy được (`LocalMateAI.API`) — cần khai báo rõ vì `AppDbContext` không nằm cùng project với `Program.cs`.
@@ -245,7 +234,7 @@ dotnet run
 
 Hoặc mở `LocalMateAI.sln` bằng Visual Studio, chọn `LocalMateAI.API` làm Startup Project, nhấn `F5`.
 
-Nếu bật OpenAPI/Swagger lúc tạo project, truy cập `https://localhost:<port>/swagger` để xem và test danh sách API.
+Trong môi trường Development, truy cập `https://localhost:7144/swagger` để xem OpenAPI và kiểm thử endpoint.
 
 ### 5.8. Quy ước làm việc nhóm (bổ sung khi nhóm thống nhất)
 
@@ -253,7 +242,7 @@ Nếu bật OpenAPI/Swagger lúc tạo project, truy cập `https://localhost:<p
 - Không commit trực tiếp `appsettings.Development.json` nếu chứa secret — dùng User Secrets như hướng dẫn ở mục 5.5.
 - Mỗi khi thêm/sửa Entity, nhớ tạo migration mới và **commit file migration cùng lúc với thay đổi code**, để cả nhóm đồng bộ schema:
   ```bash
-  dotnet ef migrations add <TênMôTảThayĐổi> --project LocalMateAI.Application --startup-project LocalMateAI.API
+  dotnet tool run dotnet-ef migrations add <TênMôTảThayĐổi> --project LocalMateAI.Application --startup-project LocalMateAI.API --context AppDbContext
   ```
 
 ---

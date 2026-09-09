@@ -1,0 +1,14 @@
+# Build output
+**/[Bb]in/
+**/[Oo]bj/
+
+# IDE and local user settings
+.vs/
+.idea/
+*.user
+*.suo
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
