@@ -1,5 +1,9 @@
 using LocalMateAI.API.Middlewares;
+using LocalMateAI.API.Security;
+using LocalMateAI.Application.Interfaces;
 using LocalMateAI.Application.Persistence;
+using LocalMateAI.Application.Services;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 
@@ -28,6 +32,13 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+builder.Services.Configure<PasswordHasherOptions>(options =>
+{
+    options.CompatibilityMode = PasswordHasherCompatibilityMode.IdentityV3;
+    options.IterationCount = 220_000;
+});
+builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IPasswordHashService, AspNetCorePasswordHashService>();
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connectionString, npgsqlOptions => npgsqlOptions.UseNetTopologySuite()));
 builder.Services.AddCors(options =>
