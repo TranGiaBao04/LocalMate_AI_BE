@@ -168,6 +168,26 @@ LocalMateAI/
 
 > Team dùng Docker để thống nhất PostgreSQL 17 + PostGIS 3.5. Native PostgreSQL 18 trên máy cá nhân không dùng làm database phát triển của dự án.
 
+**Luồng kết nối Database (Docker):**
+
+```mermaid
+flowchart LR
+    A[Docker Desktop] --> B["Container PostgreSQL 17 + PostGIS"]
+    B --> C["Port localhost:5433"]
+    C --> D["ASP.NET Core API"]
+    D --> E["EF Core / AppDbContext"]
+    E --> F[Migration]
+    F --> B
+```
+
+Giải thích từng bước:
+1. **Docker Desktop** chạy container theo `compose.yaml` — mỗi thành viên chạy đúng 1 image `postgis/postgis:17-3.5`, không phụ thuộc PostgreSQL cài native trên máy.
+2. **Container PostgreSQL 17 + PostGIS** là database thật, dữ liệu lưu trong Docker volume, độc lập với hệ điều hành host.
+3. Container expose ra **`localhost:5433`** (không phải `5432` mặc định) để không xung đột nếu máy đã có PostgreSQL native cài sẵn.
+4. **ASP.NET Core API** (`LocalMateAI.API`) đọc connection string trỏ tới `localhost:5433` từ User Secrets (mục 5.5) để kết nối.
+5. **EF Core / `AppDbContext`** (nằm ở `LocalMateAI.Application`) là lớp trung gian dịch Entity C# ↔ bảng SQL trong container.
+6. Mỗi khi Entity thay đổi, chạy **Migration** (`dotnet tool run dotnet-ef migrations add ...` — mục 5.6) để sinh script cập nhật schema, rồi `database update` áp ngược lại vào chính container ở bước 2 — khép kín vòng lặp, không ai cần cài Postgres native để dev.
+
 **Khởi tạo database bằng Docker:**
 
 1. Sao chép `.env.example` thành `.env`, thay `POSTGRES_PASSWORD` bằng mật khẩu local riêng.
