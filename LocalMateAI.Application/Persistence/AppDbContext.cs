@@ -6,12 +6,15 @@ namespace LocalMateAI.Application.Persistence;
 
 public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
+    public DbSet<User> Users => Set<User>();
     public DbSet<MetroStation> MetroStations => Set<MetroStation>();
     public DbSet<Place> Places => Set<Place>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
+
+        base.OnModelCreating(modelBuilder);
     }
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
