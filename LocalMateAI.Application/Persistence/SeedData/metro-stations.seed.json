@@ -1,0 +1,16 @@
+[
+  { "Order": 1, "Name": "Bến Thành", "Latitude": 10.770530406408453, "Longitude": 106.6967477810222 },
+  { "Order": 2, "Name": "Nhà hát Thành phố", "Latitude": 10.7747136816189, "Longitude": 106.70229714368662 },
+  { "Order": 3, "Name": "Ba Son", "Latitude": 10.781936794321268, "Longitude": 106.7079500942345 },
+  { "Order": 4, "Name": "Công viên Văn Thánh", "Latitude": 10.796646507156005, "Longitude": 106.71622323475307 },
+  { "Order": 5, "Name": "Tân Cảng", "Latitude": 10.79878476791469, "Longitude": 106.7232292778966 },
+  { "Order": 6, "Name": "Thảo Điền", "Latitude": 10.800553877167836, "Longitude": 106.73371556752899 },
+  { "Order": 7, "Name": "An Phú", "Latitude": 10.802380833339674, "Longitude": 106.74220860958152 },
+  { "Order": 8, "Name": "Rạch Chiếc", "Latitude": 10.808756024281022, "Longitude": 106.75587227307508 },
+  { "Order": 9, "Name": "Phước Long", "Latitude": 10.821581026322251, "Longitude": 106.75870286697635 },
+  { "Order": 10, "Name": "Bình Thái", "Latitude": 10.832850475335981, "Longitude": 106.76428557704892 },
+  { "Order": 11, "Name": "Thủ Đức", "Latitude": 10.846589369765686, "Longitude": 106.77193379026605 },
+  { "Order": 12, "Name": "Khu Công nghệ cao", "Latitude": 10.859010977686417, "Longitude": 106.78897071155798 },
+  { "Order": 13, "Name": "Đại học Quốc gia", "Latitude": 10.86637902172023, "Longitude": 106.80125979984709 },
+  { "Order": 14, "Name": "Bến xe Suối Tiên", "Latitude": 10.879584928772724, "Longitude": 106.81430623142462 }
+]
