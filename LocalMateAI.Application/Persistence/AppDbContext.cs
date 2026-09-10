@@ -1,4 +1,3 @@
-using LocalMateAI.Application.Persistence.Configurations;
 using LocalMateAI.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -10,7 +9,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.ApplyConfiguration(new UserConfiguration());
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
 
         base.OnModelCreating(modelBuilder);
     }

@@ -4,7 +4,7 @@ namespace LocalMateAI.Domain.Entities;
 
 public sealed class User
 {
-    public long Id { get; set; }
+    public Guid Id { get; set; } = Guid.NewGuid();
 
     public string FullName { get; set; } = string.Empty;
 
