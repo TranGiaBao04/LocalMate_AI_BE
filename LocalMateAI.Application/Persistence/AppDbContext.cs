@@ -1,3 +1,4 @@
+using LocalMateAI.Domain.Common;
 using LocalMateAI.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -6,6 +7,8 @@ namespace LocalMateAI.Application.Persistence;
 public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
     public DbSet<User> Users => Set<User>();
+    public DbSet<MetroStation> MetroStations => Set<MetroStation>();
+    public DbSet<Place> Places => Set<Place>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -16,7 +19,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
-        ApplyUserAudit();
+        ApplyAudit();
 
         return base.SaveChanges(acceptAllChangesOnSuccess);
     }
@@ -25,16 +28,16 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         bool acceptAllChangesOnSuccess,
         CancellationToken cancellationToken = default)
     {
-        ApplyUserAudit();
+        ApplyAudit();
 
         return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
     }
 
-    private void ApplyUserAudit()
+    private void ApplyAudit()
     {
         var now = DateTime.UtcNow;
 
-        foreach (var entry in ChangeTracker.Entries<User>())
+        foreach (var entry in ChangeTracker.Entries<BaseEntity>())
         {
             if (entry.State == EntityState.Added)
             {
@@ -43,7 +46,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             }
             else if (entry.State == EntityState.Modified)
             {
-                entry.Property(user => user.CreatedAt).IsModified = false;
+                entry.Property(entity => entity.CreatedAt).IsModified = false;
                 entry.Entity.UpdatedAt = now;
             }
         }
