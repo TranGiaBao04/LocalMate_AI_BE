@@ -17,8 +17,8 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
         builder.HasKey(user => user.Id);
 
         builder.Property(user => user.Id)
-            .HasColumnType("bigint")
-            .UseIdentityByDefaultColumn();
+            .HasColumnType("uuid")
+            .ValueGeneratedNever();
 
         builder.Property(user => user.FullName)
             .HasColumnType("character varying(200)")
