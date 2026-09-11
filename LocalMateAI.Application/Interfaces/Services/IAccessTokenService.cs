@@ -6,4 +6,6 @@ namespace LocalMateAI.Application.Interfaces.Services;
 public interface IAccessTokenService
 {
     AccessTokenResult CreateAccessToken(User user);
+
+    AccessTokenResult CreateDemoAccessToken(Guid sessionId);
 }

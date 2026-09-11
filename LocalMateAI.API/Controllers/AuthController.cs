@@ -51,6 +51,14 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
         };
     }
 
+    [HttpPost("demo")]
+    [ProducesResponseType<DemoSessionResponse>(StatusCodes.Status200OK)]
+    public ActionResult<DemoSessionResponse> CreateDemoSession()
+    {
+        var response = authService.CreateDemoSession();
+        return Ok(response);
+    }
+
     private ObjectResult CreateValidationProblem(
         IReadOnlyDictionary<string, string[]> validationErrors)
     {
