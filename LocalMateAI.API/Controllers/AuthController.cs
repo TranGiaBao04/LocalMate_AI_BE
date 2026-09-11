@@ -30,6 +30,27 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
         };
     }
 
+    [HttpPost("login")]
+    [ProducesResponseType<LoginResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<LoginResponse>> LoginAsync(
+        [FromBody] LoginRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await authService.LoginAsync(request, cancellationToken);
+
+        return result.Status switch
+        {
+            LoginResultStatus.Success => Ok(result.Response),
+            LoginResultStatus.ValidationFailed =>
+                CreateValidationProblem(result.ValidationErrors!),
+            LoginResultStatus.InvalidCredentials =>
+                Unauthorized(CreateInvalidCredentialsProblem()),
+            _ => throw new InvalidOperationException("Unsupported login result status.")
+        };
+    }
+
     private ObjectResult CreateValidationProblem(
         IReadOnlyDictionary<string, string[]> validationErrors)
     {
@@ -58,6 +79,21 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
         };
 
         problem.Extensions["code"] = "duplicate_email";
+        return problem;
+    }
+
+    private ProblemDetails CreateInvalidCredentialsProblem()
+    {
+        var problem = new ProblemDetails
+        {
+            Status = StatusCodes.Status401Unauthorized,
+            Title = "Authentication failed.",
+            Detail = "Email hoặc mật khẩu không chính xác.",
+            Type = "https://httpstatuses.com/401",
+            Instance = HttpContext.Request.Path
+        };
+
+        problem.Extensions["code"] = "invalid_credentials";
         return problem;
     }
 }
