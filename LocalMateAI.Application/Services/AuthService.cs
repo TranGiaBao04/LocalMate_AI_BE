@@ -9,7 +9,8 @@ namespace LocalMateAI.Application.Services;
 
 public sealed class AuthService(
     IUserRepository userRepository,
-    IPasswordHashService passwordHashService) : IAuthService
+    IPasswordHashService passwordHashService,
+    IAccessTokenService accessTokenService) : IAuthService
 {
     private const int MaximumFullNameLength = 200;
     private const int MaximumEmailLength = 254;
@@ -65,6 +66,56 @@ public sealed class AuthService(
         return RegisterResult.Succeeded(response);
     }
 
+    public async Task<LoginResult> LoginAsync(
+        LoginRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var email = request.Email?.Trim().ToLowerInvariant() ?? string.Empty;
+        var password = request.Password ?? string.Empty;
+
+        var validationErrors = ValidateLogin(email, password);
+        if (validationErrors.Count > 0)
+        {
+            return LoginResult.ValidationFailed(validationErrors);
+        }
+
+        var user = await userRepository.GetByEmailAsync(email, cancellationToken);
+        if (user is null)
+        {
+            _ = passwordHashService.HashPassword(new User(), password);
+            return LoginResult.InvalidCredentials();
+        }
+
+        var verificationResult = passwordHashService.VerifyHashedPassword(
+            user,
+            user.PasswordHash,
+            password);
+
+        if (verificationResult == PasswordHashVerificationResult.Failed)
+        {
+            return LoginResult.InvalidCredentials();
+        }
+
+        if (verificationResult == PasswordHashVerificationResult.SuccessRehashNeeded)
+        {
+            var updatedPasswordHash = passwordHashService.HashPassword(user, password);
+            await userRepository.UpdatePasswordHashAsync(
+                user,
+                updatedPasswordHash,
+                cancellationToken);
+        }
+
+        var accessToken = accessTokenService.CreateAccessToken(user);
+        var response = new LoginResponse(
+            accessToken.AccessToken,
+            "Bearer",
+            accessToken.ExpiresAt);
+
+        return LoginResult.Succeeded(response);
+    }
+
     private static Dictionary<string, string[]> Validate(
         string fullName,
         string email,
@@ -109,6 +160,31 @@ public sealed class AuthService(
         else if (string.IsNullOrWhiteSpace(password))
         {
             errors["password"] = ["Password must contain at least one non-whitespace character."];
+        }
+
+        return errors;
+    }
+
+    private static Dictionary<string, string[]> ValidateLogin(string email, string password)
+    {
+        var errors = new Dictionary<string, string[]>(StringComparer.Ordinal);
+
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            errors["email"] = ["Email is required."];
+        }
+        else if (email.Length > MaximumEmailLength)
+        {
+            errors["email"] = [$"Email must not exceed {MaximumEmailLength} characters."];
+        }
+        else if (!EmailValidator.IsValid(email))
+        {
+            errors["email"] = ["Email format is invalid."];
+        }
+
+        if (string.IsNullOrEmpty(password))
+        {
+            errors["password"] = ["Password is required."];
         }
 
         return errors;

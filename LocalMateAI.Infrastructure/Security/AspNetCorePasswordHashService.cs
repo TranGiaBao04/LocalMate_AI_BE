@@ -3,7 +3,7 @@ using LocalMateAI.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
 
-namespace LocalMateAI.API.Security;
+namespace LocalMateAI.Infrastructure.Security;
 
 public sealed class AspNetCorePasswordHashService(
     IOptions<PasswordHasherOptions> options) : IPasswordHashService

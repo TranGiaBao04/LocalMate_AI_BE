@@ -13,6 +13,9 @@ public sealed class UserRepository(AppDbContext dbContext) : IUserRepository
     public Task<bool> EmailExistsAsync(string email, CancellationToken cancellationToken = default) =>
         dbContext.Users.AsNoTracking().AnyAsync(user => user.Email == email, cancellationToken);
 
+    public Task<User?> GetByEmailAsync(string email, CancellationToken cancellationToken = default) =>
+        dbContext.Users.SingleOrDefaultAsync(user => user.Email == email, cancellationToken);
+
     public async Task<bool> TryAddAsync(User user, CancellationToken cancellationToken = default)
     {
         dbContext.Users.Add(user);
@@ -27,6 +30,15 @@ public sealed class UserRepository(AppDbContext dbContext) : IUserRepository
             dbContext.Entry(user).State = EntityState.Detached;
             return false;
         }
+    }
+
+    public async Task UpdatePasswordHashAsync(
+        User user,
+        string passwordHash,
+        CancellationToken cancellationToken = default)
+    {
+        user.PasswordHash = passwordHash;
+        await dbContext.SaveChangesAsync(cancellationToken);
     }
 
     private static bool IsDuplicateEmailViolation(DbUpdateException exception) =>
