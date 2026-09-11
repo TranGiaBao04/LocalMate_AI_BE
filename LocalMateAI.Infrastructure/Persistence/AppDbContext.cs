@@ -2,7 +2,7 @@ using LocalMateAI.Domain.Common;
 using LocalMateAI.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
-namespace LocalMateAI.Application.Persistence;
+namespace LocalMateAI.Infrastructure.Persistence;
 
 public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {

@@ -4,7 +4,7 @@ using NetTopologySuite.Geometries;
 
 #nullable disable
 
-namespace LocalMateAI.Application.Persistence.Migrations
+namespace LocalMateAI.Infrastructure.Persistence.Migrations
 {
     /// <inheritdoc />
     public partial class InitialCreate : Migration

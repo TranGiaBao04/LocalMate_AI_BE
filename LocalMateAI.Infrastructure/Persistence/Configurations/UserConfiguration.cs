@@ -3,7 +3,7 @@ using LocalMateAI.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
-namespace LocalMateAI.Application.Persistence.Configurations;
+namespace LocalMateAI.Infrastructure.Persistence.Configurations;
 
 public sealed class UserConfiguration : IEntityTypeConfiguration<User>
 {

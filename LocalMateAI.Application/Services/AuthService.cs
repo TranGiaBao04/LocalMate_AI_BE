@@ -1,19 +1,15 @@
 using System.ComponentModel.DataAnnotations;
 using LocalMateAI.Application.DTOs.Auth;
 using LocalMateAI.Application.Interfaces;
-using LocalMateAI.Application.Persistence;
 using LocalMateAI.Domain.Entities;
 using LocalMateAI.Domain.Enums;
-using Microsoft.EntityFrameworkCore;
-using Npgsql;
 
 namespace LocalMateAI.Application.Services;
 
 public sealed class AuthService(
-    AppDbContext dbContext,
+    IUserRepository userRepository,
     IPasswordHashService passwordHashService) : IAuthService
 {
-    private const string UserEmailConstraintName = "UX_USERS_Email";
     private const int MaximumFullNameLength = 200;
     private const int MaximumEmailLength = 254;
     private const int MinimumPasswordLength = 8;
@@ -37,10 +33,7 @@ public sealed class AuthService(
             return RegisterResult.ValidationFailed(validationErrors);
         }
 
-        var emailExists = await dbContext.Users
-            .AsNoTracking()
-            .AnyAsync(user => user.Email == email, cancellationToken);
-
+        var emailExists = await userRepository.EmailExistsAsync(email, cancellationToken);
         if (emailExists)
         {
             return RegisterResult.EmailAlreadyExists();
@@ -54,15 +47,10 @@ public sealed class AuthService(
         };
 
         user.PasswordHash = passwordHashService.HashPassword(user, password);
-        dbContext.Users.Add(user);
 
-        try
+        var added = await userRepository.TryAddAsync(user, cancellationToken);
+        if (!added)
         {
-            await dbContext.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateException exception) when (IsDuplicateEmailViolation(exception))
-        {
-            dbContext.Entry(user).State = EntityState.Detached;
             return RegisterResult.EmailAlreadyExists();
         }
 
@@ -124,12 +112,4 @@ public sealed class AuthService(
 
         return errors;
     }
-
-    private static bool IsDuplicateEmailViolation(DbUpdateException exception) =>
-        exception.InnerException is PostgresException postgresException
-        && postgresException.SqlState == PostgresErrorCodes.UniqueViolation
-        && string.Equals(
-            postgresException.ConstraintName,
-            UserEmailConstraintName,
-            StringComparison.Ordinal);
 }

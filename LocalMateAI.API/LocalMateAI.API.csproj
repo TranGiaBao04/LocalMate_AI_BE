@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\LocalMateAI.Application\LocalMateAI.Application.csproj" />
+    <ProjectReference Include="..\LocalMateAI.Infrastructure\LocalMateAI.Infrastructure.csproj" />
   </ItemGroup>
 
   <ItemGroup>
