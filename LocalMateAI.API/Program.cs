@@ -72,6 +72,7 @@ builder.Services.Configure<PasswordHasherOptions>(options =>
 });
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IPasswordHashService, AspNetCorePasswordHashService>();
 builder.Services.AddScoped<IAccessTokenService, JwtAccessTokenService>();
 builder.Services.AddScoped<IMetroStationRepository, MetroStationRepository>();
