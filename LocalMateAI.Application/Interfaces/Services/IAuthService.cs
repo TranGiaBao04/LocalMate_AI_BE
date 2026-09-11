@@ -11,4 +11,6 @@ public interface IAuthService
     Task<LoginResult> LoginAsync(
         LoginRequest request,
         CancellationToken cancellationToken = default);
+
+    DemoSessionResponse CreateDemoSession();
 }

@@ -116,6 +116,18 @@ public sealed class AuthService(
         return LoginResult.Succeeded(response);
     }
 
+    public DemoSessionResponse CreateDemoSession()
+    {
+        var sessionId = Guid.NewGuid();
+        var accessToken = accessTokenService.CreateDemoAccessToken(sessionId);
+
+        return new DemoSessionResponse(
+            accessToken.AccessToken,
+            "Bearer",
+            accessToken.ExpiresAt,
+            "demo");
+    }
+
     private static Dictionary<string, string[]> Validate(
         string fullName,
         string email,
