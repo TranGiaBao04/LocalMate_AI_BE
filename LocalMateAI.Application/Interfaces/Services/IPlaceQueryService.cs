@@ -1,7 +1,7 @@
 using LocalMateAI.Application.DTOs.Places;
 using LocalMateAI.Domain.Enums;
 
-namespace LocalMateAI.Application.Interfaces;
+namespace LocalMateAI.Application.Interfaces.Services;
 
 public interface IPlaceQueryService
 {

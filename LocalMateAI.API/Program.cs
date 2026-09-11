@@ -1,6 +1,7 @@
 using LocalMateAI.API.Middlewares;
 using LocalMateAI.API.Security;
-using LocalMateAI.Application.Interfaces;
+using LocalMateAI.Application.Interfaces.Repositories;
+using LocalMateAI.Application.Interfaces.Services;
 using LocalMateAI.Application.Services;
 using LocalMateAI.Infrastructure.Persistence;
 using LocalMateAI.Infrastructure.Repositories;

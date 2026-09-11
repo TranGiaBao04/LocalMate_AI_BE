@@ -1,6 +1,6 @@
 using LocalMateAI.Application.DTOs.Geo;
 
-namespace LocalMateAI.Application.Interfaces;
+namespace LocalMateAI.Application.Interfaces.Services;
 
 public interface IGeoService
 {

@@ -1,5 +1,6 @@
 using LocalMateAI.Application.DTOs.Places;
-using LocalMateAI.Application.Interfaces;
+using LocalMateAI.Application.Interfaces.Repositories;
+using LocalMateAI.Application.Interfaces.Services;
 using LocalMateAI.Domain.Enums;
 
 namespace LocalMateAI.Application.Services;

@@ -1,5 +1,5 @@
 using LocalMateAI.Application.DTOs.Auth;
-using LocalMateAI.Application.Interfaces;
+using LocalMateAI.Application.Interfaces.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace LocalMateAI.API.Controllers;

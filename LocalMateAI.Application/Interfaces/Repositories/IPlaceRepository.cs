@@ -2,7 +2,7 @@ using LocalMateAI.Application.DTOs.Places;
 using LocalMateAI.Domain.Enums;
 using NetTopologySuite.Geometries;
 
-namespace LocalMateAI.Application.Interfaces;
+namespace LocalMateAI.Application.Interfaces.Repositories;
 
 public interface IPlaceRepository
 {

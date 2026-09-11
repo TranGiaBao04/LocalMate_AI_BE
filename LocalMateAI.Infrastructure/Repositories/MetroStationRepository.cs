@@ -1,5 +1,5 @@
 using LocalMateAI.Application.DTOs.Geo;
-using LocalMateAI.Application.Interfaces;
+using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 

@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using LocalMateAI.Application.DTOs.Auth;
-using LocalMateAI.Application.Interfaces;
+using LocalMateAI.Application.Interfaces.Repositories;
+using LocalMateAI.Application.Interfaces.Services;
 using LocalMateAI.Domain.Entities;
 using LocalMateAI.Domain.Enums;
 

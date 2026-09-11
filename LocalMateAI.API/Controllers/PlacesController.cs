@@ -1,5 +1,5 @@
 using LocalMateAI.Application.DTOs.Places;
-using LocalMateAI.Application.Interfaces;
+using LocalMateAI.Application.Interfaces.Services;
 using LocalMateAI.Domain.Enums;
 using Microsoft.AspNetCore.Mvc;
 

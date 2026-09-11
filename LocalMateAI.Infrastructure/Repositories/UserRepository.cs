@@ -1,4 +1,4 @@
-using LocalMateAI.Application.Interfaces;
+using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Infrastructure.Persistence;
 using LocalMateAI.Domain.Entities;
 using Microsoft.EntityFrameworkCore;

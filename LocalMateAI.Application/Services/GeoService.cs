@@ -1,5 +1,6 @@
 using LocalMateAI.Application.DTOs.Geo;
-using LocalMateAI.Application.Interfaces;
+using LocalMateAI.Application.Interfaces.Repositories;
+using LocalMateAI.Application.Interfaces.Services;
 
 namespace LocalMateAI.Application.Services;
 

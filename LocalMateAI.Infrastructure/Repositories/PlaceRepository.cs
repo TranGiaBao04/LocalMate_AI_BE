@@ -1,5 +1,5 @@
 using LocalMateAI.Application.DTOs.Places;
-using LocalMateAI.Application.Interfaces;
+using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Infrastructure.Persistence;
 using LocalMateAI.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
