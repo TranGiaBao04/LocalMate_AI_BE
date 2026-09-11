@@ -16,6 +16,11 @@ public sealed class UserRepository(AppDbContext dbContext) : IUserRepository
     public Task<User?> GetByEmailAsync(string email, CancellationToken cancellationToken = default) =>
         dbContext.Users.SingleOrDefaultAsync(user => user.Email == email, cancellationToken);
 
+    public Task<User?> GetByIdAsync(Guid userId, CancellationToken cancellationToken = default) =>
+        dbContext.Users
+            .AsNoTracking()
+            .SingleOrDefaultAsync(user => user.Id == userId, cancellationToken);
+
     public async Task<bool> TryAddAsync(User user, CancellationToken cancellationToken = default)
     {
         dbContext.Users.Add(user);
