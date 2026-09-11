@@ -1,6 +1,6 @@
 using LocalMateAI.Domain.Entities;
 
-namespace LocalMateAI.Application.Interfaces;
+namespace LocalMateAI.Application.Interfaces.Services;
 
 public interface IPasswordHashService
 {

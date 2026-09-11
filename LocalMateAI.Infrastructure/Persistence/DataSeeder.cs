@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using NetTopologySuite;
 using NetTopologySuite.Geometries;
 
-namespace LocalMateAI.Application.Persistence;
+namespace LocalMateAI.Infrastructure.Persistence;
 
 public static class DataSeeder
 {

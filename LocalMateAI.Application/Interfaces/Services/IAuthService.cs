@@ -1,6 +1,6 @@
 using LocalMateAI.Application.DTOs.Auth;
 
-namespace LocalMateAI.Application.Interfaces;
+namespace LocalMateAI.Application.Interfaces.Services;
 
 public interface IAuthService
 {

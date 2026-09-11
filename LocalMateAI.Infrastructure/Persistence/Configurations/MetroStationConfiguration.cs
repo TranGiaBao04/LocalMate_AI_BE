@@ -2,7 +2,7 @@ using LocalMateAI.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
-namespace LocalMateAI.Application.Persistence.Configurations;
+namespace LocalMateAI.Infrastructure.Persistence.Configurations;
 
 public sealed class MetroStationConfiguration : IEntityTypeConfiguration<MetroStation>
 {
@@ -16,6 +16,7 @@ public sealed class MetroStationConfiguration : IEntityTypeConfiguration<MetroSt
             .HasColumnType("geometry (point, 4326)")
             .IsRequired();
 
-        // Spatial index (GiST) là task riêng BE-30, hạn 2026-09-28 — chưa thêm ở đây.
+        builder.HasIndex(x => x.Location)
+            .HasMethod("gist");
     }
 }

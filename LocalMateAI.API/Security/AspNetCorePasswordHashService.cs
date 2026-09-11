@@ -1,4 +1,4 @@
-using LocalMateAI.Application.Interfaces;
+using LocalMateAI.Application.Interfaces.Services;
 using LocalMateAI.Domain.Entities;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Options;
