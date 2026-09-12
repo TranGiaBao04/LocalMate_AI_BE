@@ -14,4 +14,13 @@ public sealed class TagRepository(AppDbContext dbContext) : ITagRepository
             .AsNoTracking()
             .Where(tag => tagIds.Contains(tag.Id))
             .ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<Tag>> GetActiveAsync(
+        CancellationToken cancellationToken = default) =>
+        await dbContext.Tags
+            .AsNoTracking()
+            .Where(tag => tag.IsActive)
+            .OrderBy(tag => tag.Type)
+            .ThenBy(tag => tag.Name)
+            .ToListAsync(cancellationToken);
 }

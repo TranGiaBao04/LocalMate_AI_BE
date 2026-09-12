@@ -7,4 +7,7 @@ public interface ITagRepository
     Task<IReadOnlyList<Tag>> GetByIdsAsync(
         IReadOnlyCollection<Guid> tagIds,
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<Tag>> GetActiveAsync(
+        CancellationToken cancellationToken = default);
 }
