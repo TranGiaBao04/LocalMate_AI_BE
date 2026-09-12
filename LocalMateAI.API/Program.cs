@@ -1,5 +1,6 @@
 using LocalMateAI.API.Middlewares;
 using LocalMateAI.Application.Persistence;
+using LocalMateAI.Application.Services;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 
@@ -28,6 +29,13 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+
+// Register Application Services for Google Maps & Navigation (BE-60, BE-61, BE-62, BE-63)
+builder.Services.AddSingleton<IGoogleMapsUrlBuilderService, GoogleMapsUrlBuilderService>();
+builder.Services.AddSingleton<ICoordinatesValidationService, CoordinatesValidationService>();
+builder.Services.AddTransient<IRouteEstimateService, RouteEstimateService>();
+builder.Services.AddTransient<IMetroWalkingRouter, MetroWalkingRouter>();
+
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connectionString, npgsqlOptions => npgsqlOptions.UseNetTopologySuite()));
 builder.Services.AddCors(options =>
