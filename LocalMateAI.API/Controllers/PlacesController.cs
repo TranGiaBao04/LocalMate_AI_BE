@@ -1,6 +1,7 @@
 using LocalMateAI.Application.DTOs.Places;
 using LocalMateAI.Application.Interfaces.Services;
 using LocalMateAI.Domain.Enums;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace LocalMateAI.API.Controllers;
@@ -10,6 +11,7 @@ namespace LocalMateAI.API.Controllers;
 public sealed class PlacesController(IPlaceQueryService placeQueryService) : ControllerBase
 {
     [HttpGet("nearby")]
+    [AllowAnonymous]
     [ProducesResponseType<NearbyPlacesResponse>(StatusCodes.Status200OK)]
     public async Task<ActionResult<NearbyPlacesResponse>> GetNearby(
         [FromQuery] double latitude,
