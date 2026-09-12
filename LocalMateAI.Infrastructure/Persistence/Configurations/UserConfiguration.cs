@@ -36,7 +36,7 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
 
         builder.Property(user => user.PasswordHash)
             .HasColumnType("text")
-            .IsRequired();
+            .IsRequired(false);
 
         builder.Property(user => user.Role)
             .HasConversion<string>()

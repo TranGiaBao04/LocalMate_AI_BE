@@ -62,6 +62,21 @@ JwtOptionsValidator.TryDecodeSigningKey(
     out var jwtSigningKeyBytes);
 var jwtSigningKey = new SymmetricSecurityKey(jwtSigningKeyBytes);
 
+var googleAuthConfiguration = builder.Configuration.GetSection(GoogleAuthOptions.SectionName);
+var configuredGoogleAuthOptions =
+    googleAuthConfiguration.Get<GoogleAuthOptions>() ?? new GoogleAuthOptions();
+var googleAuthValidationResult = new GoogleAuthOptionsValidator().Validate(
+    Options.DefaultName,
+    configuredGoogleAuthOptions);
+
+if (googleAuthValidationResult.Failed)
+{
+    throw new OptionsValidationException(
+        GoogleAuthOptions.SectionName,
+        typeof(GoogleAuthOptions),
+        googleAuthValidationResult.Failures);
+}
+
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
@@ -75,18 +90,21 @@ builder.Services.AddSwaggerGen(options =>
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.Configure<JwtOptions>(jwtConfiguration);
+builder.Services.Configure<GoogleAuthOptions>(googleAuthConfiguration);
 builder.Services.Configure<PasswordHasherOptions>(options =>
 {
     options.CompatibilityMode = PasswordHasherCompatibilityMode.IdentityV3;
     options.IterationCount = 220_000;
 });
 builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<IExternalLoginRepository, ExternalLoginRepository>();
 builder.Services.AddScoped<ITagRepository, TagRepository>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<ITagService, TagService>();
 builder.Services.AddScoped<IPasswordHashService, AspNetCorePasswordHashService>();
 builder.Services.AddScoped<IAccessTokenService, JwtAccessTokenService>();
+builder.Services.AddScoped<IGoogleIdentityTokenValidator, GoogleIdentityTokenValidator>();
 builder.Services.AddScoped<IMetroStationRepository, MetroStationRepository>();
 builder.Services.AddScoped<IPlaceRepository, PlaceRepository>();
 builder.Services.AddScoped<IGeoService, GeoService>();
