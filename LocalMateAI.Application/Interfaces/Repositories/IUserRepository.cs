@@ -10,10 +10,18 @@ public interface IUserRepository
 
     Task<User?> GetByIdAsync(Guid userId, CancellationToken cancellationToken = default);
 
+    Task<User?> GetByIdForUpdateAsync(
+        Guid userId,
+        CancellationToken cancellationToken = default);
+
     Task<bool> TryAddAsync(User user, CancellationToken cancellationToken = default);
 
     Task UpdatePasswordHashAsync(
         User user,
         string passwordHash,
+        CancellationToken cancellationToken = default);
+
+    Task SaveProfileChangesAsync(
+        User user,
         CancellationToken cancellationToken = default);
 }

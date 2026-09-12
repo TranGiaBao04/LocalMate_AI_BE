@@ -10,6 +10,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<MetroStation> MetroStations => Set<MetroStation>();
     public DbSet<Place> Places => Set<Place>();
     public DbSet<Tag> Tags => Set<Tag>();
+    public DbSet<UserPreferenceTag> UserPreferenceTags => Set<UserPreferenceTag>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

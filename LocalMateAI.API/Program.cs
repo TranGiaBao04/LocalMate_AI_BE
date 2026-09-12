@@ -71,6 +71,7 @@ builder.Services.Configure<PasswordHasherOptions>(options =>
     options.IterationCount = 220_000;
 });
 builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<ITagRepository, TagRepository>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IPasswordHashService, AspNetCorePasswordHashService>();

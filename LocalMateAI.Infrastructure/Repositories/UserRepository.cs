@@ -19,6 +19,16 @@ public sealed class UserRepository(AppDbContext dbContext) : IUserRepository
     public Task<User?> GetByIdAsync(Guid userId, CancellationToken cancellationToken = default) =>
         dbContext.Users
             .AsNoTracking()
+            .Include(user => user.PreferenceTags)
+            .ThenInclude(preferenceTag => preferenceTag.Tag)
+            .SingleOrDefaultAsync(user => user.Id == userId, cancellationToken);
+
+    public Task<User?> GetByIdForUpdateAsync(
+        Guid userId,
+        CancellationToken cancellationToken = default) =>
+        dbContext.Users
+            .Include(user => user.PreferenceTags)
+            .ThenInclude(preferenceTag => preferenceTag.Tag)
             .SingleOrDefaultAsync(user => user.Id == userId, cancellationToken);
 
     public async Task<bool> TryAddAsync(User user, CancellationToken cancellationToken = default)
@@ -43,6 +53,17 @@ public sealed class UserRepository(AppDbContext dbContext) : IUserRepository
         CancellationToken cancellationToken = default)
     {
         user.PasswordHash = passwordHash;
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task SaveProfileChangesAsync(
+        User user,
+        CancellationToken cancellationToken = default)
+    {
+        dbContext.Entry(user)
+            .Property(entry => entry.UpdatedAt)
+            .IsModified = true;
+
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
