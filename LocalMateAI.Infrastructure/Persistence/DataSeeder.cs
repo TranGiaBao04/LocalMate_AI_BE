@@ -21,6 +21,7 @@ public static class DataSeeder
     {
         await SeedMetroStationsAsync(context, cancellationToken);
         await SeedPlacesAsync(context, cancellationToken);
+        await SeedCuratedItinerariesAsync(context, cancellationToken);
     }
 
     private static async Task SeedMetroStationsAsync(AppDbContext context, CancellationToken cancellationToken)
@@ -68,6 +69,45 @@ public static class DataSeeder
         await context.SaveChangesAsync(cancellationToken);
     }
 
+    private static async Task SeedCuratedItinerariesAsync(AppDbContext context, CancellationToken cancellationToken)
+    {
+        if (await context.CuratedItineraries.AnyAsync(cancellationToken))
+        {
+            return;
+        }
+
+        var records = await ReadSeedFileAsync<CuratedItinerarySeedRecord>(
+            "curated-itineraries.seed.json",
+            cancellationToken);
+        var placesByName = await context.Places.ToDictionaryAsync(place => place.Name, cancellationToken);
+
+        foreach (var record in records)
+        {
+            var itinerary = new CuratedItinerary
+            {
+                Title = record.Title,
+                Description = record.Description,
+                CoverImageUrl = record.CoverImageUrl,
+                EstimatedDurationMinutes = record.EstimatedDurationMinutes,
+                EstimatedCostMin = record.EstimatedCostMin,
+                EstimatedCostMax = record.EstimatedCostMax
+            };
+
+            itinerary.Items = record.PlaceNames
+                .Select((placeName, index) => new CuratedItineraryItem
+                {
+                    CuratedItinerary = itinerary,
+                    PlaceId = placesByName[placeName].Id,
+                    OrderIndex = index
+                })
+                .ToList();
+
+            await context.CuratedItineraries.AddAsync(itinerary, cancellationToken);
+        }
+
+        await context.SaveChangesAsync(cancellationToken);
+    }
+
     private static async Task<List<T>> ReadSeedFileAsync<T>(string fileName, CancellationToken cancellationToken)
     {
         var path = Path.Combine(AppContext.BaseDirectory, "Persistence", "SeedData", fileName);
@@ -89,4 +129,13 @@ public static class DataSeeder
         decimal EstimatedCostMin,
         decimal EstimatedCostMax,
         string Description);
+
+    private sealed record CuratedItinerarySeedRecord(
+        string Title,
+        string? Description,
+        string? CoverImageUrl,
+        int EstimatedDurationMinutes,
+        decimal EstimatedCostMin,
+        decimal EstimatedCostMax,
+        IReadOnlyList<string> PlaceNames);
 }

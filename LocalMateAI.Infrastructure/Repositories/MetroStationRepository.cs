@@ -1,4 +1,5 @@
 using LocalMateAI.Application.DTOs.Geo;
+using LocalMateAI.Application.DTOs.MasterData;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -7,6 +8,20 @@ namespace LocalMateAI.Infrastructure.Repositories;
 
 public sealed class MetroStationRepository(AppDbContext dbContext) : IMetroStationRepository
 {
+    public async Task<IReadOnlyList<MetroStationSummaryResponse>> GetAllAsync(
+        CancellationToken cancellationToken = default)
+    {
+        return await dbContext.MetroStations
+            .OrderBy(station => station.Order)
+            .Select(station => new MetroStationSummaryResponse(
+                station.Id,
+                station.Name,
+                station.Order,
+                station.Location.Y,
+                station.Location.X))
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<NearestStationResult?> FindNearestAsync(
         double latitude,
         double longitude,
