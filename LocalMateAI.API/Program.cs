@@ -13,6 +13,14 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using Serilog;
 
+try
+{
+    DotNetEnv.Env.TraversePath().Load();
+}
+catch (FileNotFoundException)
+{
+}
+
 var builder = WebApplication.CreateBuilder(args);
 
 const string frontendClientPolicy = "FrontendClient";
@@ -79,6 +87,10 @@ builder.Services.AddScoped<IMetroStationRepository, MetroStationRepository>();
 builder.Services.AddScoped<IPlaceRepository, PlaceRepository>();
 builder.Services.AddScoped<IGeoService, GeoService>();
 builder.Services.AddScoped<IPlaceQueryService, PlaceQueryService>();
+builder.Services.AddMemoryCache();
+builder.Services.AddScoped<IMasterDataService, MasterDataService>();
+builder.Services.AddScoped<ICuratedItineraryRepository, CuratedItineraryRepository>();
+builder.Services.AddScoped<ICuratedItineraryService, CuratedItineraryService>();
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connectionString, npgsqlOptions => npgsqlOptions.UseNetTopologySuite()));
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
