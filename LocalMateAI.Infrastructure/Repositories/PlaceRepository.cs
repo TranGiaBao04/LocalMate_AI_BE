@@ -9,6 +9,40 @@ namespace LocalMateAI.Infrastructure.Repositories;
 
 public sealed class PlaceRepository(AppDbContext dbContext) : IPlaceRepository
 {
+    public async Task<IReadOnlyList<MetroClusterPlaceReadModel>> GetMetroClusterPlacesAsync(
+        double radiusMeters,
+        CancellationToken cancellationToken = default)
+    {
+        return await dbContext.Database.SqlQuery<MetroClusterPlaceReadModel>(
+            $"""
+             SELECT nearest."StationId", nearest."StationName", nearest."StationOrder",
+                    nearest."StationLatitude", nearest."StationLongitude",
+                    p."Id" AS "PlaceId", p."Name" AS "PlaceName", p."Address" AS "PlaceAddress",
+                    ST_Y(p."Location") AS "PlaceLatitude",
+                    ST_X(p."Location") AS "PlaceLongitude",
+                    p."Category" AS "PlaceCategory",
+                    p."EstimatedCostMin", p."EstimatedCostMax", p."ImageUrl",
+                    nearest."DistanceFromStationMeters"
+             FROM "Places" p
+             CROSS JOIN LATERAL (
+                 SELECT ms."Id" AS "StationId", ms."Name" AS "StationName",
+                        ms."Order" AS "StationOrder",
+                        ST_Y(ms."Location") AS "StationLatitude",
+                        ST_X(ms."Location") AS "StationLongitude",
+                        ST_Distance(
+                            p."Location"::geography,
+                            ms."Location"::geography
+                        ) AS "DistanceFromStationMeters"
+                 FROM "MetroStations" ms
+                 ORDER BY "DistanceFromStationMeters", ms."Order", ms."Name", ms."Id"
+                 LIMIT 1
+             ) nearest
+             WHERE p."Status" = 'Active'
+               AND nearest."DistanceFromStationMeters" <= {radiusMeters}
+             """)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<Point?> GetLocationAsync(
         Guid placeId,
         CancellationToken cancellationToken = default)
