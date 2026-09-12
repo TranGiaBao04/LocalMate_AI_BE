@@ -1,7 +1,9 @@
+using FluentValidation;
 using LocalMateAI.API.Middlewares;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Interfaces.Services;
 using LocalMateAI.Application.Services;
+using LocalMateAI.Application.Validators.Trips;
 using LocalMateAI.Infrastructure.Persistence;
 using LocalMateAI.Infrastructure.Repositories;
 using LocalMateAI.Infrastructure.Security;
@@ -93,6 +95,7 @@ builder.Services.AddMemoryCache();
 builder.Services.AddScoped<IMasterDataService, MasterDataService>();
 builder.Services.AddScoped<ICuratedItineraryRepository, CuratedItineraryRepository>();
 builder.Services.AddScoped<ICuratedItineraryService, CuratedItineraryService>();
+builder.Services.AddValidatorsFromAssemblyContaining<TripRequestValidator>();
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connectionString, npgsqlOptions => npgsqlOptions.UseNetTopologySuite()));
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
