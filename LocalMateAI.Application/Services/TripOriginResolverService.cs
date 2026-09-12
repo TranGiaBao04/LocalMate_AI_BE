@@ -3,22 +3,15 @@ using LocalMateAI.Application.Interfaces.Services;
 
 namespace LocalMateAI.Application.Services;
 
-public sealed class TripOriginResolverService : ITripOriginResolverService
+public sealed class TripOriginResolverService(IGeoService geoService) : ITripOriginResolverService
 {
     private const double MaxServiceAreaDistanceMeters = 3000;
-
-    private readonly IGeoService _geoService;
-
-    public TripOriginResolverService(IGeoService geoService)
-    {
-        _geoService = geoService;
-    }
 
     public async Task<TripOriginResolution?> ResolveAsync(
         TripRequestDto request,
         CancellationToken cancellationToken = default)
     {
-        var nearestStation = await _geoService.FindNearestStationAsync(
+        var nearestStation = await geoService.FindNearestStationAsync(
             request.StartLatitude,
             request.StartLongitude,
             cancellationToken);
