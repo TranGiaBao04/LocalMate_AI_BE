@@ -3,6 +3,7 @@ using System;
 using LocalMateAI.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NetTopologySuite.Geometries;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace LocalMateAI.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260911194501_AddTags")]
+    partial class AddTags
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -202,47 +205,6 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("CK_USERS_Role", "\"Role\" IN ('User', 'Admin')");
                         });
-                });
-
-            modelBuilder.Entity("LocalMateAI.Domain.Entities.UserPreferenceTag", b =>
-                {
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("TagId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("UserId", "TagId")
-                        .HasName("PK_USER_PREFERENCE_TAGS");
-
-                    b.HasIndex("TagId")
-                        .HasDatabaseName("IX_USER_PREFERENCE_TAGS_TagId");
-
-                    b.ToTable("USER_PREFERENCE_TAGS", (string)null);
-                });
-
-            modelBuilder.Entity("LocalMateAI.Domain.Entities.UserPreferenceTag", b =>
-                {
-                    b.HasOne("LocalMateAI.Domain.Entities.Tag", "Tag")
-                        .WithMany()
-                        .HasForeignKey("TagId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("FK_USER_PREFERENCE_TAGS_TAGS_TagId");
-
-                    b.HasOne("LocalMateAI.Domain.Entities.User", null)
-                        .WithMany("PreferenceTags")
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("FK_USER_PREFERENCE_TAGS_USERS_UserId");
-
-                    b.Navigation("Tag");
-                });
-
-            modelBuilder.Entity("LocalMateAI.Domain.Entities.User", b =>
-                {
-                    b.Navigation("PreferenceTags");
                 });
 #pragma warning restore 612, 618
         }
