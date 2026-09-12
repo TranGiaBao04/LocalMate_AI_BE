@@ -12,4 +12,6 @@ public sealed class User : BaseEntity
     public string PasswordHash { get; set; } = string.Empty;
 
     public UserRole Role { get; set; } = UserRole.User;
+
+    public ICollection<UserPreferenceTag> PreferenceTags { get; set; } = [];
 }

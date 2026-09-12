@@ -3,6 +3,7 @@ using System;
 using LocalMateAI.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NetTopologySuite.Geometries;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace LocalMateAI.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260911194501_AddTags")]
+    partial class AddTags
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -23,76 +26,6 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "postgis");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
-
-            modelBuilder.Entity("LocalMateAI.Domain.Entities.CuratedItinerary", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("CoverImageUrl")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Description")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.Property<decimal>("EstimatedCostMax")
-                        .HasColumnType("numeric(12,0)");
-
-                    b.Property<decimal>("EstimatedCostMin")
-                        .HasColumnType("numeric(12,0)");
-
-                    b.Property<int>("EstimatedDurationMinutes")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("CuratedItineraries");
-                });
-
-            modelBuilder.Entity("LocalMateAI.Domain.Entities.CuratedItineraryItem", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("CuratedItineraryId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("OrderIndex")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid>("PlaceId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("PlaceId");
-
-                    b.HasIndex("CuratedItineraryId", "OrderIndex")
-                        .IsUnique();
-
-                    b.ToTable("CuratedItineraryItems");
-                });
 
             modelBuilder.Entity("LocalMateAI.Domain.Entities.MetroStation", b =>
                 {
@@ -272,71 +205,6 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("CK_USERS_Role", "\"Role\" IN ('User', 'Admin')");
                         });
-                });
-
-            modelBuilder.Entity("LocalMateAI.Domain.Entities.CuratedItineraryItem", b =>
-                {
-                    b.HasOne("LocalMateAI.Domain.Entities.CuratedItinerary", "CuratedItinerary")
-                        .WithMany("Items")
-                        .HasForeignKey("CuratedItineraryId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("LocalMateAI.Domain.Entities.Place", "Place")
-                        .WithMany()
-                        .HasForeignKey("PlaceId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("CuratedItinerary");
-
-                    b.Navigation("Place");
-                });
-
-            modelBuilder.Entity("LocalMateAI.Domain.Entities.CuratedItinerary", b =>
-                {
-                    b.Navigation("Items");
-                });
-
-            modelBuilder.Entity("LocalMateAI.Domain.Entities.UserPreferenceTag", b =>
-                {
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("TagId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("UserId", "TagId")
-                        .HasName("PK_USER_PREFERENCE_TAGS");
-
-                    b.HasIndex("TagId")
-                        .HasDatabaseName("IX_USER_PREFERENCE_TAGS_TagId");
-
-                    b.ToTable("USER_PREFERENCE_TAGS", (string)null);
-                });
-
-            modelBuilder.Entity("LocalMateAI.Domain.Entities.UserPreferenceTag", b =>
-                {
-                    b.HasOne("LocalMateAI.Domain.Entities.Tag", "Tag")
-                        .WithMany()
-                        .HasForeignKey("TagId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("FK_USER_PREFERENCE_TAGS_TAGS_TagId");
-
-                    b.HasOne("LocalMateAI.Domain.Entities.User", null)
-                        .WithMany("PreferenceTags")
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("FK_USER_PREFERENCE_TAGS_USERS_UserId");
-
-                    b.Navigation("Tag");
-                });
-
-            modelBuilder.Entity("LocalMateAI.Domain.Entities.User", b =>
-                {
-                    b.Navigation("PreferenceTags");
                 });
 #pragma warning restore 612, 618
         }
