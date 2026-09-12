@@ -10,6 +10,17 @@ namespace LocalMateAI.API.Controllers;
 [Route("api/places")]
 public sealed class PlacesController(IPlaceQueryService placeQueryService) : ControllerBase
 {
+    [HttpGet("metro-clusters")]
+    [AllowAnonymous]
+    [ProducesResponseType<IReadOnlyList<MetroExperienceClusterResponse>>(StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<MetroExperienceClusterResponse>>> GetMetroClustersAsync(
+        CancellationToken cancellationToken)
+    {
+        var result = await placeQueryService.GetMetroClustersAsync(cancellationToken);
+
+        return Ok(result);
+    }
+
     [HttpGet("nearby")]
     [AllowAnonymous]
     [ProducesResponseType<NearbyPlacesResponse>(StatusCodes.Status200OK)]

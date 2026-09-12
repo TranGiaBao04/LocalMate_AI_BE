@@ -6,6 +6,10 @@ namespace LocalMateAI.Application.Interfaces.Repositories;
 
 public interface IPlaceRepository
 {
+    Task<IReadOnlyList<MetroClusterPlaceReadModel>> GetMetroClusterPlacesAsync(
+        double radiusMeters,
+        CancellationToken cancellationToken = default);
+
     Task<Point?> GetLocationAsync(
         Guid placeId,
         CancellationToken cancellationToken = default);
