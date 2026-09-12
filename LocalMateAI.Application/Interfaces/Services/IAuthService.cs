@@ -12,5 +12,9 @@ public interface IAuthService
         LoginRequest request,
         CancellationToken cancellationToken = default);
 
+    Task<GoogleSignInResult> GoogleSignInAsync(
+        GoogleSignInRequest request,
+        CancellationToken cancellationToken = default);
+
     DemoSessionResponse CreateDemoSession();
 }

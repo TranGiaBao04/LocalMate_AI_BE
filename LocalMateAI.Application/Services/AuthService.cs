@@ -9,11 +9,16 @@ namespace LocalMateAI.Application.Services;
 
 public sealed class AuthService(
     IUserRepository userRepository,
+    IExternalLoginRepository externalLoginRepository,
     IPasswordHashService passwordHashService,
-    IAccessTokenService accessTokenService) : IAuthService
+    IAccessTokenService accessTokenService,
+    IGoogleIdentityTokenValidator googleIdentityTokenValidator) : IAuthService
 {
+    private const string GoogleProvider = "Google";
     private const int MaximumFullNameLength = 200;
     private const int MaximumEmailLength = 254;
+    private const int MaximumProviderSubjectLength = 255;
+    private const int MaximumGoogleIdTokenLength = 16_384;
     private const int MinimumPasswordLength = 8;
     private const int MaximumPasswordLength = 128;
 
@@ -82,7 +87,7 @@ public sealed class AuthService(
         }
 
         var user = await userRepository.GetByEmailAsync(email, cancellationToken);
-        if (user is null)
+        if (user is null || user.PasswordHash is null)
         {
             _ = passwordHashService.HashPassword(new User(), password);
             return LoginResult.InvalidCredentials();
@@ -107,13 +112,102 @@ public sealed class AuthService(
                 cancellationToken);
         }
 
-        var accessToken = accessTokenService.CreateAccessToken(user);
-        var response = new LoginResponse(
-            accessToken.AccessToken,
-            "Bearer",
-            accessToken.ExpiresAt);
+        return LoginResult.Succeeded(CreateLoginResponse(user));
+    }
 
-        return LoginResult.Succeeded(response);
+    public async Task<GoogleSignInResult> GoogleSignInAsync(
+        GoogleSignInRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var idToken = request.IdToken?.Trim() ?? string.Empty;
+        var validationErrors = ValidateGoogleSignIn(idToken);
+        if (validationErrors.Count > 0)
+        {
+            return GoogleSignInResult.ValidationFailed(validationErrors);
+        }
+
+        var identity = await googleIdentityTokenValidator.ValidateAsync(
+            idToken,
+            cancellationToken);
+
+        if (identity is null)
+        {
+            return GoogleSignInResult.InvalidGoogleToken();
+        }
+
+        var providerSubject = identity.ProviderSubject.Trim();
+        if (string.IsNullOrWhiteSpace(providerSubject)
+            || providerSubject.Length > MaximumProviderSubjectLength)
+        {
+            return GoogleSignInResult.InvalidGoogleToken();
+        }
+
+        var linkedUser = await externalLoginRepository.GetUserByExternalLoginAsync(
+            GoogleProvider,
+            providerSubject,
+            cancellationToken);
+
+        if (linkedUser is not null)
+        {
+            return GoogleSignInResult.Succeeded(CreateLoginResponse(linkedUser));
+        }
+
+        var email = identity.Email.Trim().ToLowerInvariant();
+        var fullName = identity.FullName.Trim();
+        if (!IsValidExternalEmail(email)
+            || string.IsNullOrWhiteSpace(fullName)
+            || fullName.Length > MaximumFullNameLength)
+        {
+            return GoogleSignInResult.InvalidGoogleToken();
+        }
+
+        var emailOwner = await userRepository.GetByEmailAsync(email, cancellationToken);
+        if (emailOwner is not null)
+        {
+            return GoogleSignInResult.AccountLinkRequired();
+        }
+
+        var user = new User
+        {
+            FullName = fullName,
+            Email = email,
+            PasswordHash = null,
+            Role = UserRole.User
+        };
+
+        var externalLogin = new UserExternalLogin
+        {
+            UserId = user.Id,
+            Provider = GoogleProvider,
+            ProviderSubject = providerSubject
+        };
+
+        var created = await externalLoginRepository.TryCreateUserWithExternalLoginAsync(
+            user,
+            externalLogin,
+            cancellationToken);
+
+        if (created)
+        {
+            return GoogleSignInResult.Succeeded(CreateLoginResponse(user));
+        }
+
+        linkedUser = await externalLoginRepository.GetUserByExternalLoginAsync(
+            GoogleProvider,
+            providerSubject,
+            cancellationToken);
+
+        if (linkedUser is not null)
+        {
+            return GoogleSignInResult.Succeeded(CreateLoginResponse(linkedUser));
+        }
+
+        var emailWasClaimed = await userRepository.EmailExistsAsync(email, cancellationToken);
+        return emailWasClaimed
+            ? GoogleSignInResult.AccountLinkRequired()
+            : GoogleSignInResult.AccountConflict();
     }
 
     public DemoSessionResponse CreateDemoSession()
@@ -200,5 +294,36 @@ public sealed class AuthService(
         }
 
         return errors;
+    }
+
+    private static Dictionary<string, string[]> ValidateGoogleSignIn(string idToken)
+    {
+        var errors = new Dictionary<string, string[]>(StringComparer.Ordinal);
+
+        if (string.IsNullOrWhiteSpace(idToken))
+        {
+            errors["idToken"] = ["Google ID token is required."];
+        }
+        else if (idToken.Length > MaximumGoogleIdTokenLength)
+        {
+            errors["idToken"] =
+                [$"Google ID token must not exceed {MaximumGoogleIdTokenLength} characters."];
+        }
+
+        return errors;
+    }
+
+    private static bool IsValidExternalEmail(string email) =>
+        !string.IsNullOrWhiteSpace(email)
+        && email.Length <= MaximumEmailLength
+        && EmailValidator.IsValid(email);
+
+    private LoginResponse CreateLoginResponse(User user)
+    {
+        var accessToken = accessTokenService.CreateAccessToken(user);
+        return new LoginResponse(
+            accessToken.AccessToken,
+            "Bearer",
+            accessToken.ExpiresAt);
     }
 }

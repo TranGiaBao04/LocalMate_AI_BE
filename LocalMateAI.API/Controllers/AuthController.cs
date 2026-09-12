@@ -54,6 +54,33 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
         };
     }
 
+    [HttpPost("google")]
+    [AllowAnonymous]
+    [ProducesResponseType<LoginResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<LoginResponse>> GoogleSignInAsync(
+        [FromBody] GoogleSignInRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await authService.GoogleSignInAsync(request, cancellationToken);
+
+        return result.Status switch
+        {
+            GoogleSignInResultStatus.Success => Ok(result.Response),
+            GoogleSignInResultStatus.ValidationFailed =>
+                CreateValidationProblem(result.ValidationErrors!),
+            GoogleSignInResultStatus.InvalidGoogleToken =>
+                Unauthorized(CreateInvalidGoogleTokenProblem()),
+            GoogleSignInResultStatus.AccountLinkRequired =>
+                Conflict(CreateAccountLinkRequiredProblem()),
+            GoogleSignInResultStatus.AccountConflict =>
+                Conflict(CreateAccountConflictProblem()),
+            _ => throw new InvalidOperationException("Unsupported Google sign-in result status.")
+        };
+    }
+
     [HttpPost("demo")]
     [AllowAnonymous]
     [ProducesResponseType<DemoSessionResponse>(StatusCodes.Status200OK)]
@@ -106,6 +133,51 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
         };
 
         problem.Extensions["code"] = "invalid_credentials";
+        return problem;
+    }
+
+    private ProblemDetails CreateInvalidGoogleTokenProblem()
+    {
+        var problem = new ProblemDetails
+        {
+            Status = StatusCodes.Status401Unauthorized,
+            Title = "Google authentication failed.",
+            Detail = "The Google ID token is invalid.",
+            Type = "https://httpstatuses.com/401",
+            Instance = HttpContext.Request.Path
+        };
+
+        problem.Extensions["code"] = "invalid_google_token";
+        return problem;
+    }
+
+    private ProblemDetails CreateAccountLinkRequiredProblem()
+    {
+        var problem = new ProblemDetails
+        {
+            Status = StatusCodes.Status409Conflict,
+            Title = "Account linking is required.",
+            Detail = "Sign in with the existing LocalMate account before linking Google.",
+            Type = "https://httpstatuses.com/409",
+            Instance = HttpContext.Request.Path
+        };
+
+        problem.Extensions["code"] = "account_link_required";
+        return problem;
+    }
+
+    private ProblemDetails CreateAccountConflictProblem()
+    {
+        var problem = new ProblemDetails
+        {
+            Status = StatusCodes.Status409Conflict,
+            Title = "External identity conflict.",
+            Detail = "The Google identity could not be associated with a LocalMate account.",
+            Type = "https://httpstatuses.com/409",
+            Instance = HttpContext.Request.Path
+        };
+
+        problem.Extensions["code"] = "account_conflict";
         return problem;
     }
 }
