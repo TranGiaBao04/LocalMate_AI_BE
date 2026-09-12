@@ -96,6 +96,8 @@ builder.Services.AddScoped<IMasterDataService, MasterDataService>();
 builder.Services.AddScoped<ICuratedItineraryRepository, CuratedItineraryRepository>();
 builder.Services.AddScoped<ICuratedItineraryService, CuratedItineraryService>();
 builder.Services.AddValidatorsFromAssemblyContaining<TripRequestValidator>();
+builder.Services.AddScoped<ITripCriteriaNormalizationService, TripCriteriaNormalizationService>();
+builder.Services.AddScoped<ITripOriginResolverService, TripOriginResolverService>();
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connectionString, npgsqlOptions => npgsqlOptions.UseNetTopologySuite()));
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
