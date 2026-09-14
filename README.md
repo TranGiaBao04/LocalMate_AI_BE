@@ -65,15 +65,15 @@ Hệ thống xoay quanh 4 nhóm actor và luồng nghiệp vụ cốt lõi sau:
 
 ## 3. Kiến trúc hệ thống
 
-Backend được tổ chức theo hướng **layered architecture** rút gọn còn 3 project, phân chia theo mức độ trừu tượng (không phải theo loại kỹ thuật):
+Backend được tổ chức theo **Clean Architecture**, 4 project tách theo mức độ trừu tượng (không phải theo loại kỹ thuật):
 
 ```
-Domain  →  Application  →  API
-(lõi)      (nghiệp vụ +      (nhận/trả
-            hạ tầng)          HTTP)
+Domain  →  Application  →  Infrastructure  →  API
+(lõi)      (nghiệp vụ,     (EF Core, DB,      (nhận/trả
+            interface)      Repository)        HTTP, DI)
 ```
 
-Nguyên tắc phụ thuộc: **luôn đi một chiều từ ngoài vào trong**. `API` được phép biết về `Application`, `Application` được phép biết về `Domain`, nhưng `Domain` không biết gì về 2 tầng còn lại.
+Nguyên tắc phụ thuộc: **luôn đi một chiều từ ngoài vào trong**. `Domain` không biết gì về 3 tầng còn lại. `Application` chỉ biết `Domain`. `Infrastructure` biết `Domain` + `Application` (implement các interface `Application` khai báo). `API` là "Composition Root" — biết cả `Application` lẫn `Infrastructure`, là nơi duy nhất nối interface với implementation thật qua Dependency Injection.
 
 ### 3.1. `LocalMateAI.Domain`
 
@@ -87,37 +87,45 @@ Tầng lõi — chỉ chứa các class C# thuần mô tả dữ liệu, **khôn
 
 ### 3.2. `LocalMateAI.Application`
 
-Tầng chứa toàn bộ **logic nghiệp vụ** và **hạ tầng kỹ thuật phục vụ nghiệp vụ** (đã gộp phần Infrastructure vào đây để rút gọn solution, phù hợp quy mô MVP).
+Tầng chứa **logic nghiệp vụ thuần** và các "hợp đồng" (interface) — **không được phép phụ thuộc EF Core/Npgsql hay bất kỳ công nghệ truy cập dữ liệu cụ thể nào**, chỉ biết `Domain`.
 
 | Thư mục | Nội dung |
 |---|---|
-| `DTOs/` | Object dùng để truyền dữ liệu qua lại giữa API và Service (ví dụ `TripRequestDto`, `ItineraryResultDto`, `PlaceDto`), tách biệt với Entity để không lộ cấu trúc DB ra ngoài |
-| `Interfaces/` | Định nghĩa "hợp đồng" (interface) cho Repository và Service, ví dụ `IPlaceRepository`, `ITripService`, `IAiPlannerService` — chỉ khai báo cần làm gì, không viết cách làm |
-| `Services/` | Implementation thật của logic nghiệp vụ (`TripService`, `AuthService`) và các service gọi ra ngoài (`AiPlannerService` — gọi LLM API thật) |
-| `Repositories/` | Implementation thật của Repository, dùng EF Core truy vấn PostgreSQL (`PlaceRepository`, `TripRepository`) |
+| `DTOs/` | Object dùng để truyền dữ liệu qua lại giữa các tầng (ví dụ `TripRequestDto`, `ItineraryResultDto`, `PlaceDto`), tách biệt với Entity để không lộ cấu trúc DB ra ngoài |
+| `Interfaces/` | Định nghĩa "hợp đồng" (interface) cho Repository và Service, ví dụ `IPlaceRepository`, `ITripService`, `IAiPlannerService` — chỉ khai báo cần làm gì, **không** viết cách làm; implementation thật của Repository nằm ở `Infrastructure` (mục 3.3) |
+| `Services/` | Implementation thật của logic nghiệp vụ (`TripService`, `AuthService`, `GeoService`, `PlaceQueryService`) và các service gọi ra ngoài (`AiPlannerService` — gọi LLM API thật) — Service gọi Repository **qua interface**, không tự viết SQL/LINQ chạm DB |
 | `AiPlanner/` | Logic hỗ trợ AI Planner: dựng prompt (`PromptTemplateBuilder`), validate/parse kết quả JSON trả về từ LLM |
-| `Persistence/` | `AppDbContext.cs` — khai báo các `DbSet<T>` tương ứng bảng trong Postgres, là "cổng giao tiếp" chính giữa code và database |
-| `Persistence/Configurations/` | Mỗi file cấu hình chi tiết cách 1 Entity map vào bảng (ràng buộc, độ dài, khoá ngoại, index) theo pattern `IEntityTypeConfiguration<T>`, tránh dồn hết vào `AppDbContext` |
 | `Mappings/` | Cấu hình AutoMapper để chuyển đổi qua lại giữa Entity và DTO |
 
-### 3.3. `LocalMateAI.API`
+### 3.3. `LocalMateAI.Infrastructure`
 
-Tầng mỏng nhất — chỉ nhận HTTP request, gọi xuống Service tương ứng ở Application, trả response. **Không chứa logic nghiệp vụ.**
+Tầng **duy nhất** được phép đụng tới EF Core/Npgsql/SQL thật — implement các interface `Application` khai báo (chủ yếu `IXxxRepository`) và quản lý toàn bộ phần kết nối database.
+
+| Thư mục | Nội dung |
+|---|---|
+| `Persistence/AppDbContext.cs` | Khai báo các `DbSet<T>` tương ứng bảng trong Postgres, là "cổng giao tiếp" chính giữa code và database |
+| `Persistence/Configurations/` | Mỗi file cấu hình chi tiết cách 1 Entity map vào bảng (ràng buộc, độ dài, khoá ngoại, index) theo pattern `IEntityTypeConfiguration<T>`, tránh dồn hết vào `AppDbContext` |
+| `Persistence/Migrations/` | Lịch sử thay đổi schema do `dotnet-ef` tự sinh |
+| `Persistence/SeedData/`, `Persistence/DataSeeder.cs` | Data mẫu (JSON) + logic nạp data mẫu lúc khởi động app |
+| `Repositories/` | Implementation thật của Repository, dùng EF Core truy vấn PostgreSQL (`PlaceRepository`, `UserRepository`, `MetroStationRepository`) — mỗi class implement 1 interface khai báo bên `Application/Interfaces/` |
+
+### 3.4. `LocalMateAI.API`
+
+Tầng mỏng nhất — chỉ nhận HTTP request, gọi xuống Service tương ứng ở `Application`, trả response. **Không chứa logic nghiệp vụ.** Đồng thời là **Composition Root**: `Program.cs` là nơi duy nhất trong solution biết cả interface (`Application`) lẫn implementation thật (`Infrastructure`), dùng Dependency Injection để nối chúng lại.
 
 | Thư mục/File | Nội dung |
 |---|---|
-| `Controllers/` | `AuthController`, `TripController`, `PlaceController`, `FeedbackController`, `AdminController` — mỗi controller chỉ gọi Service qua interface |
-| `Middlewares/` | Xử lý cross-cutting concern, ví dụ `ExceptionHandlingMiddleware` bắt lỗi tập trung |
+| `Controllers/` | `AuthController`, `PlacesController`, `TripController`, `FeedbackController`, `AdminController` — mỗi controller chỉ gọi Service qua interface |
+| `Middlewares/` | Xử lý cross-cutting concern, ví dụ `GlobalExceptionHandler` bắt lỗi tập trung |
 | `Program.cs` | Cấu hình pipeline, đăng ký Dependency Injection (DbContext, Repository, Service, JWT Auth) |
 | `appsettings.json` | Cấu hình chung (không chứa secret) |
 
-### 3.4. Vì sao gộp Application + Infrastructure
+### 3.5. Vì sao tách `Infrastructure` thành project riêng
 
-Ở quy mô MVP/đồ án, tách riêng project `Infrastructure` khỏi `Application` tạo thêm chi phí quản lý (thêm project, thêm reference) mà lợi ích thực tế chưa cần thiết. Ranh giới quan trọng nhất cần giữ là:
-- **Domain sạch, không phụ thuộc gì** (dễ tái sử dụng, dễ test).
-- **API mỏng, không chứa nghiệp vụ** (dễ đọc, dễ maintain).
-
-Bên trong `Application`, vẫn giữ nguyên tắc tách **interface** (`Interfaces/`) khỏi **implementation thật** (`Services/`, `Repositories/`) bằng cách chia folder — nhờ vậy vẫn giữ được lợi ích dễ đổi công nghệ (ví dụ đổi provider AI, đổi ORM) và dễ viết unit test, mà không cần trả giá bằng độ phức tạp quản lý 4 project riêng biệt.
+Ban đầu dự án gộp `Application` + `Infrastructure` làm 1 project để giảm chi phí quản lý (đúng tinh thần MVP/đồ án gọn nhẹ). Sau khi triển khai thực tế (BE-28/29), nhóm nhận thấy Service gọi thẳng `AppDbContext` khiến logic nghiệp vụ và SQL lẫn vào nhau, khó đọc/khó test/khó đổi công nghệ sau này — nên quyết định tách hẳn theo đúng Clean Architecture 4 tầng "sách vở":
+- **`Application` không còn biết EF Core/Npgsql tồn tại** — chỉ làm việc qua interface, dễ viết unit test (mock Repository) mà không cần đụng tới database thật.
+- **`Infrastructure` là ranh giới rõ ràng cho mọi thứ liên quan công nghệ lưu trữ** — sau này đổi ORM, đổi provider DB, hay thêm cache... chỉ sửa trong project này, không ảnh hưởng `Application`/`API`.
+- Cái giá phải trả là thêm 1 project, thêm vài dòng `ProjectReference` — chấp nhận được vì đội đã đủ quen cấu trúc và cần code dễ bảo trì hơn khi số lượng Service/Repository tăng dần.
 
 ---
 
@@ -125,7 +133,7 @@ Bên trong `Application`, vẫn giữ nguyên tắc tách **interface** (`Interf
 
 ```
 LocalMateAI/
-├── LocalMateAI.sln
+├── LocalMateAI.slnx
 │
 ├── LocalMateAI.Domain/
 │   ├── Entities/
@@ -136,11 +144,16 @@ LocalMateAI/
 │   ├── DTOs/
 │   ├── Interfaces/
 │   ├── Services/
-│   ├── Repositories/
 │   ├── AiPlanner/
-│   ├── Persistence/
-│   │   └── Configurations/
 │   └── Mappings/
+│
+├── LocalMateAI.Infrastructure/
+│   ├── Persistence/
+│   │   ├── AppDbContext.cs
+│   │   ├── Configurations/
+│   │   ├── Migrations/
+│   │   └── SeedData/
+│   └── Repositories/
 │
 └── LocalMateAI.API/
     ├── Controllers/
@@ -185,7 +198,7 @@ Giải thích từng bước:
 2. **Container PostgreSQL 17 + PostGIS** là database thật, dữ liệu lưu trong Docker volume, độc lập với hệ điều hành host.
 3. Container expose ra **`localhost:5433`** (không phải `5432` mặc định) để không xung đột nếu máy đã có PostgreSQL native cài sẵn.
 4. **ASP.NET Core API** (`LocalMateAI.API`) đọc connection string trỏ tới `localhost:5433` từ User Secrets (mục 5.5) để kết nối.
-5. **EF Core / `AppDbContext`** (nằm ở `LocalMateAI.Application`) là lớp trung gian dịch Entity C# ↔ bảng SQL trong container.
+5. **EF Core / `AppDbContext`** (nằm ở `LocalMateAI.Infrastructure`) là lớp trung gian dịch Entity C# ↔ bảng SQL trong container.
 6. Mỗi khi Entity thay đổi, chạy **Migration** (`dotnet tool run dotnet-ef migrations add ...` — mục 5.6) để sinh script cập nhật schema, rồi `database update` áp ngược lại vào chính container ở bước 2 — khép kín vòng lặp, không ai cần cài Postgres native để dev.
 
 **Khởi tạo database bằng Docker:**
@@ -237,11 +250,11 @@ dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Host=localhost;Po
 ### 5.6. Chạy migration để tạo database
 
 ```bash
-dotnet tool run dotnet-ef migrations add <MigrationName> --project LocalMateAI.Application --startup-project LocalMateAI.API --context AppDbContext
-dotnet tool run dotnet-ef database update --project LocalMateAI.Application --startup-project LocalMateAI.API --context AppDbContext
+dotnet tool run dotnet-ef migrations add <MigrationName> --project LocalMateAI.Infrastructure --startup-project LocalMateAI.API --context AppDbContext
+dotnet tool run dotnet-ef database update --project LocalMateAI.Infrastructure --startup-project LocalMateAI.API --context AppDbContext
 ```
 
-> `--project` chỉ định project chứa `AppDbContext` (`LocalMateAI.Application`), `--startup-project` chỉ định project chạy được (`LocalMateAI.API`) — cần khai báo rõ vì `AppDbContext` không nằm cùng project với `Program.cs`.
+> `--project` chỉ định project chứa `AppDbContext` (`LocalMateAI.Infrastructure`), `--startup-project` chỉ định project chạy được (`LocalMateAI.API`) — cần khai báo rõ vì `AppDbContext` không nằm cùng project với `Program.cs`.
 
 Kiểm tra bằng pgAdmin/DBeaver xem các bảng đã được tạo đúng trong database `localmateai` chưa.
 
@@ -252,7 +265,7 @@ cd LocalMateAI.API
 dotnet run
 ```
 
-Hoặc mở `LocalMateAI.sln` bằng Visual Studio, chọn `LocalMateAI.API` làm Startup Project, nhấn `F5`.
+Hoặc mở `LocalMateAI.slnx` bằng Visual Studio, chọn `LocalMateAI.API` làm Startup Project, nhấn `F5`.
 
 Trong môi trường Development, truy cập `https://localhost:7144/swagger` để xem OpenAPI và kiểm thử endpoint.
 
@@ -262,7 +275,7 @@ Trong môi trường Development, truy cập `https://localhost:7144/swagger` đ
 - Không commit trực tiếp `appsettings.Development.json` nếu chứa secret — dùng User Secrets như hướng dẫn ở mục 5.5.
 - Mỗi khi thêm/sửa Entity, nhớ tạo migration mới và **commit file migration cùng lúc với thay đổi code**, để cả nhóm đồng bộ schema:
   ```bash
-  dotnet tool run dotnet-ef migrations add <TênMôTảThayĐổi> --project LocalMateAI.Application --startup-project LocalMateAI.API --context AppDbContext
+  dotnet tool run dotnet-ef migrations add <TênMôTảThayĐổi> --project LocalMateAI.Infrastructure --startup-project LocalMateAI.API --context AppDbContext
   ```
 
 ---
