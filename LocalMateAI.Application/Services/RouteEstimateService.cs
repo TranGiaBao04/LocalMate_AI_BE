@@ -1,23 +1,7 @@
+using LocalMateAI.Application.DTOs.Maps;
+using LocalMateAI.Application.Interfaces.Services;
+
 namespace LocalMateAI.Application.Services;
-
-public record RouteEstimateResult(
-    double DistanceKm,
-    double DistanceMeters,
-    int WalkingDurationMinutes,
-    int DrivingDurationMinutes,
-    string DistanceText,
-    string WalkingDurationText,
-    string DrivingDurationText,
-    string MapsDirectionsUrl
-);
-
-public interface IRouteEstimateService
-{
-    RouteEstimateResult EstimateRoute(
-        double originLat, double originLng,
-        double destLat, double destLng,
-        string? originName = null, string? destName = null);
-}
 
 public sealed class RouteEstimateService(IGoogleMapsUrlBuilderService mapsUrlBuilder) : IRouteEstimateService
 {

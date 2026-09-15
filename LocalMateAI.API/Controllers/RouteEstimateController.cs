@@ -1,4 +1,4 @@
-using LocalMateAI.Application.Services;
+using LocalMateAI.Application.Interfaces.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace LocalMateAI.API.Controllers;
@@ -44,10 +44,11 @@ public class RouteEstimateController(
     /// Tìm ga Metro số 1 gần nhất và tính thời gian đi bộ kết nối (BE-63)
     /// </summary>
     [HttpGet("metro-walk")]
-    public IActionResult GetNearestMetroWalkRoute(
+    public async Task<IActionResult> GetNearestMetroWalkRoute(
         [FromQuery] double lat,
         [FromQuery] double lng,
-        [FromQuery] string? placeName = null)
+        [FromQuery] string? placeName = null,
+        CancellationToken cancellationToken = default)
     {
         var validation = validationService.ValidateCoordinate(lat, lng);
         if (!validation.IsValid)
@@ -55,17 +56,22 @@ public class RouteEstimateController(
             return BadRequest(new { error = validation.Reason });
         }
 
-        var result = metroWalkingRouter.FindNearestMetroStationRoute(lat, lng, placeName);
+        var result = await metroWalkingRouter.FindNearestMetroStationRouteAsync(lat, lng, placeName, cancellationToken);
+        if (result is null)
+        {
+            return NotFound(new { error = "Không tìm thấy ga Metro phù hợp." });
+        }
+
         return Ok(result);
     }
 
     /// <summary>
-    /// Lấy danh sách 14 ga Metro Số 1 (Bến Thành - Suối Tiên)
+    /// Lấy danh sách ga Metro Số 1 (Bến Thành - Suối Tiên)
     /// </summary>
     [HttpGet("metro-stations")]
-    public IActionResult GetMetroStations()
+    public async Task<IActionResult> GetMetroStations(CancellationToken cancellationToken = default)
     {
-        var stations = metroWalkingRouter.GetMetroLine1Stations();
+        var stations = await metroWalkingRouter.GetMetroLine1StationsAsync(cancellationToken);
         return Ok(stations);
     }
 }
