@@ -9,9 +9,9 @@ public sealed class TagConfiguration : IEntityTypeConfiguration<Tag>
 {
     public void Configure(EntityTypeBuilder<Tag> builder)
     {
-        builder.ToTable("TAGS", tableBuilder =>
+        builder.ToTable("Tags", tableBuilder =>
             tableBuilder.HasCheckConstraint(
-                "CK_TAGS_Type",
+                "CK_Tags_Type",
                 "\"Type\" IN ('Interest', 'TravelStyle')"));
 
         builder.HasKey(tag => tag.Id);
@@ -47,6 +47,6 @@ public sealed class TagConfiguration : IEntityTypeConfiguration<Tag>
 
         builder.HasIndex(tag => new { tag.Type, tag.Name })
             .IsUnique()
-            .HasDatabaseName("UX_TAGS_Type_Name");
+            .HasDatabaseName("UX_Tags_Type_Name");
     }
 }

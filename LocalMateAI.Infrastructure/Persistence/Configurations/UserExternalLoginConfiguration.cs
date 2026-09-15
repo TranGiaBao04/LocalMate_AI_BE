@@ -8,14 +8,14 @@ public sealed class UserExternalLoginConfiguration : IEntityTypeConfiguration<Us
 {
     public void Configure(EntityTypeBuilder<UserExternalLogin> builder)
     {
-        builder.ToTable("USER_EXTERNAL_LOGINS");
+        builder.ToTable("UserExternalLogins");
 
         builder.HasKey(externalLogin => new
             {
                 externalLogin.Provider,
                 externalLogin.ProviderSubject
             })
-            .HasName("PK_USER_EXTERNAL_LOGINS");
+            .HasName("PK_UserExternalLogins");
 
         builder.Property(externalLogin => externalLogin.UserId)
             .HasColumnType("uuid")
@@ -37,12 +37,12 @@ public sealed class UserExternalLoginConfiguration : IEntityTypeConfiguration<Us
                 externalLogin.Provider
             })
             .IsUnique()
-            .HasDatabaseName("UX_USER_EXTERNAL_LOGINS_UserId_Provider");
+            .HasDatabaseName("UX_UserExternalLogins_UserId_Provider");
 
         builder.HasOne<User>()
             .WithMany()
             .HasForeignKey(externalLogin => externalLogin.UserId)
             .OnDelete(DeleteBehavior.Cascade)
-            .HasConstraintName("FK_USER_EXTERNAL_LOGINS_USERS_UserId");
+            .HasConstraintName("FK_UserExternalLogins_Users_UserId");
     }
 }

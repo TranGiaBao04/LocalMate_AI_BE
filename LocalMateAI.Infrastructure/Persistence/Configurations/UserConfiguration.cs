@@ -9,9 +9,9 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
 {
     public void Configure(EntityTypeBuilder<User> builder)
     {
-        builder.ToTable("USERS", tableBuilder =>
+        builder.ToTable("Users", tableBuilder =>
             tableBuilder.HasCheckConstraint(
-                "CK_USERS_Role",
+                "CK_Users_Role",
                 "\"Role\" IN ('User', 'Admin')"));
 
         builder.HasKey(user => user.Id);
@@ -32,7 +32,7 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
 
         builder.HasIndex(user => user.Email)
             .IsUnique()
-            .HasDatabaseName("UX_USERS_Email");
+            .HasDatabaseName("UX_Users_Email");
 
         builder.Property(user => user.PasswordHash)
             .HasColumnType("text")
