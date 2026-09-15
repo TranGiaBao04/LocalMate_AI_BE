@@ -1,4 +1,4 @@
-using LocalMateAI.Application.Services;
+using LocalMateAI.Application.Interfaces.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace LocalMateAI.API.Controllers;
@@ -47,7 +47,7 @@ public class GoogleMapsController(
     }
 
     /// <summary>
-    /// Kiểm tra tính hợp lệ của tọa độ vĩ độ/kinh độ tại TP.HCM (BE-61)
+    /// Kiểm tra tính hợp lệ của một tọa độ vĩ độ/kinh độ đơn lẻ tại TP.HCM (BE-61)
     /// </summary>
     [HttpGet("validate-coordinate")]
     public IActionResult ValidateCoordinate([FromQuery] double lat, [FromQuery] double lng)
