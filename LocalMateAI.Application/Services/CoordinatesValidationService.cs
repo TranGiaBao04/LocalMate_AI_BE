@@ -1,18 +1,14 @@
-namespace LocalMateAI.Application.Services;
+using LocalMateAI.Application.Interfaces.Services;
 
-public interface ICoordinatesValidationService
-{
-    bool IsValidHcmcCoordinate(double lat, double lng);
-    (bool IsValid, string Reason) ValidateCoordinate(double lat, double lng);
-}
+namespace LocalMateAI.Application.Services;
 
 public sealed class CoordinatesValidationService : ICoordinatesValidationService
 {
     // Bán kính TP.HCM hợp lệ
-    private const double MinLat = 10.3;
-    private const double MaxLat = 11.2;
-    private const double MinLng = 106.3;
-    private const double MaxLng = 107.1;
+    private const double MinLat = 10.370000; // Điểm cực Nam: Xã Long Hòa, huyện Cần Giờ
+    private const double MaxLat = 11.160000; // Điểm cực Bắc: Xã Phú Mỹ Hưng, huyện Củ Chi
+    private const double MinLng = 106.360000; // Điểm cực Tây: Xã Thái Mỹ, huyện Củ Chi
+    private const double MaxLng = 107.030000; // Điểm cực Đông: Xã Thạnh An (Đảo Thạnh An), Cần Giờ
 
     public bool IsValidHcmcCoordinate(double lat, double lng)
     {
