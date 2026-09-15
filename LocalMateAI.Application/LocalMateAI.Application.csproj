@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
     <ProjectReference Include="..\LocalMateAI.Domain\LocalMateAI.Domain.csproj" />
@@ -16,6 +16,8 @@
     <PackageReference Include="FluentValidation" Version="12.1.1" />
     <PackageReference Include="NetTopologySuite" Version="2.6.0" />
     <PackageReference Include="Microsoft.Extensions.Caching.Memory" Version="10.0.11" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.11" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.11" />
   </ItemGroup>
 
   <PropertyGroup>

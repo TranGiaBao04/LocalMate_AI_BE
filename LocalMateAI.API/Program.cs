@@ -117,6 +117,13 @@ builder.Services.AddValidatorsFromAssemblyContaining<TripRequestValidator>();
 builder.Services.AddScoped<ITripCriteriaNormalizationService, TripCriteriaNormalizationService>();
 builder.Services.AddScoped<ITripOriginResolverService, TripOriginResolverService>();
 builder.Services.AddScoped<ITripFeasibilityService, TripFeasibilityService>();
+
+// Register Application Services for Google Maps & Navigation (BE-60, BE-61, BE-62, BE-63)
+builder.Services.AddSingleton<IGoogleMapsUrlBuilderService, GoogleMapsUrlBuilderService>();
+builder.Services.AddSingleton<ICoordinatesValidationService, CoordinatesValidationService>();
+builder.Services.AddScoped<IRouteEstimateService, RouteEstimateService>();
+builder.Services.AddScoped<IMetroWalkingRouter, MetroWalkingRouter>();
+
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connectionString, npgsqlOptions => npgsqlOptions.UseNetTopologySuite()));
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -154,6 +161,7 @@ var app = builder.Build();
 using (var seedScope = app.Services.CreateScope())
 {
     var seedDbContext = seedScope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await seedDbContext.Database.MigrateAsync();
     await DataSeeder.SeedAsync(seedDbContext);
 }
 
