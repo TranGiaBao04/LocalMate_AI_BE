@@ -8,6 +8,30 @@ public sealed class TripService(
     ITripRepository tripRepository,
     IUserRepository userRepository) : ITripService
 {
+    public async Task<MyTripsResult> GetMyTripsAsync(
+        Guid userId,
+        CancellationToken cancellationToken = default)
+    {
+        var user = await userRepository.GetByIdAsync(userId, cancellationToken);
+        if (user is null)
+        {
+            return new MyTripsResult(false);
+        }
+
+        var trips = await tripRepository.GetByUserIdAsync(userId, cancellationToken);
+        return new MyTripsResult(true, trips.Select(trip => new MyTripResponse(
+            trip.Id,
+            trip.Status.ToString(),
+            trip.StartLatitude,
+            trip.StartLongitude,
+            trip.DurationHours,
+            trip.BudgetMin,
+            trip.BudgetMax,
+            trip.ItemCount,
+            trip.CreatedAt,
+            trip.UpdatedAt)).ToArray());
+    }
+
     public async Task<SaveTripResult> SaveTripAsync(
         Guid userId,
         SaveTripRequest request,

@@ -73,6 +73,33 @@ public sealed class TripsController(
         };
     }
 
+    [HttpGet("my-trips")]
+    [Authorize(Roles = "User,Admin")]
+    [ProducesResponseType<IReadOnlyList<MyTripResponse>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<IReadOnlyList<MyTripResponse>>> GetMyTripsAsync(
+        CancellationToken cancellationToken)
+    {
+        var subject = User.FindFirst("sub")?.Value;
+        if (!Guid.TryParse(subject, out var userId) || userId == Guid.Empty)
+        {
+            return Unauthorized(CreateProblem(
+                StatusCodes.Status401Unauthorized,
+                "Authentication identity is invalid.",
+                "invalid_identity"));
+        }
+
+        var result = await tripService.GetMyTripsAsync(userId, cancellationToken);
+        return result.UserFound
+            ? Ok(result.Trips)
+            : NotFound(CreateProblem(
+                StatusCodes.Status404NotFound,
+                "Current user was not found.",
+                "user_not_found"));
+    }
+
     private ProblemDetails CreateProblem(int status, string title, string code)
     {
         var problem = new ProblemDetails
