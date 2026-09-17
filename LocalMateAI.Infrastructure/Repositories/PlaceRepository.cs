@@ -79,4 +79,23 @@ public sealed class PlaceRepository(AppDbContext dbContext) : IPlaceRepository
              """)
             .ToListAsync(cancellationToken);
     }
+
+    public async Task<IReadOnlyDictionary<Guid, IReadOnlyList<Guid>>> GetPlaceTagIdsByPlaceIdsAsync(
+        IReadOnlyList<Guid> placeIds,
+        CancellationToken cancellationToken = default)
+    {
+        if (placeIds.Count == 0)
+        {
+            return new Dictionary<Guid, IReadOnlyList<Guid>>();
+        }
+
+        return (await dbContext.PlaceTags
+                .Where(placeTag => placeIds.Contains(placeTag.PlaceId))
+                .Select(placeTag => new { placeTag.PlaceId, placeTag.TagId })
+                .ToListAsync(cancellationToken))
+            .GroupBy(row => row.PlaceId)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<Guid>)group.Select(row => row.TagId).ToList());
+    }
 }

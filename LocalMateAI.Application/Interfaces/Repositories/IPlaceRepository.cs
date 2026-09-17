@@ -20,4 +20,8 @@ public interface IPlaceRepository
         double radiusMeters,
         PlaceCategory? category,
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyDictionary<Guid, IReadOnlyList<Guid>>> GetPlaceTagIdsByPlaceIdsAsync(
+        IReadOnlyList<Guid> placeIds,
+        CancellationToken cancellationToken = default);
 }

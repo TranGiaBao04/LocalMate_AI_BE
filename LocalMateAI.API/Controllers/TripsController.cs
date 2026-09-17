@@ -1,3 +1,4 @@
+using LocalMateAI.Application.DTOs.Matching;
 using LocalMateAI.Application.DTOs.Trips;
 using LocalMateAI.Application.Interfaces.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -9,6 +10,7 @@ namespace LocalMateAI.API.Controllers;
 [Route("api/trips")]
 public sealed class TripsController(
     ITripFeasibilityService tripFeasibilityService,
+    ITripMatchingService tripMatchingService,
     ITripService tripService) : ControllerBase
 {
     [HttpPost("feasibility-check")]
@@ -27,6 +29,27 @@ public sealed class TripsController(
             TripFeasibilityResultStatus.ValidationFailed =>
                 CreateValidationProblem(result.ValidationErrors!),
             _ => throw new InvalidOperationException("Unsupported trip feasibility result status.")
+        };
+    }
+
+    [HttpPost("match")]
+        [Authorize(Roles = "User,Admin")]
+        [ProducesResponseType<TripMatchingResponse>(StatusCodes.Status200OK)]
+        [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        public async Task<ActionResult<TripMatchingResponse>> MatchAsync(
+            [FromBody] TripRequestDto request,
+            CancellationToken cancellationToken)
+    {
+        var result = await tripMatchingService.MatchAsync(request, cancellationToken);
+
+        return result.Status switch
+        {
+            TripMatchingResultStatus.Success => Ok(result.Response),
+            TripMatchingResultStatus.ValidationFailed =>
+                CreateValidationProblem(result.ValidationErrors!),
+            _ => throw new InvalidOperationException("Unsupported trip matching result status.")
         };
     }
 

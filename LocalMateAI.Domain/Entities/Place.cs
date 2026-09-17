@@ -13,6 +13,8 @@ public sealed class Place : BaseEntity
     public PlaceCategory Category { get; set; }
     public PlaceStatus Status { get; set; } = PlaceStatus.Pending;
     public decimal EstimatedCostMin { get; set; }
-    public decimal EstimatedCostMax { get; set; }
-    public string? ImageUrl { get; set; }
-}
+        public decimal EstimatedCostMax { get; set; }
+        public string? ImageUrl { get; set; }
+
+        public ICollection<PlaceTag> Tags { get; set; } = [];
+    }

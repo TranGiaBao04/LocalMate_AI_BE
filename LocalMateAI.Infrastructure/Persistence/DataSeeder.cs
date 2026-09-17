@@ -17,10 +17,21 @@ public static class DataSeeder
         PropertyNameCaseInsensitive = true
     };
 
+    private static readonly IReadOnlyDictionary<string, string[]> PlaceTagMappingsByCategory =
+        new Dictionary<string, string[]>
+        {
+            ["Food"] = new[] { "Ẩm thực", "Chill nhẹ" },
+            ["Cafe"] = new[] { "Cà phê", "Chụp ảnh" },
+            ["Culture"] = new[] { "Văn hóa", "Chụp ảnh" },
+            ["CheckIn"] = new[] { "Check-in", "Chill nhẹ" }
+        };
+
     public static async Task SeedAsync(AppDbContext context, CancellationToken cancellationToken = default)
     {
         await SeedMetroStationsAsync(context, cancellationToken);
         await SeedPlacesAsync(context, cancellationToken);
+        await SeedTagsAsync(context, cancellationToken);
+        await SeedPlaceTagsAsync(context, cancellationToken);
         await SeedCuratedItinerariesAsync(context, cancellationToken);
     }
 
@@ -67,6 +78,65 @@ public static class DataSeeder
 
         await context.Places.AddRangeAsync(places, cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
+    }
+
+    private static async Task SeedTagsAsync(AppDbContext context, CancellationToken cancellationToken)
+    {
+        if (await context.Tags.AnyAsync(cancellationToken))
+        {
+            return;
+        }
+
+        var records = await ReadSeedFileAsync<TagSeedRecord>("tags.seed.json", cancellationToken);
+
+        var tags = records.Select(record => new Tag
+        {
+            Name = record.Name,
+            Type = Enum.Parse<TagType>(record.Type),
+            IsActive = true
+        });
+
+        await context.Tags.AddRangeAsync(tags, cancellationToken);
+        await context.SaveChangesAsync(cancellationToken);
+    }
+
+    private static async Task SeedPlaceTagsAsync(AppDbContext context, CancellationToken cancellationToken)
+    {
+        // Không guard theo Places (Places có thể đã tồn tại từ trước) — guard theo chính bảng PlaceTags.
+        if (await context.PlaceTags.AnyAsync(cancellationToken))
+        {
+            return;
+        }
+
+        var placeRecords = await ReadSeedFileAsync<PlaceSeedRecord>("places.seed.json", cancellationToken);
+        var placesByName = await context.Places.ToDictionaryAsync(place => place.Name, cancellationToken);
+        var tagsByName = await context.Tags.ToDictionaryAsync(tag => tag.Name, cancellationToken);
+
+        var placeTags = new List<PlaceTag>();
+
+        foreach (var record in placeRecords)
+        {
+            if (!placesByName.TryGetValue(record.Name, out var place))
+            {
+                continue;
+            }
+
+            var tagNames = PlaceTagMappingsByCategory.GetValueOrDefault(record.Category, []);
+
+            foreach (var tagName in tagNames)
+            {
+                if (tagsByName.TryGetValue(tagName, out var tag))
+                {
+                    placeTags.Add(new PlaceTag { PlaceId = place.Id, TagId = tag.Id });
+                }
+            }
+        }
+
+        if (placeTags.Count > 0)
+        {
+            await context.PlaceTags.AddRangeAsync(placeTags, cancellationToken);
+            await context.SaveChangesAsync(cancellationToken);
+        }
     }
 
     private static async Task SeedCuratedItinerariesAsync(AppDbContext context, CancellationToken cancellationToken)
@@ -119,6 +189,8 @@ public static class DataSeeder
     }
 
     private sealed record MetroStationSeedRecord(string Name, int Order, double Latitude, double Longitude);
+
+    private sealed record TagSeedRecord(string Name, string Type);
 
     private sealed record PlaceSeedRecord(
         string Name,
