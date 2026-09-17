@@ -33,12 +33,14 @@ public sealed class TripsController(
     }
 
     [HttpPost("match")]
-    [AllowAnonymous]
-    [ProducesResponseType<TripMatchingResponse>(StatusCodes.Status200OK)]
-    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<TripMatchingResponse>> MatchAsync(
-        [FromBody] TripRequestDto request,
-        CancellationToken cancellationToken)
+        [Authorize(Roles = "User,Admin")]
+        [ProducesResponseType<TripMatchingResponse>(StatusCodes.Status200OK)]
+        [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
+        public async Task<ActionResult<TripMatchingResponse>> MatchAsync(
+            [FromBody] TripRequestDto request,
+            CancellationToken cancellationToken)
     {
         var result = await tripMatchingService.MatchAsync(request, cancellationToken);
 

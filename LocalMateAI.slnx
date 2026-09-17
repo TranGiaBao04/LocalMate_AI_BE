@@ -3,4 +3,5 @@
   <Project Path="LocalMateAI.Application/LocalMateAI.Application.csproj" />
   <Project Path="LocalMateAI.Domain/LocalMateAI.Domain.csproj" />
   <Project Path="LocalMateAI.Infrastructure/LocalMateAI.Infrastructure.csproj" />
+  <Project Path="LocalMateAI.Tests/LocalMateAI.Tests.csproj" />
 </Solution>

@@ -2,6 +2,7 @@ using System.Security.Claims;
 using LocalMateAI.Application.DTOs.Auth;
 using LocalMateAI.Application.Interfaces.Services;
 using LocalMateAI.Domain.Entities;
+using LocalMateAI.Domain.Enums;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
@@ -22,9 +23,12 @@ public sealed class JwtAccessTokenService(IOptions<JwtOptions> options) : IAcces
             ]);
 
     public AccessTokenResult CreateDemoAccessToken(Guid sessionId) =>
-        CreateToken(
-            sessionId,
-            [new Claim("session_type", "demo")]);
+            CreateToken(
+                sessionId,
+                [
+                    new Claim("session_type", "demo"),
+                    new Claim("role", UserRole.User.ToString())
+                ]);
 
     private AccessTokenResult CreateToken(Guid subjectId, IEnumerable<Claim> additionalClaims)
     {
