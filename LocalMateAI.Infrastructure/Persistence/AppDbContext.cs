@@ -16,7 +16,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<Trip> Trips => Set<Trip>();
     public DbSet<ItineraryItem> ItineraryItems => Set<ItineraryItem>();
     public DbSet<TripTag> TripTags => Set<TripTag>();
-    public DbSet<UserExternalLogin> UserExternalLogins => Set<UserExternalLogin>();
+        public DbSet<PlaceTag> PlaceTags => Set<PlaceTag>();
+        public DbSet<UserExternalLogin> UserExternalLogins => Set<UserExternalLogin>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

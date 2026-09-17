@@ -1,0 +1,9 @@
+[
+  { "Name": "Cà phê", "Type": "Interest" },
+  { "Name": "Ẩm thực", "Type": "Interest" },
+  { "Name": "Văn hóa", "Type": "Interest" },
+  { "Name": "Check-in", "Type": "Interest" },
+  { "Name": "Chụp ảnh", "Type": "TravelStyle" },
+  { "Name": "Chill nhẹ", "Type": "TravelStyle" },
+  { "Name": "Thiên nhiên", "Type": "TravelStyle" }
+]
