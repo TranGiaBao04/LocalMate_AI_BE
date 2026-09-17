@@ -1,4 +1,5 @@
 using FluentValidation;
+using LocalMateAI.API;
 using LocalMateAI.API.Middlewares;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Interfaces.Services;
@@ -80,13 +81,16 @@ if (googleAuthValidationResult.Failed)
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
+{
     options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Type = SecuritySchemeType.Http,
         Scheme = "bearer",
         BearerFormat = "JWT",
         Description = "Enter a JWT access token using the Bearer scheme."
-    }));
+    });
+    options.OperationFilter<TripLibraryAuthorizationOperationFilter>();
+});
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.Configure<JwtOptions>(jwtConfiguration);
@@ -107,6 +111,7 @@ builder.Services.AddScoped<IAccessTokenService, JwtAccessTokenService>();
 builder.Services.AddScoped<IGoogleIdentityTokenValidator, GoogleIdentityTokenValidator>();
 builder.Services.AddScoped<IMetroStationRepository, MetroStationRepository>();
 builder.Services.AddScoped<IPlaceRepository, PlaceRepository>();
+builder.Services.AddScoped<ITripRepository, TripRepository>();
 builder.Services.AddScoped<IGeoService, GeoService>();
 builder.Services.AddScoped<IPlaceQueryService, PlaceQueryService>();
 builder.Services.AddMemoryCache();
@@ -117,6 +122,7 @@ builder.Services.AddValidatorsFromAssemblyContaining<TripRequestValidator>();
 builder.Services.AddScoped<ITripCriteriaNormalizationService, TripCriteriaNormalizationService>();
 builder.Services.AddScoped<ITripOriginResolverService, TripOriginResolverService>();
 builder.Services.AddScoped<ITripFeasibilityService, TripFeasibilityService>();
+builder.Services.AddScoped<ITripService, TripService>();
 
 // Register Application Services for Google Maps & Navigation (BE-60, BE-61, BE-62, BE-63)
 builder.Services.AddSingleton<IGoogleMapsUrlBuilderService, GoogleMapsUrlBuilderService>();

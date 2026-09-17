@@ -7,10 +7,12 @@ namespace LocalMateAI.API.Controllers;
 
 [ApiController]
 [Route("api/trips")]
-[AllowAnonymous]
-public sealed class TripsController(ITripFeasibilityService tripFeasibilityService) : ControllerBase
+public sealed class TripsController(
+    ITripFeasibilityService tripFeasibilityService,
+    ITripService tripService) : ControllerBase
 {
     [HttpPost("feasibility-check")]
+    [AllowAnonymous]
     [ProducesResponseType<TripFeasibilityResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<TripFeasibilityResponse>> CheckFeasibilityAsync(
@@ -26,6 +28,90 @@ public sealed class TripsController(ITripFeasibilityService tripFeasibilityServi
                 CreateValidationProblem(result.ValidationErrors!),
             _ => throw new InvalidOperationException("Unsupported trip feasibility result status.")
         };
+    }
+
+    [HttpPost("save")]
+    [Authorize(Roles = "User,Admin")]
+    [ProducesResponseType<SaveTripResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<SaveTripResponse>> SaveTripAsync(
+        [FromBody] SaveTripRequest request,
+        CancellationToken cancellationToken)
+    {
+        var subject = User.FindFirst("sub")?.Value;
+        if (!Guid.TryParse(subject, out var userId) || userId == Guid.Empty)
+        {
+            return Unauthorized(CreateProblem(
+                StatusCodes.Status401Unauthorized,
+                "Authentication identity is invalid.",
+                "invalid_identity"));
+        }
+
+        var result = await tripService.SaveTripAsync(userId, request, cancellationToken);
+        return result.Status switch
+        {
+            SaveTripResultStatus.Success => Ok(result.Response),
+            SaveTripResultStatus.InvalidTripId =>
+                BadRequest(CreateProblem(
+                    StatusCodes.Status400BadRequest,
+                    "Trip ID is invalid.",
+                    "invalid_trip_id")),
+            SaveTripResultStatus.UserNotFound =>
+                NotFound(CreateProblem(
+                    StatusCodes.Status404NotFound,
+                    "Current user was not found.",
+                    "user_not_found")),
+            SaveTripResultStatus.TripNotFound =>
+                NotFound(CreateProblem(
+                    StatusCodes.Status404NotFound,
+                    "Trip was not found.",
+                    "trip_not_found")),
+            _ => throw new InvalidOperationException("Unsupported save trip result status.")
+        };
+    }
+
+    [HttpGet("my-trips")]
+    [Authorize(Roles = "User,Admin")]
+    [ProducesResponseType<IReadOnlyList<MyTripResponse>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<IReadOnlyList<MyTripResponse>>> GetMyTripsAsync(
+        CancellationToken cancellationToken)
+    {
+        var subject = User.FindFirst("sub")?.Value;
+        if (!Guid.TryParse(subject, out var userId) || userId == Guid.Empty)
+        {
+            return Unauthorized(CreateProblem(
+                StatusCodes.Status401Unauthorized,
+                "Authentication identity is invalid.",
+                "invalid_identity"));
+        }
+
+        var result = await tripService.GetMyTripsAsync(userId, cancellationToken);
+        return result.UserFound
+            ? Ok(result.Trips)
+            : NotFound(CreateProblem(
+                StatusCodes.Status404NotFound,
+                "Current user was not found.",
+                "user_not_found"));
+    }
+
+    private ProblemDetails CreateProblem(int status, string title, string code)
+    {
+        var problem = new ProblemDetails
+        {
+            Status = status,
+            Title = title,
+            Type = $"https://httpstatuses.com/{status}",
+            Instance = HttpContext.Request.Path
+        };
+
+        problem.Extensions["code"] = code;
+        return problem;
     }
 
     private ObjectResult CreateValidationProblem(
