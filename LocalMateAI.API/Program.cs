@@ -126,6 +126,7 @@ builder.Services.AddScoped<IMetroClusterMatchingService, MetroClusterMatchingSer
 builder.Services.AddScoped<ICandidateFilterService, CandidateFilterService>();
 builder.Services.AddScoped<ITagSimilarityScorer, TagSimilarityScorer>();
 builder.Services.AddScoped<ITripMatchingService, TripMatchingService>();
+builder.Services.AddScoped<IHeuristicFallbackEngine, HeuristicFallbackEngine>();
 builder.Services.AddScoped<ITripService, TripService>();
 
 // Register Application Services for Google Maps & Navigation (BE-60, BE-61, BE-62, BE-63)

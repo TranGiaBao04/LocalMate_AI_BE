@@ -11,6 +11,7 @@ namespace LocalMateAI.API.Controllers;
 public sealed class TripsController(
     ITripFeasibilityService tripFeasibilityService,
     ITripMatchingService tripMatchingService,
+    IHeuristicFallbackEngine heuristicFallbackEngine,
     ITripService tripService) : ControllerBase
 {
     [HttpPost("feasibility-check")]
@@ -33,14 +34,14 @@ public sealed class TripsController(
     }
 
     [HttpPost("match")]
-        [Authorize(Roles = "User,Admin")]
-        [ProducesResponseType<TripMatchingResponse>(StatusCodes.Status200OK)]
-        [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
-        [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
-        [ProducesResponseType(StatusCodes.Status403Forbidden)]
-        public async Task<ActionResult<TripMatchingResponse>> MatchAsync(
-            [FromBody] TripRequestDto request,
-            CancellationToken cancellationToken)
+    [Authorize(Roles = "User,Admin")]
+    [ProducesResponseType<TripMatchingResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<TripMatchingResponse>> MatchAsync(
+        [FromBody] TripRequestDto request,
+        CancellationToken cancellationToken)
     {
         var result = await tripMatchingService.MatchAsync(request, cancellationToken);
 
@@ -50,6 +51,31 @@ public sealed class TripsController(
             TripMatchingResultStatus.ValidationFailed =>
                 CreateValidationProblem(result.ValidationErrors!),
             _ => throw new InvalidOperationException("Unsupported trip matching result status.")
+        };
+    }
+
+    [HttpPost("fallback-itinerary")]
+    [Authorize(Roles = "User,Admin")]
+    [ProducesResponseType<FallbackItineraryPayload>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<FallbackItineraryPayload>> GenerateFallbackItineraryAsync(
+        [FromBody] TripRequestDto request,
+        [FromQuery] string reason = "heuristic",
+        CancellationToken cancellationToken = default)
+    {
+        var result = await heuristicFallbackEngine.GenerateFallbackAsync(
+            request,
+            reason,
+            cancellationToken);
+
+        return result.Status switch
+        {
+            FallbackItineraryStatus.Success => Ok(result.Payload),
+            FallbackItineraryStatus.ValidationFailed =>
+                CreateValidationProblem(result.ValidationErrors!),
+            _ => throw new InvalidOperationException("Unsupported fallback itinerary result status.")
         };
     }
 
