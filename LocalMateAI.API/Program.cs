@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using FluentValidation;
 using LocalMateAI.API;
 using LocalMateAI.API.Middlewares;
@@ -5,6 +6,7 @@ using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Interfaces.Services;
 using LocalMateAI.Application.Services;
 using LocalMateAI.Application.Validators.Trips;
+using LocalMateAI.Domain.Enums;
 using LocalMateAI.Infrastructure.Persistence;
 using LocalMateAI.Infrastructure.Repositories;
 using LocalMateAI.Infrastructure.Security;
@@ -90,6 +92,20 @@ builder.Services.AddSwaggerGen(options =>
         Description = "Enter a JWT access token using the Bearer scheme."
     });
     options.OperationFilter<TripLibraryAuthorizationOperationFilter>();
+    options.MapType<FeedbackQuickTag>(() => new OpenApiSchema
+    {
+        Type = JsonSchemaType.String,
+        Enum =
+        [
+            JsonValue.Create(nameof(FeedbackQuickTag.Suitable)),
+            JsonValue.Create(nameof(FeedbackQuickTag.NotSuitable)),
+            JsonValue.Create(nameof(FeedbackQuickTag.TooDense)),
+            JsonValue.Create(nameof(FeedbackQuickTag.TooFewStops)),
+            JsonValue.Create(nameof(FeedbackQuickTag.TooExpensive)),
+            JsonValue.Create(nameof(FeedbackQuickTag.TooFar)),
+            JsonValue.Create(nameof(FeedbackQuickTag.PreferenceMismatch))
+        ]
+    });
 });
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
@@ -112,6 +128,7 @@ builder.Services.AddScoped<IGoogleIdentityTokenValidator, GoogleIdentityTokenVal
 builder.Services.AddScoped<IMetroStationRepository, MetroStationRepository>();
 builder.Services.AddScoped<IPlaceRepository, PlaceRepository>();
 builder.Services.AddScoped<ITripRepository, TripRepository>();
+builder.Services.AddScoped<IFeedbackRepository, FeedbackRepository>();
 builder.Services.AddScoped<IGeoService, GeoService>();
 builder.Services.AddScoped<IPlaceQueryService, PlaceQueryService>();
 builder.Services.AddScoped<IAdminPlaceService, AdminPlaceService>();
@@ -129,6 +146,7 @@ builder.Services.AddScoped<ITagSimilarityScorer, TagSimilarityScorer>();
 builder.Services.AddScoped<ITripMatchingService, TripMatchingService>();
 builder.Services.AddScoped<IHeuristicFallbackEngine, HeuristicFallbackEngine>();
 builder.Services.AddScoped<ITripService, TripService>();
+builder.Services.AddScoped<IFeedbackService, FeedbackService>();
 
 // Register Application Services for Google Maps & Navigation (BE-60, BE-61, BE-62, BE-63)
 builder.Services.AddSingleton<IGoogleMapsUrlBuilderService, GoogleMapsUrlBuilderService>();
