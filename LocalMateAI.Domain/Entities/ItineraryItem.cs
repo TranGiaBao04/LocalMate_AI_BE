@@ -13,4 +13,6 @@ public sealed class ItineraryItem : BaseEntity
     public int EstimatedDurationMinutes { get; set; }
     public decimal EstimatedBudget { get; set; }
     public string? Reasoning { get; set; }
+    public bool IsVisited { get; set; }
+    public DateTimeOffset? VisitedAt { get; set; }
 }

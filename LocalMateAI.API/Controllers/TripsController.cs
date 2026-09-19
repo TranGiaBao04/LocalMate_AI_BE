@@ -193,6 +193,55 @@ public sealed class TripsController(
                 "user_not_found"));
     }
 
+    [HttpPut("items/{id:guid}/visit")]
+    [Authorize(Roles = "User,Admin")]
+    [ProducesResponseType<VisitItineraryItemResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<VisitItineraryItemResponse>> MarkItineraryItemVisitedAsync(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var subject = User.FindFirst("sub")?.Value;
+        if (!Guid.TryParse(subject, out var userId) || userId == Guid.Empty)
+        {
+            return Unauthorized(CreateProblem(
+                StatusCodes.Status401Unauthorized,
+                "Authentication identity is invalid.",
+                "invalid_identity"));
+        }
+
+        var result = await tripService.MarkItineraryItemVisitedAsync(userId, id, cancellationToken);
+        return result.Status switch
+        {
+            VisitItineraryItemResultStatus.Success => Ok(result.Response),
+            VisitItineraryItemResultStatus.InvalidItemId =>
+                BadRequest(CreateProblem(
+                    StatusCodes.Status400BadRequest,
+                    "Itinerary item ID is invalid.",
+                    "invalid_itinerary_item_id")),
+            VisitItineraryItemResultStatus.UserNotFound =>
+                StatusCode(StatusCodes.Status403Forbidden, CreateProblem(
+                    StatusCodes.Status403Forbidden,
+                    "A persisted user account is required to mark a visit.",
+                    "visit_requires_persisted_user")),
+            VisitItineraryItemResultStatus.ItemNotFound =>
+                NotFound(CreateProblem(
+                    StatusCodes.Status404NotFound,
+                    "Itinerary item was not found.",
+                    "itinerary_item_not_found")),
+            VisitItineraryItemResultStatus.TripNotFinalized =>
+                Conflict(CreateProblem(
+                    StatusCodes.Status409Conflict,
+                    "Trip must be finalized before an item can be marked visited.",
+                    "trip_not_finalized")),
+            _ => throw new InvalidOperationException("Unsupported visit itinerary item result status.")
+        };
+    }
+
     private ProblemDetails CreateProblem(int status, string title, string code)
     {
         var problem = new ProblemDetails

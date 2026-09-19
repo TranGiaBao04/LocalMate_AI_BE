@@ -22,4 +22,15 @@ public interface ITripRepository
         Guid tripId,
         Guid userId,
         CancellationToken cancellationToken = default);
+
+    Task<OwnedItineraryItemVisitReadModel?> GetOwnedItineraryItemVisitAsync(
+        Guid itemId,
+        Guid userId,
+        CancellationToken cancellationToken = default);
+
+    Task<bool> MarkItineraryItemVisitedIfEligibleAsync(
+        Guid itemId,
+        Guid userId,
+        DateTimeOffset visitedAt,
+        CancellationToken cancellationToken = default);
 }
