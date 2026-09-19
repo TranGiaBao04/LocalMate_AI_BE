@@ -17,4 +17,9 @@ public interface ITripService
         Guid userId,
         Guid tripId,
         CancellationToken cancellationToken = default);
+
+    Task<VisitItineraryItemResult> MarkItineraryItemVisitedAsync(
+        Guid userId,
+        Guid itemId,
+        CancellationToken cancellationToken = default);
 }

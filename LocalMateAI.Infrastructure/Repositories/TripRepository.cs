@@ -69,4 +69,39 @@ public sealed class TripRepository(AppDbContext dbContext) : ITripRepository
 
         return rowsChanged == 1;
     }
+
+    public Task<OwnedItineraryItemVisitReadModel?> GetOwnedItineraryItemVisitAsync(
+        Guid itemId,
+        Guid userId,
+        CancellationToken cancellationToken = default) =>
+        dbContext.ItineraryItems
+            .AsNoTracking()
+            .Where(item => item.Id == itemId && item.Trip.UserId == userId)
+            .Select(item => new OwnedItineraryItemVisitReadModel(
+                item.Id,
+                item.TripId,
+                item.Trip.Status,
+                item.IsVisited,
+                item.VisitedAt,
+                item.UpdatedAt))
+            .SingleOrDefaultAsync(cancellationToken);
+
+    public async Task<bool> MarkItineraryItemVisitedIfEligibleAsync(
+        Guid itemId,
+        Guid userId,
+        DateTimeOffset visitedAt,
+        CancellationToken cancellationToken = default)
+    {
+        var rowsChanged = await dbContext.ItineraryItems
+            .Where(item => item.Id == itemId
+                           && item.Trip.UserId == userId
+                           && item.Trip.Status == TripStatus.Finalized
+                           && !item.IsVisited)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(item => item.IsVisited, true)
+                .SetProperty(item => item.VisitedAt, visitedAt)
+                .SetProperty(item => item.UpdatedAt, visitedAt.UtcDateTime), cancellationToken);
+
+        return rowsChanged == 1;
+    }
 }
