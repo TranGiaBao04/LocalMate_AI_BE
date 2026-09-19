@@ -1,3 +1,4 @@
+using LocalMateAI.Application.Commands;
 using LocalMateAI.Application.DTOs.Trips;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Services;
@@ -9,30 +10,37 @@ namespace LocalMateAI.Tests;
 public sealed class TripServiceFinalizeTests
 {
     private static readonly Guid UserId = Guid.NewGuid();
-    private static readonly Guid OtherUserId = Guid.NewGuid();
 
     [Fact]
-    public async Task FinalizeTrip_DraftOwnedTrip_Succeeds()
+    public async Task FinalizeTrip_DelegatesToCommand_AndReturnsItsResult()
     {
-        var trip = Trip(status: TripStatus.Draft, userId: UserId);
-        var service = new TripService(
-            new FakeTripRepository(trip, finalizeResult: true),
-            new FakeUserRepository());
+        var tripId = Guid.NewGuid();
+        var response = new FinalizeTripResponse(tripId, nameof(TripStatus.Finalized));
+        var fakeCommand = new FakeFinalizeTripCommand(
+            FinalizeTripResult.Succeeded(response));
 
-        var result = await service.FinalizeTripAsync(UserId, trip.Id);
+        var service = new TripService(
+            new NotSupportedTripRepository(),
+            new FakeUserRepository(),
+            fakeCommand);
+
+        var result = await service.FinalizeTripAsync(UserId, tripId);
 
         Assert.Equal(FinalizeTripResultStatus.Success, result.Status);
-        Assert.NotNull(result.Response);
-        Assert.Equal(trip.Id, result.Response.TripId);
-        Assert.Equal(nameof(TripStatus.Finalized), result.Response.Status);
+        Assert.Same(response, result.Response);
+        Assert.Equal(UserId, fakeCommand.ReceivedUserId);
+        Assert.Equal(tripId, fakeCommand.ReceivedTripId);
     }
 
     [Fact]
-    public async Task FinalizeTrip_NullTrip_ReturnsNotFound()
+    public async Task FinalizeTrip_CommandFailure_PropagatesResult()
     {
+        var fakeCommand = new FakeFinalizeTripCommand(FinalizeTripResult.MissingTrip());
+
         var service = new TripService(
-            new FakeTripRepository(trip: null),
-            new FakeUserRepository());
+            new NotSupportedTripRepository(),
+            new FakeUserRepository(),
+            fakeCommand);
 
         var result = await service.FinalizeTripAsync(UserId, Guid.NewGuid());
 
@@ -40,90 +48,41 @@ public sealed class TripServiceFinalizeTests
         Assert.Null(result.Response);
     }
 
-    [Fact]
-    public async Task FinalizeTrip_TripOwnedByOtherUser_ReturnsNotFound()
+    private sealed class FakeFinalizeTripCommand(FinalizeTripResult result) : IFinalizeTripCommand
     {
-        var trip = Trip(status: TripStatus.Draft, userId: OtherUserId);
-        var service = new TripService(
-            new FakeTripRepository(trip),
-            new FakeUserRepository());
+        public Guid? ReceivedUserId { get; private set; }
+        public Guid? ReceivedTripId { get; private set; }
 
-        var result = await service.FinalizeTripAsync(UserId, trip.Id);
-
-        // Không lộ thông tin trip của người khác — khớp pattern SaveTrip.MissingTrip
-        Assert.Equal(FinalizeTripResultStatus.TripNotFound, result.Status);
-    }
-
-    [Fact]
-    public async Task FinalizeTrip_AlreadyFinalized_ReturnsAlreadyFinalized()
-    {
-        var trip = Trip(status: TripStatus.Finalized, userId: UserId);
-        var service = new TripService(
-            new FakeTripRepository(trip),
-            new FakeUserRepository());
-
-        var result = await service.FinalizeTripAsync(UserId, trip.Id);
-
-        Assert.Equal(FinalizeTripResultStatus.AlreadyFinalized, result.Status);
-        Assert.Null(result.Response);
-    }
-
-    [Fact]
-    public async Task FinalizeTrip_EmptyTripId_ReturnsInvalid()
-    {
-        var service = new TripService(
-            new FakeTripRepository(trip: null),
-            new FakeUserRepository());
-
-        var result = await service.FinalizeTripAsync(UserId, Guid.Empty);
-
-        Assert.Equal(FinalizeTripResultStatus.InvalidTripId, result.Status);
-    }
-
-    [Fact]
-    public async Task FinalizeTrip_ConcurrentFinalizeLosesRace_ReturnsNotFound()
-    {
-        // Dòng chuyển trạng thái không thành công (đã bị request khác finalize trước) → MissingTrip
-        var trip = Trip(status: TripStatus.Draft, userId: UserId);
-        var service = new TripService(
-            new FakeTripRepository(trip, finalizeResult: false),
-            new FakeUserRepository());
-
-        var result = await service.FinalizeTripAsync(UserId, trip.Id);
-
-        Assert.Equal(FinalizeTripResultStatus.TripNotFound, result.Status);
-    }
-
-    private static Trip Trip(TripStatus status, Guid userId) =>
-        new()
-        {
-            Id = Guid.NewGuid(),
-            UserId = userId,
-            StartLatitude = 10.77,
-            StartLongitude = 106.69,
-            DurationHours = 3,
-            BudgetMin = 0,
-            BudgetMax = 300_000,
-            Status = status
-        };
-
-    private sealed class FakeTripRepository(Trip? trip, bool finalizeResult = true) : ITripRepository
-    {
-        public Task<Trip?> GetByIdAsync(Guid tripId, CancellationToken cancellationToken = default) =>
-            Task.FromResult(trip);
-
-        public Task<bool> FinalizeTripAsync(
-            Guid tripId,
+        public Task<FinalizeTripResult> ExecuteAsync(
             Guid userId,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(finalizeResult);
+            Guid tripId,
+            CancellationToken cancellationToken = default)
+        {
+            ReceivedUserId = userId;
+            ReceivedTripId = tripId;
+            return Task.FromResult(result);
+        }
+    }
 
+    private sealed class NotSupportedTripRepository : ITripRepository
+    {
         public Task<IReadOnlyList<MyTripReadModel>> GetByUserIdAsync(
             Guid userId,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
+        public Task<Trip?> GetByIdAsync(
+            Guid tripId,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         public Task<bool> AttachUserIfUnownedAsync(
+            Guid tripId,
+            Guid userId,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<bool> FinalizeTripAsync(
             Guid tripId,
             Guid userId,
             CancellationToken cancellationToken = default) =>

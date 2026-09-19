@@ -1,6 +1,7 @@
 using FluentValidation;
 using LocalMateAI.API;
 using LocalMateAI.API.Middlewares;
+using LocalMateAI.Application.Commands;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Interfaces.Services;
 using LocalMateAI.Application.Services;
@@ -129,6 +130,7 @@ builder.Services.AddScoped<ITagSimilarityScorer, TagSimilarityScorer>();
 builder.Services.AddScoped<ITripMatchingService, TripMatchingService>();
 builder.Services.AddScoped<IHeuristicFallbackEngine, HeuristicFallbackEngine>();
 builder.Services.AddScoped<ITripService, TripService>();
+builder.Services.AddScoped<IFinalizeTripCommand, FinalizeTripCommand>();
 
 // Register Application Services for Google Maps & Navigation (BE-60, BE-61, BE-62, BE-63)
 builder.Services.AddSingleton<IGoogleMapsUrlBuilderService, GoogleMapsUrlBuilderService>();
