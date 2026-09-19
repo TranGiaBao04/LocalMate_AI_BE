@@ -11,6 +11,7 @@ public sealed class TripLibraryAuthorizationOperationFilter : IOperationFilter
         if (!string.Equals(route, "api/trips/save", StringComparison.OrdinalIgnoreCase)
             && !string.Equals(route, "api/trips/my-trips", StringComparison.OrdinalIgnoreCase)
             && !string.Equals(route, "api/trips/items/{id}/visit", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(route, "api/feedback/trip", StringComparison.OrdinalIgnoreCase)
             && !(route?.StartsWith("api/admin/places", StringComparison.OrdinalIgnoreCase) ?? false))
         {
             return;
