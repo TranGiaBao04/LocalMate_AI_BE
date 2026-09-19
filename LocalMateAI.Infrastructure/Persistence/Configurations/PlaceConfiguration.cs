@@ -34,6 +34,10 @@ public sealed class PlaceConfiguration : IEntityTypeConfiguration<Place>
             .HasConversion<string>()
             .HasMaxLength(20);
 
+        builder.Property(x => x.IsVerified)
+            .IsRequired()
+            .HasDefaultValue(false);
+
         builder.HasIndex(x => x.Location)
             .HasMethod("gist");
     }

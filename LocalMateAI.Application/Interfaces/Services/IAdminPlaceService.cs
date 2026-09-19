@@ -20,6 +20,16 @@ public interface IAdminPlaceService
         UpdateAdminPlaceRequest request,
         CancellationToken cancellationToken = default);
 
+    Task<AdminPlaceModerationResult> UpdateStatusAsync(
+        Guid placeId,
+        UpdatePlaceStatusRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<AdminPlaceModerationResult> UpdateVerificationAsync(
+        Guid placeId,
+        UpdatePlaceVerificationRequest request,
+        CancellationToken cancellationToken = default);
+
     Task<DeleteAdminPlaceResult> DeleteAsync(
         Guid placeId,
         CancellationToken cancellationToken = default);
