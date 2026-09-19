@@ -186,6 +186,9 @@ public sealed class PlaceRepository(AppDbContext dbContext) : IPlaceRepository
                 cancellationToken)
             || await dbContext.CuratedItineraryItems.AnyAsync(
                 item => item.PlaceId == placeId,
+                cancellationToken)
+            || await dbContext.PlaceReviews.AnyAsync(
+                review => review.PlaceId == placeId,
                 cancellationToken);
 
         if (isReferenced)
@@ -217,5 +220,6 @@ public sealed class PlaceRepository(AppDbContext dbContext) : IPlaceRepository
             SqlState: PostgresErrorCodes.ForeignKeyViolation,
             ConstraintName: "FK_ItineraryItems_Places_PlaceId"
                 or "FK_CuratedItineraryItems_Places_PlaceId"
+                or "FK_PlaceReviews_Places_PlaceId"
         };
 }

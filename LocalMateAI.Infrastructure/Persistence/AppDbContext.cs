@@ -16,6 +16,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<Trip> Trips => Set<Trip>();
     public DbSet<ItineraryItem> ItineraryItems => Set<ItineraryItem>();
     public DbSet<Feedback> Feedbacks => Set<Feedback>();
+    public DbSet<PlaceReview> PlaceReviews => Set<PlaceReview>();
     public DbSet<TripTag> TripTags => Set<TripTag>();
         public DbSet<PlaceTag> PlaceTags => Set<PlaceTag>();
         public DbSet<UserExternalLogin> UserExternalLogins => Set<UserExternalLogin>();
