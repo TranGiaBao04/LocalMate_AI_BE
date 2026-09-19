@@ -114,6 +114,7 @@ builder.Services.AddScoped<IPlaceRepository, PlaceRepository>();
 builder.Services.AddScoped<ITripRepository, TripRepository>();
 builder.Services.AddScoped<IGeoService, GeoService>();
 builder.Services.AddScoped<IPlaceQueryService, PlaceQueryService>();
+builder.Services.AddScoped<IAdminPlaceService, AdminPlaceService>();
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<IMasterDataService, MasterDataService>();
 builder.Services.AddScoped<ICuratedItineraryRepository, CuratedItineraryRepository>();
