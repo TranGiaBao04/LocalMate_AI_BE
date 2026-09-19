@@ -1,9 +1,11 @@
 using LocalMateAI.Application.DTOs.Places;
 using LocalMateAI.Application.Interfaces.Repositories;
+using LocalMateAI.Domain.Entities;
 using LocalMateAI.Infrastructure.Persistence;
 using LocalMateAI.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 using NetTopologySuite.Geometries;
+using Npgsql;
 
 namespace LocalMateAI.Infrastructure.Repositories;
 
@@ -98,4 +100,120 @@ public sealed class PlaceRepository(AppDbContext dbContext) : IPlaceRepository
                 group => group.Key,
                 group => (IReadOnlyList<Guid>)group.Select(row => row.TagId).ToList());
     }
+
+    public async Task<IReadOnlyList<AdminPlaceResponse>> GetAllForAdminAsync(
+        CancellationToken cancellationToken = default)
+    {
+        return await dbContext.Places
+            .AsNoTracking()
+            .OrderBy(place => place.Name)
+            .ThenBy(place => place.Id)
+            .Select(place => new AdminPlaceResponse(
+                place.Id,
+                place.Name,
+                place.Description,
+                place.Address,
+                place.Location.Y,
+                place.Location.X,
+                place.Category.ToString(),
+                place.Status.ToString(),
+                place.EstimatedCostMin,
+                place.EstimatedCostMax,
+                place.ImageUrl,
+                place.CreatedAt,
+                place.UpdatedAt))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<AdminPlaceResponse?> GetAdminByIdAsync(
+        Guid placeId,
+        CancellationToken cancellationToken = default)
+    {
+        return await dbContext.Places
+            .AsNoTracking()
+            .Where(place => place.Id == placeId)
+            .Select(place => new AdminPlaceResponse(
+                place.Id,
+                place.Name,
+                place.Description,
+                place.Address,
+                place.Location.Y,
+                place.Location.X,
+                place.Category.ToString(),
+                place.Status.ToString(),
+                place.EstimatedCostMin,
+                place.EstimatedCostMax,
+                place.ImageUrl,
+                place.CreatedAt,
+                place.UpdatedAt))
+            .SingleOrDefaultAsync(cancellationToken);
+    }
+
+    public Task<Place?> GetByIdAsync(
+        Guid placeId,
+        CancellationToken cancellationToken = default) =>
+        dbContext.Places.SingleOrDefaultAsync(place => place.Id == placeId, cancellationToken);
+
+    public async Task AddAsync(
+        Place place,
+        CancellationToken cancellationToken = default)
+    {
+        await dbContext.Places.AddAsync(place, cancellationToken);
+    }
+
+    public async Task SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<DeletePlacePersistenceResult> DeleteForAdminAsync(
+        Guid placeId,
+        CancellationToken cancellationToken = default)
+    {
+        var place = await dbContext.Places.SingleOrDefaultAsync(
+            candidate => candidate.Id == placeId,
+            cancellationToken);
+
+        if (place is null)
+        {
+            return DeletePlacePersistenceResult.NotFound;
+        }
+
+        var isReferenced = await dbContext.ItineraryItems.AnyAsync(
+                item => item.PlaceId == placeId,
+                cancellationToken)
+            || await dbContext.CuratedItineraryItems.AnyAsync(
+                item => item.PlaceId == placeId,
+                cancellationToken);
+
+        if (isReferenced)
+        {
+            return DeletePlacePersistenceResult.InUse;
+        }
+
+        var placeTags = await dbContext.PlaceTags
+            .Where(placeTag => placeTag.PlaceId == placeId)
+            .ToListAsync(cancellationToken);
+
+        dbContext.PlaceTags.RemoveRange(placeTags);
+        dbContext.Places.Remove(place);
+
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+            return DeletePlacePersistenceResult.Deleted;
+        }
+        catch (DbUpdateException exception) when (IsHistoricalPlaceReferenceViolation(exception))
+        {
+            return DeletePlacePersistenceResult.InUse;
+        }
+    }
+
+    private static bool IsHistoricalPlaceReferenceViolation(DbUpdateException exception) =>
+        exception.InnerException is PostgresException
+        {
+            SqlState: PostgresErrorCodes.ForeignKeyViolation,
+            ConstraintName: "FK_ItineraryItems_Places_PlaceId"
+                or "FK_CuratedItineraryItems_Places_PlaceId"
+        };
 }

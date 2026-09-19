@@ -9,7 +9,8 @@ public sealed class TripLibraryAuthorizationOperationFilter : IOperationFilter
     {
         var route = context.ApiDescription.RelativePath;
         if (!string.Equals(route, "api/trips/save", StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(route, "api/trips/my-trips", StringComparison.OrdinalIgnoreCase))
+            && !string.Equals(route, "api/trips/my-trips", StringComparison.OrdinalIgnoreCase)
+            && !(route?.StartsWith("api/admin/places", StringComparison.OrdinalIgnoreCase) ?? false))
         {
             return;
         }

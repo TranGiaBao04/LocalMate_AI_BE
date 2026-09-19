@@ -1,4 +1,5 @@
 using LocalMateAI.Application.DTOs.Places;
+using LocalMateAI.Domain.Entities;
 using LocalMateAI.Domain.Enums;
 using NetTopologySuite.Geometries;
 
@@ -23,5 +24,26 @@ public interface IPlaceRepository
 
     Task<IReadOnlyDictionary<Guid, IReadOnlyList<Guid>>> GetPlaceTagIdsByPlaceIdsAsync(
         IReadOnlyList<Guid> placeIds,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<AdminPlaceResponse>> GetAllForAdminAsync(
+        CancellationToken cancellationToken = default);
+
+    Task<AdminPlaceResponse?> GetAdminByIdAsync(
+        Guid placeId,
+        CancellationToken cancellationToken = default);
+
+    Task<Place?> GetByIdAsync(
+        Guid placeId,
+        CancellationToken cancellationToken = default);
+
+    Task AddAsync(
+        Place place,
+        CancellationToken cancellationToken = default);
+
+    Task SaveChangesAsync(CancellationToken cancellationToken = default);
+
+    Task<DeletePlacePersistenceResult> DeleteForAdminAsync(
+        Guid placeId,
         CancellationToken cancellationToken = default);
 }
