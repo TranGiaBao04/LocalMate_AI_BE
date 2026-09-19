@@ -122,6 +122,50 @@ public sealed class TripsController(
         };
     }
 
+    [HttpPost("{tripId:guid}/finalize")]
+    [Authorize(Roles = "User,Admin")]
+    [ProducesResponseType<FinalizeTripResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<FinalizeTripResponse>> FinalizeTripAsync(
+        Guid tripId,
+        CancellationToken cancellationToken)
+    {
+        var subject = User.FindFirst("sub")?.Value;
+        if (!Guid.TryParse(subject, out var userId) || userId == Guid.Empty)
+        {
+            return Unauthorized(CreateProblem(
+                StatusCodes.Status401Unauthorized,
+                "Authentication identity is invalid.",
+                "invalid_identity"));
+        }
+
+        var result = await tripService.FinalizeTripAsync(userId, tripId, cancellationToken);
+        return result.Status switch
+        {
+            FinalizeTripResultStatus.Success => Ok(result.Response),
+            FinalizeTripResultStatus.InvalidTripId =>
+                BadRequest(CreateProblem(
+                    StatusCodes.Status400BadRequest,
+                    "Trip ID is invalid.",
+                    "invalid_trip_id")),
+            FinalizeTripResultStatus.TripNotFound =>
+                NotFound(CreateProblem(
+                    StatusCodes.Status404NotFound,
+                    "Trip was not found.",
+                    "trip_not_found")),
+            FinalizeTripResultStatus.AlreadyFinalized =>
+                Conflict(CreateProblem(
+                    StatusCodes.Status409Conflict,
+                    "Trip is already finalized.",
+                    "already_finalized")),
+            _ => throw new InvalidOperationException("Unsupported finalize trip result status.")
+        };
+    }
+
     [HttpGet("my-trips")]
     [Authorize(Roles = "User,Admin")]
     [ProducesResponseType<IReadOnlyList<MyTripResponse>>(StatusCodes.Status200OK)]

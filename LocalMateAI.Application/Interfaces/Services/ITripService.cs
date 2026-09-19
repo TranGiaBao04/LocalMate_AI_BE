@@ -12,4 +12,9 @@ public interface ITripService
         Guid userId,
         SaveTripRequest request,
         CancellationToken cancellationToken = default);
+
+    Task<FinalizeTripResult> FinalizeTripAsync(
+        Guid userId,
+        Guid tripId,
+        CancellationToken cancellationToken = default);
 }
