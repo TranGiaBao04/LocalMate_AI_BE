@@ -17,4 +17,9 @@ public interface ITripRepository
         Guid tripId,
         Guid userId,
         CancellationToken cancellationToken = default);
+
+    Task<bool> FinalizeTripAsync(
+        Guid tripId,
+        Guid userId,
+        CancellationToken cancellationToken = default);
 }
