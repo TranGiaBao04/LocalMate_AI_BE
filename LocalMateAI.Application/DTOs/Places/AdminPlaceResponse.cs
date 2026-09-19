@@ -9,6 +9,7 @@ public sealed record AdminPlaceResponse(
     double Longitude,
     string Category,
     string Status,
+    bool IsVerified,
     decimal EstimatedCostMin,
     decimal EstimatedCostMax,
     string? ImageUrl,

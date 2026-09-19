@@ -12,6 +12,7 @@ public sealed class Place : BaseEntity
     public required Point Location { get; set; }
     public PlaceCategory Category { get; set; }
     public PlaceStatus Status { get; set; } = PlaceStatus.Pending;
+    public bool IsVerified { get; set; }
     public decimal EstimatedCostMin { get; set; }
         public decimal EstimatedCostMax { get; set; }
         public string? ImageUrl { get; set; }
