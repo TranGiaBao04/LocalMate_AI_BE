@@ -131,5 +131,11 @@ public sealed class FinalizeTripCommandTests
             DateTimeOffset visitedAt,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
+
+        public Task<Trip?> ForkTripAsync(
+            Guid sourceTripId,
+            Guid userId,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 }

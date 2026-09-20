@@ -100,6 +100,12 @@ public sealed class TripServiceFinalizeTests
             DateTimeOffset visitedAt,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
+
+        public Task<Trip?> ForkTripAsync(
+            Guid sourceTripId,
+            Guid userId,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 
     private sealed class FakeUserRepository : IUserRepository

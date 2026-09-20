@@ -1,3 +1,4 @@
+using LocalMateAI.Application.Commands;
 using LocalMateAI.Application.DTOs.Matching;
 using LocalMateAI.Application.DTOs.Trips;
 using LocalMateAI.Application.Interfaces.Services;
@@ -12,7 +13,8 @@ public sealed class TripsController(
     ITripFeasibilityService tripFeasibilityService,
     ITripMatchingService tripMatchingService,
     IHeuristicFallbackEngine heuristicFallbackEngine,
-    ITripService tripService) : ControllerBase
+    ITripService tripService,
+    IForkTripCommand forkTripCommand) : ControllerBase
 {
     [HttpPost("feasibility-check")]
     [AllowAnonymous]
@@ -163,6 +165,44 @@ public sealed class TripsController(
                     "Trip is already finalized.",
                     "already_finalized")),
             _ => throw new InvalidOperationException("Unsupported finalize trip result status.")
+        };
+    }
+
+    [HttpPost("{tripId:guid}/fork")]
+    [Authorize(Roles = "User,Admin")]
+    [ProducesResponseType<ForkTripResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ForkTripResponse>> ForkTripAsync(
+        Guid tripId,
+        CancellationToken cancellationToken)
+    {
+        var subject = User.FindFirst("sub")?.Value;
+        if (!Guid.TryParse(subject, out var userId) || userId == Guid.Empty)
+        {
+            return Unauthorized(CreateProblem(
+                StatusCodes.Status401Unauthorized,
+                "Authentication identity is invalid.",
+                "invalid_identity"));
+        }
+
+        var result = await forkTripCommand.ExecuteAsync(userId, tripId, cancellationToken);
+        return result.Status switch
+        {
+            ForkTripResultStatus.Success => Ok(result.Response),
+            ForkTripResultStatus.InvalidTripId =>
+                BadRequest(CreateProblem(
+                    StatusCodes.Status400BadRequest,
+                    "Trip ID is invalid.",
+                    "invalid_trip_id")),
+            ForkTripResultStatus.TripNotFound =>
+                NotFound(CreateProblem(
+                    StatusCodes.Status404NotFound,
+                    "Trip was not found.",
+                    "trip_not_found")),
+            _ => throw new InvalidOperationException("Unsupported fork trip result status.")
         };
     }
 

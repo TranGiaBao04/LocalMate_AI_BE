@@ -104,4 +104,71 @@ public sealed class TripRepository(AppDbContext dbContext) : ITripRepository
 
         return rowsChanged == 1;
     }
+
+    public async Task<Trip?> ForkTripAsync(
+        Guid sourceTripId,
+        Guid userId,
+        CancellationToken cancellationToken = default)
+    {
+        var source = await dbContext.Trips
+            .AsNoTracking()
+            .Include(trip => trip.Items)
+            .Include(trip => trip.Tags)
+            .SingleOrDefaultAsync(
+                trip => trip.Id == sourceTripId && trip.UserId == userId,
+                cancellationToken);
+        if (source is null)
+        {
+            return null;
+        }
+
+        var now = DateTime.UtcNow;
+        var copyId = Guid.NewGuid();
+        var copy = new Trip
+        {
+            Id = copyId,
+            UserId = userId,
+            StartLatitude = source.StartLatitude,
+            StartLongitude = source.StartLongitude,
+            DurationHours = source.DurationHours,
+            BudgetMin = source.BudgetMin,
+            BudgetMax = source.BudgetMax,
+            Status = TripStatus.Draft,
+            CreatedAt = now,
+            UpdatedAt = now,
+            Items = source.Items.Select(item => new ItineraryItem
+            {
+                Id = Guid.NewGuid(),
+                TripId = copyId,
+                PlaceId = item.PlaceId,
+                OrderIndex = item.OrderIndex,
+                ScheduledTime = item.ScheduledTime,
+                EstimatedDurationMinutes = item.EstimatedDurationMinutes,
+                EstimatedBudget = item.EstimatedBudget,
+                Reasoning = item.Reasoning,
+                IsVisited = false, // bản nháp mới chưa ghé đâu
+                VisitedAt = null,
+                CreatedAt = now,
+                UpdatedAt = now
+            }).ToList(),
+            Tags = source.Tags.Select(tag => new TripTag
+            {
+                TripId = copyId,
+                TagId = tag.TagId
+            }).ToList()
+        };
+
+        dbContext.Trips.Add(copy);
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            // Nguồn bị xóa ngay giữa lúc fork (race hiếm) → coi như không tồn tại
+            return null;
+        }
+
+        return copy;
+    }
 }
