@@ -209,6 +209,7 @@ app.UseHttpsRedirection();
 app.UseCors(frontendClientPolicy);
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseMiddleware<TripActionGuardMiddleware>();
 app.MapControllers();
 
 app.Run();
