@@ -436,5 +436,10 @@ public sealed class AdminPlaceServiceTests
             IReadOnlyList<Guid> placeIds,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
+
+        public Task<PlaceReadModel?> GetActiveByIdAsync(
+            Guid id,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 }

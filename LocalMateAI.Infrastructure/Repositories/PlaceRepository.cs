@@ -1,4 +1,5 @@
 using LocalMateAI.Application.DTOs.Places;
+using LocalMateAI.Application.DTOs.Tags;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Domain.Entities;
 using LocalMateAI.Infrastructure.Persistence;
@@ -222,4 +223,59 @@ public sealed class PlaceRepository(AppDbContext dbContext) : IPlaceRepository
                 or "FK_CuratedItineraryItems_Places_PlaceId"
                 or "FK_PlaceReviews_Places_PlaceId"
         };
+
+    public async Task<PlaceReadModel?> GetActiveByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        var place = await dbContext.Places
+            .AsNoTracking()
+            .Where(candidate => candidate.Id == id && candidate.Status == PlaceStatus.Active)
+            .Select(candidate => new
+            {
+                candidate.Id,
+                candidate.Name,
+                candidate.Description,
+                candidate.Address,
+                Latitude = candidate.Location.Y,
+                Longitude = candidate.Location.X,
+                candidate.Category,
+                candidate.Status,
+                candidate.IsVerified,
+                candidate.EstimatedCostMin,
+                candidate.EstimatedCostMax,
+                candidate.ImageUrl
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (place is null)
+        {
+            return null;
+        }
+
+        var tags = await dbContext.PlaceTags
+            .AsNoTracking()
+            .Where(placeTag => placeTag.PlaceId == id && placeTag.Tag.IsActive)
+            .OrderBy(placeTag => placeTag.Tag.Name)
+            .Select(placeTag => new TagResponse(
+                placeTag.Tag.Id,
+                placeTag.Tag.Name,
+                placeTag.Tag.Type.ToString()))
+            .ToListAsync(cancellationToken);
+
+        return new PlaceReadModel(
+            place.Id,
+            place.Name,
+            place.Description,
+            place.Address,
+            place.Latitude,
+            place.Longitude,
+            place.Category.ToString(),
+            place.Status.ToString(),
+            place.IsVerified,
+            place.EstimatedCostMin,
+            place.EstimatedCostMax,
+            place.ImageUrl,
+            tags);
+    }
 }

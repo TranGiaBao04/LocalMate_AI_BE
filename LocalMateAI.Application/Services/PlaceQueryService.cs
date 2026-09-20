@@ -73,4 +73,34 @@ public sealed class PlaceQueryService(
 
         return new NearbyPlacesResponse(station, places);
     }
+
+    public async Task<PlaceDetailResponse?> GetPlaceByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        var place = await placeRepository.GetActiveByIdAsync(id, cancellationToken);
+        if (place is null)
+        {
+            return null;
+        }
+
+        var nearestStation = await geoService.FindNearestStationForPlaceAsync(id, cancellationToken)
+            ?? throw new InvalidOperationException("No metro stations found.");
+
+        return new PlaceDetailResponse(
+            place.Id,
+            place.Name,
+            place.Description,
+            place.Address,
+            place.Latitude,
+            place.Longitude,
+            place.Category,
+            place.Status,
+            place.IsVerified,
+            place.EstimatedCostMin,
+            place.EstimatedCostMax,
+            place.ImageUrl,
+            place.Tags,
+            nearestStation);
+    }
 }

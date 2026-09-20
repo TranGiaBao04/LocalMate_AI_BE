@@ -13,4 +13,8 @@ public interface IPlaceQueryService
         double longitude,
         PlaceCategory? category,
         CancellationToken cancellationToken = default);
+
+    Task<PlaceDetailResponse?> GetPlaceByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken = default);
 }

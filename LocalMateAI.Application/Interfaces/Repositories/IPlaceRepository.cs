@@ -46,4 +46,8 @@ public interface IPlaceRepository
     Task<DeletePlacePersistenceResult> DeleteForAdminAsync(
         Guid placeId,
         CancellationToken cancellationToken = default);
+
+    Task<PlaceReadModel?> GetActiveByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken = default);
 }
