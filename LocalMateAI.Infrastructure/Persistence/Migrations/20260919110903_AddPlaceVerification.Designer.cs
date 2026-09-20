@@ -3,6 +3,7 @@ using System;
 using LocalMateAI.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NetTopologySuite.Geometries;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace LocalMateAI.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260919110903_AddPlaceVerification")]
+    partial class AddPlaceVerification
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -94,45 +97,6 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
                     b.ToTable("CuratedItineraryItems");
                 });
 
-            modelBuilder.Entity("LocalMateAI.Domain.Entities.Feedback", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Comment")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("QuickTag")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<Guid>("TripId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("TripId")
-                        .HasDatabaseName("IX_Feedbacks_TripId");
-
-                    b.HasIndex("UserId", "TripId")
-                        .IsUnique()
-                        .HasDatabaseName("UX_Feedbacks_UserId_TripId");
-
-                    b.ToTable("Feedbacks", (string)null);
-                });
-
             modelBuilder.Entity("LocalMateAI.Domain.Entities.ItineraryItem", b =>
                 {
                     b.Property<Guid>("Id")
@@ -147,11 +111,6 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
 
                     b.Property<int>("EstimatedDurationMinutes")
                         .HasColumnType("integer");
-
-                    b.Property<bool>("IsVisited")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false);
 
                     b.Property<int>("OrderIndex")
                         .HasColumnType("integer");
@@ -169,9 +128,6 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTimeOffset?>("VisitedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
@@ -501,23 +457,6 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
                     b.Navigation("CuratedItinerary");
 
                     b.Navigation("Place");
-                });
-
-            modelBuilder.Entity("LocalMateAI.Domain.Entities.Feedback", b =>
-                {
-                    b.HasOne("LocalMateAI.Domain.Entities.Trip", null)
-                        .WithMany()
-                        .HasForeignKey("TripId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("FK_Feedbacks_Trips_TripId");
-
-                    b.HasOne("LocalMateAI.Domain.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("FK_Feedbacks_Users_UserId");
                 });
 
             modelBuilder.Entity("LocalMateAI.Domain.Entities.ItineraryItem", b =>

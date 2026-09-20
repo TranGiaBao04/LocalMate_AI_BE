@@ -8,6 +8,13 @@ public sealed class ItineraryItemConfiguration : IEntityTypeConfiguration<Itiner
 {
     public void Configure(EntityTypeBuilder<ItineraryItem> builder)
     {
+        builder.Property(item => item.IsVisited)
+            .IsRequired()
+            .HasDefaultValue(false);
+
+        builder.Property(item => item.VisitedAt)
+            .IsRequired(false);
+
         builder.Property(item => item.EstimatedBudget)
             .HasColumnType("numeric(12,0)");
 

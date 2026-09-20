@@ -81,3 +81,93 @@ public sealed class TripService(
         CancellationToken cancellationToken = default) =>
         finalizeTripCommand.ExecuteAsync(userId, tripId, cancellationToken);
 }
+        CancellationToken cancellationToken = default)
+    {
+        if (tripId == Guid.Empty)
+        {
+            return FinalizeTripResult.InvalidTrip();
+        }
+
+        var trip = await tripRepository.GetByIdAsync(tripId, cancellationToken);
+        if (trip is null || trip.UserId != userId)
+        {
+            return FinalizeTripResult.MissingTrip();
+        }
+
+        if (trip.Status == TripStatus.Finalized)
+        {
+            return FinalizeTripResult.AlreadyFinalized();
+        }
+
+        var finalized = await tripRepository.FinalizeTripAsync(tripId, userId, cancellationToken);
+
+        return finalized
+            ? FinalizeTripResult.Succeeded(new FinalizeTripResponse(tripId, TripStatus.Finalized.ToString()))
+            : FinalizeTripResult.MissingTrip();
+    }
+
+    public async Task<VisitItineraryItemResult> MarkItineraryItemVisitedAsync(
+        Guid userId,
+        Guid itemId,
+        CancellationToken cancellationToken = default)
+    {
+        if (itemId == Guid.Empty)
+        {
+            return VisitItineraryItemResult.InvalidItem();
+        }
+
+        var user = await userRepository.GetByIdAsync(userId, cancellationToken);
+        if (user is null)
+        {
+            return VisitItineraryItemResult.MissingUser();
+        }
+
+        var item = await tripRepository.GetOwnedItineraryItemVisitAsync(
+            itemId,
+            userId,
+            cancellationToken);
+        if (item is null)
+        {
+            return VisitItineraryItemResult.MissingItem();
+        }
+
+        if (item.TripStatus != TripStatus.Finalized)
+        {
+            return VisitItineraryItemResult.NotFinalized();
+        }
+
+        if (item.IsVisited)
+        {
+            return VisitItineraryItemResult.Succeeded(ToVisitResponse(item));
+        }
+
+        var visitedAt = DateTimeOffset.UtcNow;
+        if (await tripRepository.MarkItineraryItemVisitedIfEligibleAsync(
+                itemId,
+                userId,
+                visitedAt,
+                cancellationToken))
+        {
+            return VisitItineraryItemResult.Succeeded(new VisitItineraryItemResponse(
+                item.Id,
+                item.TripId,
+                true,
+                visitedAt));
+        }
+
+        item = await tripRepository.GetOwnedItineraryItemVisitAsync(itemId, userId, cancellationToken);
+        if (item is null)
+        {
+            return VisitItineraryItemResult.MissingItem();
+        }
+
+        return item.TripStatus != TripStatus.Finalized
+            ? VisitItineraryItemResult.NotFinalized()
+            : item.IsVisited
+                ? VisitItineraryItemResult.Succeeded(ToVisitResponse(item))
+                : VisitItineraryItemResult.MissingItem();
+    }
+
+    private static VisitItineraryItemResponse ToVisitResponse(OwnedItineraryItemVisitReadModel item) =>
+        new(item.Id, item.TripId, item.IsVisited, item.VisitedAt);
+}

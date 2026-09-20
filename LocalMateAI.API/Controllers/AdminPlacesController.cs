@@ -86,6 +86,66 @@ public sealed class AdminPlacesController(IAdminPlaceService adminPlaceService) 
         };
     }
 
+    [HttpPut("{id:guid}/status")]
+    [ProducesResponseType<AdminPlaceResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<AdminPlaceResponse>> UpdateStatusAsync(
+        Guid id,
+        [FromBody] UpdatePlaceStatusRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await adminPlaceService.UpdateStatusAsync(id, request, cancellationToken);
+
+        return result.Status switch
+        {
+            AdminPlaceModerationResultStatus.Success => Ok(result.Response),
+            AdminPlaceModerationResultStatus.InvalidStatus =>
+                BadRequest(CreateProblem(
+                    StatusCodes.Status400BadRequest,
+                    "Place status is invalid.",
+                    "invalid_place_status")),
+            AdminPlaceModerationResultStatus.NotFound =>
+                NotFound(CreatePlaceNotFoundProblem()),
+            AdminPlaceModerationResultStatus.InvalidStatusTransition =>
+                Conflict(CreateProblem(
+                    StatusCodes.Status409Conflict,
+                    "Place status transition is not allowed.",
+                    "invalid_place_status_transition")),
+            _ => throw new InvalidOperationException("Unknown Admin Place status result.")
+        };
+    }
+
+    [HttpPut("{id:guid}/verification")]
+    [ProducesResponseType<AdminPlaceResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<AdminPlaceResponse>> UpdateVerificationAsync(
+        Guid id,
+        [FromBody] UpdatePlaceVerificationRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await adminPlaceService.UpdateVerificationAsync(id, request, cancellationToken);
+
+        return result.Status switch
+        {
+            AdminPlaceModerationResultStatus.Success => Ok(result.Response),
+            AdminPlaceModerationResultStatus.NotFound =>
+                NotFound(CreatePlaceNotFoundProblem()),
+            AdminPlaceModerationResultStatus.VerificationRequiresActive =>
+                Conflict(CreateProblem(
+                    StatusCodes.Status409Conflict,
+                    "Place must be Active before verification can be enabled.",
+                    "verification_requires_active")),
+            _ => throw new InvalidOperationException("Unknown Admin Place verification result.")
+        };
+    }
+
     [HttpDelete("{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
@@ -148,6 +208,20 @@ public sealed class AdminPlacesController(IAdminPlaceService adminPlaceService) 
         };
 
         problem.Extensions["code"] = "place_in_use";
+        return problem;
+    }
+
+    private ProblemDetails CreateProblem(int status, string title, string code)
+    {
+        var problem = new ProblemDetails
+        {
+            Status = status,
+            Title = title,
+            Type = $"https://httpstatuses.com/{status}",
+            Instance = HttpContext.Request.Path
+        };
+
+        problem.Extensions["code"] = code;
         return problem;
     }
 }

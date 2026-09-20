@@ -119,6 +119,75 @@ public sealed class AdminPlaceService(
         };
     }
 
+    public async Task<AdminPlaceModerationResult> UpdateStatusAsync(
+        Guid placeId,
+        UpdatePlaceStatusRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (!Enum.IsDefined(request.Status))
+        {
+            return AdminPlaceModerationResult.InvalidStatus();
+        }
+
+        var place = await placeRepository.GetByIdAsync(placeId, cancellationToken);
+        if (place is null)
+        {
+            return AdminPlaceModerationResult.Missing();
+        }
+
+        if (place.Status == request.Status)
+        {
+            return AdminPlaceModerationResult.Succeeded(Map(place));
+        }
+
+        if (!IsAllowedStatusTransition(place.Status, request.Status))
+        {
+            return AdminPlaceModerationResult.InvalidTransition();
+        }
+
+        place.Status = request.Status;
+        await placeRepository.SaveChangesAsync(cancellationToken);
+
+        return AdminPlaceModerationResult.Succeeded(Map(place));
+    }
+
+    public async Task<AdminPlaceModerationResult> UpdateVerificationAsync(
+        Guid placeId,
+        UpdatePlaceVerificationRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var place = await placeRepository.GetByIdAsync(placeId, cancellationToken);
+        if (place is null)
+        {
+            return AdminPlaceModerationResult.Missing();
+        }
+
+        if (place.IsVerified == request.IsVerified)
+        {
+            return AdminPlaceModerationResult.Succeeded(Map(place));
+        }
+
+        if (request.IsVerified && place.Status != PlaceStatus.Active)
+        {
+            return AdminPlaceModerationResult.RequiresActive();
+        }
+
+        place.IsVerified = request.IsVerified;
+        await placeRepository.SaveChangesAsync(cancellationToken);
+
+        return AdminPlaceModerationResult.Succeeded(Map(place));
+    }
+
+    private static bool IsAllowedStatusTransition(PlaceStatus current, PlaceStatus requested) =>
+        (current, requested) is
+            (PlaceStatus.Pending, PlaceStatus.Active)
+            or (PlaceStatus.Active, PlaceStatus.Inactive)
+            or (PlaceStatus.Inactive, PlaceStatus.Active);
+
     private IReadOnlyDictionary<string, string[]> Validate(
         string? name,
         string? address,
@@ -203,6 +272,7 @@ public sealed class AdminPlaceService(
             place.Location.X,
             place.Category.ToString(),
             place.Status.ToString(),
+            place.IsVerified,
             place.EstimatedCostMin,
             place.EstimatedCostMax,
             place.ImageUrl,
