@@ -2,6 +2,7 @@ using LocalMateAI.Application.Commands;
 using LocalMateAI.Application.DTOs.Trips;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Interfaces.Services;
+using LocalMateAI.Domain.Enums;
 
 namespace LocalMateAI.Application.Services;
 
@@ -80,31 +81,6 @@ public sealed class TripService(
         Guid tripId,
         CancellationToken cancellationToken = default) =>
         finalizeTripCommand.ExecuteAsync(userId, tripId, cancellationToken);
-}
-        CancellationToken cancellationToken = default)
-    {
-        if (tripId == Guid.Empty)
-        {
-            return FinalizeTripResult.InvalidTrip();
-        }
-
-        var trip = await tripRepository.GetByIdAsync(tripId, cancellationToken);
-        if (trip is null || trip.UserId != userId)
-        {
-            return FinalizeTripResult.MissingTrip();
-        }
-
-        if (trip.Status == TripStatus.Finalized)
-        {
-            return FinalizeTripResult.AlreadyFinalized();
-        }
-
-        var finalized = await tripRepository.FinalizeTripAsync(tripId, userId, cancellationToken);
-
-        return finalized
-            ? FinalizeTripResult.Succeeded(new FinalizeTripResponse(tripId, TripStatus.Finalized.ToString()))
-            : FinalizeTripResult.MissingTrip();
-    }
 
     public async Task<VisitItineraryItemResult> MarkItineraryItemVisitedAsync(
         Guid userId,

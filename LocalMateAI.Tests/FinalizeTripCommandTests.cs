@@ -118,5 +118,18 @@ public sealed class FinalizeTripCommandTests
             Guid userId,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
+
+        public Task<OwnedItineraryItemVisitReadModel?> GetOwnedItineraryItemVisitAsync(
+            Guid itemId,
+            Guid userId,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<bool> MarkItineraryItemVisitedIfEligibleAsync(
+            Guid itemId,
+            Guid userId,
+            DateTimeOffset visitedAt,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 }

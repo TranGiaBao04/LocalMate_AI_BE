@@ -1,3 +1,4 @@
+using LocalMateAI.Application.Commands;
 using LocalMateAI.Application.DTOs.Trips;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Services;
@@ -10,13 +11,14 @@ public sealed class TripServiceVisitTests
 {
     private static readonly Guid UserId = Guid.NewGuid();
     private static readonly Guid OtherUserId = Guid.NewGuid();
+    private static readonly IFinalizeTripCommand UnusedFinalizeCommand = new FakeFinalizeTripCommand();
 
     [Fact]
     public async Task MarkVisited_FinalizedOwnedUnvisitedItem_SucceedsWithUtcTimestamp()
     {
         var item = VisitItem(TripStatus.Finalized);
         var repository = new FakeTripRepository(item) { MarkResult = true };
-        var service = new TripService(repository, new FakeUserRepository(UserId));
+        var service = new TripService(repository, new FakeUserRepository(UserId), UnusedFinalizeCommand);
 
         var before = DateTimeOffset.UtcNow;
         var result = await service.MarkItineraryItemVisitedAsync(UserId, item.Id);
@@ -40,7 +42,7 @@ public sealed class TripServiceVisitTests
         var timestamp = new DateTimeOffset(2026, 9, 19, 12, 0, 0, TimeSpan.Zero);
         var item = VisitItem(TripStatus.Finalized, isVisited: true, visitedAt: timestamp);
         var repository = new FakeTripRepository(item);
-        var service = new TripService(repository, new FakeUserRepository(UserId));
+        var service = new TripService(repository, new FakeUserRepository(UserId), UnusedFinalizeCommand);
 
         var result = await service.MarkItineraryItemVisitedAsync(UserId, item.Id);
 
@@ -54,7 +56,7 @@ public sealed class TripServiceVisitTests
     public async Task MarkVisited_NonPersistedIdentity_IsForbiddenBeforeItemLookup()
     {
         var repository = new FakeTripRepository();
-        var service = new TripService(repository, new FakeUserRepository());
+        var service = new TripService(repository, new FakeUserRepository(), UnusedFinalizeCommand);
 
         var result = await service.MarkItineraryItemVisitedAsync(Guid.NewGuid(), Guid.NewGuid());
 
@@ -69,7 +71,7 @@ public sealed class TripServiceVisitTests
     {
         var item = foreign ? VisitItem(TripStatus.Finalized) : null;
         var repository = new FakeTripRepository(item, foreign ? OtherUserId : UserId);
-        var service = new TripService(repository, new FakeUserRepository(UserId));
+        var service = new TripService(repository, new FakeUserRepository(UserId), UnusedFinalizeCommand);
 
         var result = await service.MarkItineraryItemVisitedAsync(UserId, item?.Id ?? Guid.NewGuid());
 
@@ -82,7 +84,7 @@ public sealed class TripServiceVisitTests
     {
         var item = VisitItem(TripStatus.Draft);
         var repository = new FakeTripRepository(item);
-        var service = new TripService(repository, new FakeUserRepository(UserId));
+        var service = new TripService(repository, new FakeUserRepository(UserId), UnusedFinalizeCommand);
 
         var result = await service.MarkItineraryItemVisitedAsync(UserId, item.Id);
 
@@ -101,7 +103,7 @@ public sealed class TripServiceVisitTests
             MarkResult = false,
             ReadAfterMark = item with { IsVisited = true, VisitedAt = timestamp }
         };
-        var service = new TripService(repository, new FakeUserRepository(UserId));
+        var service = new TripService(repository, new FakeUserRepository(UserId), UnusedFinalizeCommand);
 
         var result = await service.MarkItineraryItemVisitedAsync(UserId, item.Id);
 
@@ -115,7 +117,7 @@ public sealed class TripServiceVisitTests
     public async Task MarkVisited_EmptyItemId_ReturnsInvalidWithoutLookup()
     {
         var repository = new FakeTripRepository();
-        var service = new TripService(repository, new FakeUserRepository(UserId));
+        var service = new TripService(repository, new FakeUserRepository(UserId), UnusedFinalizeCommand);
 
         var result = await service.MarkItineraryItemVisitedAsync(UserId, Guid.Empty);
 
@@ -209,6 +211,15 @@ public sealed class TripServiceVisitTests
             throw new NotSupportedException();
 
         public Task SaveProfileChangesAsync(User user, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+    }
+
+    private sealed class FakeFinalizeTripCommand : IFinalizeTripCommand
+    {
+        public Task<FinalizeTripResult> ExecuteAsync(
+            Guid userId,
+            Guid tripId,
+            CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
     }
 }
