@@ -1,3 +1,4 @@
+using LocalMateAI.Application.Commands;
 using LocalMateAI.Application.DTOs.Trips;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Interfaces.Services;
@@ -7,7 +8,8 @@ namespace LocalMateAI.Application.Services;
 
 public sealed class TripService(
     ITripRepository tripRepository,
-    IUserRepository userRepository) : ITripService
+    IUserRepository userRepository,
+    IFinalizeTripCommand finalizeTripCommand) : ITripService
 {
     public async Task<MyTripsResult> GetMyTripsAsync(
         Guid userId,
@@ -74,33 +76,11 @@ public sealed class TripService(
             : SaveTripResult.MissingTrip();
     }
 
-    public async Task<FinalizeTripResult> FinalizeTripAsync(
+    public Task<FinalizeTripResult> FinalizeTripAsync(
         Guid userId,
         Guid tripId,
-        CancellationToken cancellationToken = default)
-    {
-        if (tripId == Guid.Empty)
-        {
-            return FinalizeTripResult.InvalidTrip();
-        }
-
-        var trip = await tripRepository.GetByIdAsync(tripId, cancellationToken);
-        if (trip is null || trip.UserId != userId)
-        {
-            return FinalizeTripResult.MissingTrip();
-        }
-
-        if (trip.Status == TripStatus.Finalized)
-        {
-            return FinalizeTripResult.AlreadyFinalized();
-        }
-
-        var finalized = await tripRepository.FinalizeTripAsync(tripId, userId, cancellationToken);
-
-        return finalized
-            ? FinalizeTripResult.Succeeded(new FinalizeTripResponse(tripId, TripStatus.Finalized.ToString()))
-            : FinalizeTripResult.MissingTrip();
-    }
+        CancellationToken cancellationToken = default) =>
+        finalizeTripCommand.ExecuteAsync(userId, tripId, cancellationToken);
 
     public async Task<VisitItineraryItemResult> MarkItineraryItemVisitedAsync(
         Guid userId,
