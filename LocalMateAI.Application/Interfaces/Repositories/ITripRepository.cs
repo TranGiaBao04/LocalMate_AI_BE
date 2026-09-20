@@ -33,4 +33,9 @@ public interface ITripRepository
         Guid userId,
         DateTimeOffset visitedAt,
         CancellationToken cancellationToken = default);
+
+    Task<Trip?> ForkTripAsync(
+        Guid sourceTripId,
+        Guid userId,
+        CancellationToken cancellationToken = default);
 }

@@ -188,6 +188,12 @@ public sealed class TripServiceVisitTests
             Guid userId,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
+
+        public Task<Trip?> ForkTripAsync(
+            Guid sourceTripId,
+            Guid userId,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 
     private sealed class FakeUserRepository(Guid? userId = null) : IUserRepository
