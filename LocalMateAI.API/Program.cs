@@ -144,6 +144,7 @@ builder.Services.AddScoped<ITripFeasibilityService, TripFeasibilityService>();
 builder.Services.AddScoped<IMetroClusterMatchingService, MetroClusterMatchingService>();
 builder.Services.AddScoped<ICandidateFilterService, CandidateFilterService>();
 builder.Services.AddScoped<ITagSimilarityScorer, TagSimilarityScorer>();
+builder.Services.AddScoped<IAlternativePlaceFinder, AlternativePlaceFinder>();
 builder.Services.AddScoped<ITripMatchingService, TripMatchingService>();
 builder.Services.AddScoped<IHeuristicFallbackEngine, HeuristicFallbackEngine>();
 builder.Services.AddScoped<ITripService, TripService>();
