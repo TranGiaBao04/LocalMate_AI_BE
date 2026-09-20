@@ -34,4 +34,17 @@ public sealed class PlacesController(IPlaceQueryService placeQueryService) : Con
 
         return Ok(result);
     }
+
+    [HttpGet("{id:guid}")]
+    [AllowAnonymous]
+    [ProducesResponseType<PlaceDetailResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<PlaceDetailResponse>> GetByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var result = await placeQueryService.GetPlaceByIdAsync(id, cancellationToken);
+
+        return result is null ? NotFound() : Ok(result);
+    }
 }
