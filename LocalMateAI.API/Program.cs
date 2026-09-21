@@ -129,6 +129,7 @@ builder.Services.AddScoped<IGoogleIdentityTokenValidator, GoogleIdentityTokenVal
 builder.Services.AddScoped<IMetroStationRepository, MetroStationRepository>();
 builder.Services.AddScoped<IPlaceRepository, PlaceRepository>();
 builder.Services.AddScoped<ITripRepository, TripRepository>();
+builder.Services.AddScoped<IItineraryItemRepository, ItineraryItemRepository>();
 builder.Services.AddScoped<IFeedbackRepository, FeedbackRepository>();
 builder.Services.AddScoped<IGeoService, GeoService>();
 builder.Services.AddScoped<IPlaceQueryService, PlaceQueryService>();
@@ -149,6 +150,7 @@ builder.Services.AddScoped<IItineraryTimelineRecalculator, ItineraryTimelineReca
 builder.Services.AddScoped<ITripMatchingService, TripMatchingService>();
 builder.Services.AddScoped<IHeuristicFallbackEngine, HeuristicFallbackEngine>();
 builder.Services.AddScoped<ITripService, TripService>();
+builder.Services.AddScoped<ITripAlternativesService, TripAlternativesService>();
 builder.Services.AddScoped<IFinalizeTripCommand, FinalizeTripCommand>();
 builder.Services.AddScoped<IForkTripCommand, ForkTripCommand>();
 builder.Services.AddScoped<IFeedbackService, FeedbackService>();

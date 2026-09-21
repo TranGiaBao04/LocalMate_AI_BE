@@ -2,6 +2,7 @@ using LocalMateAI.Application.Commands;
 using LocalMateAI.Application.DTOs.Matching;
 using LocalMateAI.Application.DTOs.Trips;
 using LocalMateAI.Application.Interfaces.Services;
+using LocalMateAI.Application.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -14,7 +15,8 @@ public sealed class TripsController(
     ITripMatchingService tripMatchingService,
     IHeuristicFallbackEngine heuristicFallbackEngine,
     ITripService tripService,
-    IForkTripCommand forkTripCommand) : ControllerBase
+    IForkTripCommand forkTripCommand,
+    ITripAlternativesService tripAlternativesService) : ControllerBase
 {
     [HttpPost("feasibility-check")]
     [AllowAnonymous]
@@ -203,6 +205,68 @@ public sealed class TripsController(
                     "Trip was not found.",
                     "trip_not_found")),
             _ => throw new InvalidOperationException("Unsupported fork trip result status.")
+        };
+    }
+
+    [HttpGet("{tripId:guid}/items/{itemId:guid}/alternatives")]
+    [Authorize(Roles = "User,Admin")]
+    [ProducesResponseType<IReadOnlyList<AlternativePlaceResponse>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<IReadOnlyList<AlternativePlaceResponse>>> GetItemAlternativesAsync(
+        Guid tripId,
+        Guid itemId,
+        [FromQuery] int? limit,
+        CancellationToken cancellationToken)
+    {
+        var subject = User.FindFirst("sub")?.Value;
+        if (!Guid.TryParse(subject, out var userId) || userId == Guid.Empty)
+        {
+            return Unauthorized(CreateProblem(
+                StatusCodes.Status401Unauthorized,
+                "Authentication identity is invalid.",
+                "invalid_identity"));
+        }
+
+        var result = await tripAlternativesService.GetAlternativesAsync(
+            userId,
+            tripId,
+            itemId,
+            limit,
+            cancellationToken);
+
+        return result.Status switch
+        {
+            TripAlternativesResultStatus.Success => Ok(result.Alternatives),
+            TripAlternativesResultStatus.InvalidId =>
+                BadRequest(CreateProblem(
+                    StatusCodes.Status400BadRequest,
+                    "Trip ID or itinerary item ID is invalid.",
+                    "invalid_id")),
+            TripAlternativesResultStatus.InvalidLimit =>
+                BadRequest(CreateProblem(
+                    StatusCodes.Status400BadRequest,
+                    $"Limit must be between 1 and {TripAlternativesService.MaxLimit}.",
+                    "invalid_limit")),
+            TripAlternativesResultStatus.UserNotFound =>
+                StatusCode(StatusCodes.Status403Forbidden, CreateProblem(
+                    StatusCodes.Status403Forbidden,
+                    "A persisted user account is required to view alternatives.",
+                    "alternatives_requires_persisted_user")),
+            TripAlternativesResultStatus.ItemNotFound =>
+                NotFound(CreateProblem(
+                    StatusCodes.Status404NotFound,
+                    "Itinerary item was not found.",
+                    "itinerary_item_not_found")),
+            TripAlternativesResultStatus.TripFinalized =>
+                Conflict(CreateProblem(
+                    StatusCodes.Status409Conflict,
+                    "Trip is already finalized.",
+                    "trip_finalized")),
+            _ => throw new InvalidOperationException("Unsupported trip alternatives result status.")
         };
     }
 
