@@ -202,6 +202,15 @@ public sealed class TripAlternativesServiceTests
             Guid userId,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(item);
+
+        public Task<ReplacedItemReadModel?> ReplaceItemPlaceIfEligibleAsync(
+            Guid tripId,
+            Guid itemId,
+            Guid userId,
+            Guid newPlaceId,
+            decimal newEstimatedBudget,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 
     private sealed class FakeGeoService(NearestStationResult? station) : IGeoService

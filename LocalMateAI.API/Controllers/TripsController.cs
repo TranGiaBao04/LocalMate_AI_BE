@@ -16,7 +16,8 @@ public sealed class TripsController(
     IHeuristicFallbackEngine heuristicFallbackEngine,
     ITripService tripService,
     IForkTripCommand forkTripCommand,
-    ITripAlternativesService tripAlternativesService) : ControllerBase
+    ITripAlternativesService tripAlternativesService,
+    ITripItemReplacementService tripItemReplacementService) : ControllerBase
 {
     [HttpPost("feasibility-check")]
     [AllowAnonymous]
@@ -267,6 +268,83 @@ public sealed class TripsController(
                     "Trip is already finalized.",
                     "trip_finalized")),
             _ => throw new InvalidOperationException("Unsupported trip alternatives result status.")
+        };
+    }
+
+    [HttpPut("{tripId:guid}/items/{itemId:guid}/replace")]
+    [Authorize(Roles = "User,Admin")]
+    [ProducesResponseType<ReplaceItineraryItemResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<ReplaceItineraryItemResponse>> ReplaceItineraryItemAsync(
+        Guid tripId,
+        Guid itemId,
+        [FromBody] ReplaceItineraryItemRequest request,
+        CancellationToken cancellationToken)
+    {
+        var subject = User.FindFirst("sub")?.Value;
+        if (!Guid.TryParse(subject, out var userId) || userId == Guid.Empty)
+        {
+            return Unauthorized(CreateProblem(
+                StatusCodes.Status401Unauthorized,
+                "Authentication identity is invalid.",
+                "invalid_identity"));
+        }
+
+        var result = await tripItemReplacementService.ReplaceAsync(
+            userId,
+            tripId,
+            itemId,
+            request.NewPlaceId,
+            cancellationToken);
+
+        return result.Status switch
+        {
+            ReplaceItineraryItemResultStatus.Success => Ok(result.Response),
+            ReplaceItineraryItemResultStatus.InvalidId =>
+                BadRequest(CreateProblem(
+                    StatusCodes.Status400BadRequest,
+                    "Trip ID or itinerary item ID is invalid.",
+                    "invalid_id")),
+            ReplaceItineraryItemResultStatus.InvalidPlaceId =>
+                BadRequest(CreateProblem(
+                    StatusCodes.Status400BadRequest,
+                    "New place ID is invalid.",
+                    "invalid_place_id")),
+            ReplaceItineraryItemResultStatus.UserNotFound =>
+                StatusCode(StatusCodes.Status403Forbidden, CreateProblem(
+                    StatusCodes.Status403Forbidden,
+                    "A persisted user account is required to replace a place.",
+                    "replace_requires_persisted_user")),
+            ReplaceItineraryItemResultStatus.ItemNotFound =>
+                NotFound(CreateProblem(
+                    StatusCodes.Status404NotFound,
+                    "Itinerary item was not found.",
+                    "itinerary_item_not_found")),
+            ReplaceItineraryItemResultStatus.TripFinalized =>
+                Conflict(CreateProblem(
+                    StatusCodes.Status409Conflict,
+                    "Trip is already finalized.",
+                    "trip_finalized")),
+            ReplaceItineraryItemResultStatus.SamePlace =>
+                BadRequest(CreateProblem(
+                    StatusCodes.Status400BadRequest,
+                    "New place must be different from the current place.",
+                    "same_place")),
+            ReplaceItineraryItemResultStatus.PlaceAlreadyInTrip =>
+                Conflict(CreateProblem(
+                    StatusCodes.Status409Conflict,
+                    "New place is already part of this trip.",
+                    "place_already_in_trip")),
+            ReplaceItineraryItemResultStatus.PlaceNotFound =>
+                NotFound(CreateProblem(
+                    StatusCodes.Status404NotFound,
+                    "New place was not found or is not active.",
+                    "place_not_found")),
+            _ => throw new InvalidOperationException("Unsupported replace itinerary item result status.")
         };
     }
 

@@ -151,6 +151,7 @@ builder.Services.AddScoped<ITripMatchingService, TripMatchingService>();
 builder.Services.AddScoped<IHeuristicFallbackEngine, HeuristicFallbackEngine>();
 builder.Services.AddScoped<ITripService, TripService>();
 builder.Services.AddScoped<ITripAlternativesService, TripAlternativesService>();
+builder.Services.AddScoped<ITripItemReplacementService, TripItemReplacementService>();
 builder.Services.AddScoped<IFinalizeTripCommand, FinalizeTripCommand>();
 builder.Services.AddScoped<IForkTripCommand, ForkTripCommand>();
 builder.Services.AddScoped<IFeedbackService, FeedbackService>();
