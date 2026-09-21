@@ -211,6 +211,14 @@ public sealed class TripAlternativesServiceTests
             decimal newEstimatedBudget,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
+
+        public Task<DeleteItineraryItemPersistenceResult> DeleteItemAndRecalculateTimelineAsync(
+            Guid tripId,
+            Guid itemId,
+            Guid userId,
+            Func<IReadOnlyList<TimelineItemSnapshot>, IReadOnlyList<TimelineItemUpdate>> recalculateTimeline,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 
     private sealed class FakeGeoService(NearestStationResult? station) : IGeoService

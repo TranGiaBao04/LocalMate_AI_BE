@@ -297,6 +297,14 @@ public sealed class TripItemReplacementServiceTests
                 90,
                 newEstimatedBudget));
         }
+
+        public Task<DeleteItineraryItemPersistenceResult> DeleteItemAndRecalculateTimelineAsync(
+            Guid tripId,
+            Guid itemId,
+            Guid userId,
+            Func<IReadOnlyList<TimelineItemSnapshot>, IReadOnlyList<TimelineItemUpdate>> recalculateTimeline,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 
     private sealed class FakeGeoService(Guid newPlaceStation) : IGeoService

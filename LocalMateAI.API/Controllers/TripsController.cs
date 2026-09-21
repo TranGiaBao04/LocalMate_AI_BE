@@ -17,7 +17,8 @@ public sealed class TripsController(
     ITripService tripService,
     IForkTripCommand forkTripCommand,
     ITripAlternativesService tripAlternativesService,
-    ITripItemReplacementService tripItemReplacementService) : ControllerBase
+    ITripItemReplacementService tripItemReplacementService,
+    ITripItemDeletionService tripItemDeletionService) : ControllerBase
 {
     [HttpPost("feasibility-check")]
     [AllowAnonymous]
@@ -345,6 +346,61 @@ public sealed class TripsController(
                     "New place was not found or is not active.",
                     "place_not_found")),
             _ => throw new InvalidOperationException("Unsupported replace itinerary item result status.")
+        };
+    }
+
+    [HttpDelete("{tripId:guid}/items/{itemId:guid}")]
+    [Authorize(Roles = "User,Admin")]
+    [ProducesResponseType<IReadOnlyList<ItineraryTimelineItemResponse>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<IReadOnlyList<ItineraryTimelineItemResponse>>> DeleteItineraryItemAsync(
+        Guid tripId,
+        Guid itemId,
+        CancellationToken cancellationToken)
+    {
+        var subject = User.FindFirst("sub")?.Value;
+        if (!Guid.TryParse(subject, out var userId) || userId == Guid.Empty)
+        {
+            return Unauthorized(CreateProblem(
+                StatusCodes.Status401Unauthorized,
+                "Authentication identity is invalid.",
+                "invalid_identity"));
+        }
+
+        var result = await tripItemDeletionService.DeleteAsync(userId, tripId, itemId, cancellationToken);
+        return result.Status switch
+        {
+            DeleteItineraryItemResultStatus.Success => Ok(result.RemainingItems),
+            DeleteItineraryItemResultStatus.InvalidId =>
+                BadRequest(CreateProblem(
+                    StatusCodes.Status400BadRequest,
+                    "Trip ID or itinerary item ID is invalid.",
+                    "invalid_id")),
+            DeleteItineraryItemResultStatus.UserNotFound =>
+                StatusCode(StatusCodes.Status403Forbidden, CreateProblem(
+                    StatusCodes.Status403Forbidden,
+                    "A persisted user account is required to delete an itinerary item.",
+                    "delete_requires_persisted_user")),
+            DeleteItineraryItemResultStatus.ItemNotFound =>
+                NotFound(CreateProblem(
+                    StatusCodes.Status404NotFound,
+                    "Itinerary item was not found.",
+                    "itinerary_item_not_found")),
+            DeleteItineraryItemResultStatus.TripFinalized =>
+                Conflict(CreateProblem(
+                    StatusCodes.Status409Conflict,
+                    "Trip is already finalized.",
+                    "trip_finalized")),
+            DeleteItineraryItemResultStatus.LastItem =>
+                Conflict(CreateProblem(
+                    StatusCodes.Status409Conflict,
+                    "The last remaining itinerary item cannot be deleted.",
+                    "cannot_delete_last_item")),
+            _ => throw new InvalidOperationException("Unsupported delete itinerary item result status.")
         };
     }
 
