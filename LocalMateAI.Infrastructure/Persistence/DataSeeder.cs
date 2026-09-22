@@ -1,4 +1,5 @@
 using System.Text.Json;
+using LocalMateAI.Application.Interfaces.Services;
 using LocalMateAI.Domain.Entities;
 using LocalMateAI.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -9,6 +10,16 @@ namespace LocalMateAI.Infrastructure.Persistence;
 
 public static class DataSeeder
 {
+    public static readonly IReadOnlyList<DevelopmentUserSeedDefinition> DevelopmentUsers =
+    [
+        new("admin@localmate.dev", "LocalMate Admin", UserRole.Admin),
+        new("user1@localmate.dev", "LocalMate User 1", UserRole.User),
+        new("user2@localmate.dev", "LocalMate User 2", UserRole.User),
+        new("user3@localmate.dev", "LocalMate User 3", UserRole.User)
+    ];
+
+    public const string DevelopmentDefaultPassword = "LocalMate@123";
+
     private static readonly GeometryFactory GeometryFactory =
         NtsGeometryServices.Instance.CreateGeometryFactory(srid: 4326);
 
@@ -33,6 +44,50 @@ public static class DataSeeder
         await SeedTagsAsync(context, cancellationToken);
         await SeedPlaceTagsAsync(context, cancellationToken);
         await SeedCuratedItinerariesAsync(context, cancellationToken);
+    }
+
+    public static async Task SeedDevelopmentUsersAsync(
+        AppDbContext context,
+        IPasswordHashService passwordHashService,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(passwordHashService);
+
+        var existingEmails = await context.Users
+            .Select(u => u.Email)
+            .ToListAsync(cancellationToken);
+
+        var existingEmailSet = new HashSet<string>(existingEmails, StringComparer.OrdinalIgnoreCase);
+
+        var usersToAdd = new List<User>();
+
+        foreach (var seed in DevelopmentUsers)
+        {
+            if (existingEmailSet.Contains(seed.Email))
+            {
+                continue;
+            }
+
+            var user = new User
+            {
+                Id = Guid.NewGuid(),
+                FullName = seed.FullName,
+                Email = seed.Email.Trim().ToLowerInvariant(),
+                Role = seed.Role,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+
+            user.PasswordHash = passwordHashService.HashPassword(user, DevelopmentDefaultPassword);
+            usersToAdd.Add(user);
+        }
+
+        if (usersToAdd.Count > 0)
+        {
+            await context.Users.AddRangeAsync(usersToAdd, cancellationToken);
+            await context.SaveChangesAsync(cancellationToken);
+        }
     }
 
     private static async Task SeedMetroStationsAsync(AppDbContext context, CancellationToken cancellationToken)
@@ -210,4 +265,6 @@ public static class DataSeeder
         decimal EstimatedCostMin,
         decimal EstimatedCostMax,
         IReadOnlyList<string> PlaceNames);
-}
+
+    public sealed record DevelopmentUserSeedDefinition(string Email, string FullName, UserRole Role);
+}
