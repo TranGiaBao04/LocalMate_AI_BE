@@ -202,6 +202,12 @@ using (var seedScope = app.Services.CreateScope())
     var seedDbContext = seedScope.ServiceProvider.GetRequiredService<AppDbContext>();
     await seedDbContext.Database.MigrateAsync();
     await DataSeeder.SeedAsync(seedDbContext);
+
+    if (app.Environment.IsDevelopment())
+    {
+        var passwordHashService = seedScope.ServiceProvider.GetRequiredService<IPasswordHashService>();
+        await DataSeeder.SeedDevelopmentUsersAsync(seedDbContext, passwordHashService);
+    }
 }
 
 if (app.Environment.IsDevelopment())
