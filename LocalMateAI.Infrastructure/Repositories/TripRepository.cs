@@ -181,6 +181,7 @@ public sealed class TripRepository(AppDbContext dbContext) : ITripRepository
             DurationHours = source.DurationHours,
             BudgetMin = source.BudgetMin,
             BudgetMax = source.BudgetMax,
+            TravelMode = source.TravelMode,
             Status = TripStatus.Draft,
             CreatedAt = now,
             UpdatedAt = now,
