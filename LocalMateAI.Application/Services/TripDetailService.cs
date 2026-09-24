@@ -49,6 +49,10 @@ public sealed class TripDetailService(
                 item.VisitedAt))
             .ToList();
 
+        var totals = TripTotalsCalculator.Calculate(items
+            .Select(item => new TripStopSnapshot(item.ScheduledTime, item.EstimatedDurationMinutes, item.EstimatedBudget))
+            .ToList());
+
         return GetTripDetailResult.Succeeded(new TripDetailResponse(
             trip.Id,
             trip.Status.ToString(),
@@ -58,8 +62,12 @@ public sealed class TripDetailService(
             trip.DurationHours,
             trip.BudgetMin,
             trip.BudgetMax,
-            items.Sum(item => item.EstimatedBudget),
-            items.Sum(item => item.EstimatedDurationMinutes), // tổng thời gian tham quan, chưa gồm di chuyển
+            totals.TotalBudget,
+            totals.TotalVisitMinutes, // TotalDurationMinutes: giữ nghĩa cũ, chưa gồm di chuyển
+            totals.TotalVisitMinutes,
+            totals.TotalTravelMinutes,
+            totals.TotalMinutes,
+            totals.EndTime,
             trip.TagIds,
             items,
             trip.CreatedAt,

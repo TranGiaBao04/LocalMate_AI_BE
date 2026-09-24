@@ -10,7 +10,11 @@ public sealed record TripDetailResponse(
     decimal BudgetMin,
     decimal BudgetMax,
     decimal EstimatedBudget,
-    int TotalDurationMinutes,
+    int TotalDurationMinutes, // giữ nguyên nghĩa cũ: chỉ tổng thời gian tham quan
+    int TotalVisitMinutes,
+    int TotalTravelMinutes,
+    int TotalMinutes, // tham quan + di chuyển
+    TimeOnly? EndTime,
     IReadOnlyList<Guid> TagIds,
     IReadOnlyList<TripItemResponse> Items,
     DateTime CreatedAt,

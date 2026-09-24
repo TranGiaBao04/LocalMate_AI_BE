@@ -148,7 +148,7 @@ public sealed class CuratedTripServiceTests
     private sealed class FakeTripDetailService : ITripDetailService
     {
         public TripDetailResponse Response { get; } = new(
-            Guid.NewGuid(), "Draft", 10.80, 106.65, "Bến Thành", 4, 0m, 300_000m, 80_000m, 160,
+            Guid.NewGuid(), "Draft", 10.80, 106.65, "Bến Thành", 4, 0m, 300_000m, 80_000m, 160, 160, 0, 160, null,
             [], [], DateTime.UtcNow, DateTime.UtcNow, null);
 
         public Guid? RequestedTripId { get; private set; }
