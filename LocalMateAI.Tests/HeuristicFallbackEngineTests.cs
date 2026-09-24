@@ -58,7 +58,7 @@ public sealed class HeuristicFallbackEngineTests
         var stop = Assert.Single(payload.Stops);
         Assert.Equal(candidate.PlaceId, stop.PlaceId);
         Assert.Equal(new TimeOnly(8, 0), stop.ScheduledTime);
-        Assert.Contains("Fallback heuristic", stop.Reasoning);
+        Assert.Contains("Bến Thành", stop.Reasoning); // không tag trùng nên chỉ nhắc ga và khoảng cách
     }
 
     [Fact]

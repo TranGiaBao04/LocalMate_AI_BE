@@ -159,6 +159,7 @@ builder.Services.AddScoped<ITripItemDeletionService, TripItemDeletionService>();
 builder.Services.AddScoped<ITripDetailService, TripDetailService>();
 builder.Services.AddScoped<ITripDeletionService, TripDeletionService>();
 builder.Services.AddScoped<ICuratedTripService, CuratedTripService>();
+builder.Services.AddScoped<ITripGenerationService, TripGenerationService>();
 builder.Services.AddScoped<IFinalizeTripCommand, FinalizeTripCommand>();
 builder.Services.AddScoped<IForkTripCommand, ForkTripCommand>();
 builder.Services.AddScoped<IFeedbackService, FeedbackService>();

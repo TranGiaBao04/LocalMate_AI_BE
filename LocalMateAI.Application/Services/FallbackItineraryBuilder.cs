@@ -49,7 +49,11 @@ public static class FallbackItineraryBuilder
     internal static string BuildReasoning(ScoredPlaceDto scored)
     {
         var candidate = scored.Candidate;
-        return $"Fallback heuristic: khớp sở thích {scored.MatchScore:P0}, " +
-               $"cách ga {candidate.StationName} {candidate.DistanceFromStationMeters:0}m";
+        var distance = $"cách ga {candidate.StationName} {candidate.DistanceFromStationMeters:0} m";
+
+        // Không có tag trùng (kể cả khi user không chọn tag, điểm trung tính 0.5) thì không nhắc tới sở thích.
+        return scored.MatchedTagIds.Count > 0
+            ? $"Khớp sở thích của bạn {scored.MatchScore:P0}, {distance}"
+            : $"Cách ga {candidate.StationName} {candidate.DistanceFromStationMeters:0} m";
     }
 }

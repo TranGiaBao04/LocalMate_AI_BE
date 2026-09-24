@@ -74,29 +74,34 @@ public sealed class FallbackItineraryBuilderTests
     }
 
     [Fact]
-    public void BuildStops_ReasoningContainsScoreStationAndDistance()
+    public void BuildStops_ReasoningWithoutMatchedTags_MentionsOnlyStationAndDistance()
     {
         var stops = FallbackItineraryBuilder.BuildStops(
             [Scored(MakeCandidate("Cà phê Bến Thành", distance: 250.0))], durationHours: 8, budgetMax: 1_000_000m);
 
         var reasoning = stops[0].Reasoning;
 
-        Assert.Contains("Fallback heuristic", reasoning);
         Assert.Contains("Bến Thành", reasoning);
-        Assert.Contains("250m", reasoning);
+        Assert.Contains("250 m", reasoning);
+        Assert.DoesNotContain("sở thích", reasoning);
+        Assert.DoesNotContain("Fallback", reasoning);
     }
 
     [Fact]
     public void BuildStops_ReasoningFormatsMatchScoreAsPercent()
     {
         var stops = FallbackItineraryBuilder.BuildStops(
-            [Scored(MakeCandidate("Điểm hợp sở thích"), score: 1.0)], durationHours: 8, budgetMax: 1_000_000m);
+            [Scored(MakeCandidate("Điểm hợp sở thích"), score: 1.0, matchedTagIds: [Guid.NewGuid()])],
+            durationHours: 8,
+            budgetMax: 1_000_000m);
 
         Assert.Contains("100%", stops[0].Reasoning);
+        Assert.Contains("sở thích", stops[0].Reasoning);
     }
 
-    private static ScoredPlaceDto Scored(PlaceCandidateDto candidate, double score = 1.0) =>
-        new(candidate, score, []);
+    private static ScoredPlaceDto Scored(
+        PlaceCandidateDto candidate, double score = 1.0, IReadOnlyList<Guid>? matchedTagIds = null) =>
+        new(candidate, score, matchedTagIds ?? []);
 
     private static PlaceCandidateDto MakeCandidate(
         string name, decimal costMax = 50_000m, double distance = 100.0, double latitude = 10.77) =>
