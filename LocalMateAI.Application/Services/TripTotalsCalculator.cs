@@ -9,6 +9,15 @@ namespace LocalMateAI.Application.Services;
 /// </summary>
 public static class TripTotalsCalculator
 {
+    /// <summary>Khoảng trống giữa lúc chặng trước kết thúc và chặng sau bắt đầu, chính là thời gian di chuyển.</summary>
+    public static int TravelGapMinutes(TripStopSnapshot previous, TripStopSnapshot next)
+    {
+        var previousEnd = previous.ScheduledTime.ToTimeSpan()
+                          + TimeSpan.FromMinutes(previous.EstimatedDurationMinutes);
+        var gap = (int)(next.ScheduledTime.ToTimeSpan() - previousEnd).TotalMinutes;
+        return Math.Max(0, gap); // giờ chồng lấn thì coi như không di chuyển
+    }
+
     /// <param name="orderedStops">Các chặng đã xếp theo OrderIndex tăng dần.</param>
     public static TripTotals Calculate(IReadOnlyList<TripStopSnapshot> orderedStops)
     {
@@ -32,11 +41,7 @@ public static class TripTotalsCalculator
                 continue;
             }
 
-            var previous = orderedStops[index - 1];
-            var previousEnd = previous.ScheduledTime.ToTimeSpan()
-                              + TimeSpan.FromMinutes(previous.EstimatedDurationMinutes);
-            var gap = (int)(stop.ScheduledTime.ToTimeSpan() - previousEnd).TotalMinutes;
-            travelMinutes += Math.Max(0, gap); // giờ chồng lấn thì coi như không di chuyển
+            travelMinutes += TravelGapMinutes(orderedStops[index - 1], stop);
         }
 
         var last = orderedStops[^1];

@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using FluentValidation;
 using LocalMateAI.API;
 using LocalMateAI.API.Middlewares;
@@ -81,7 +82,8 @@ if (googleAuthValidationResult.Failed)
         googleAuthValidationResult.Failures);
 }
 
-builder.Services.AddControllers();
+builder.Services.AddControllers().AddJsonOptions(options =>
+    options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {

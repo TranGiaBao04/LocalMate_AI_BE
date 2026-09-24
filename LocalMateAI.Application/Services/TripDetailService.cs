@@ -30,32 +30,58 @@ public sealed class TripDetailService(
             return GetTripDetailResult.MissingTrip();
         }
 
-        var items = trip.Items
-            .Select(item => new TripItemResponse(
-                item.ItemId,
-                item.PlaceId,
-                item.PlaceName,
-                item.Category.ToString(),
-                item.ImageUrl,
-                item.Latitude,
-                item.Longitude,
-                item.StationName,
-                item.OrderIndex,
-                item.ScheduledTime,
-                item.EstimatedDurationMinutes,
-                item.EstimatedBudget,
-                item.Reasoning,
-                item.IsVisited,
-                item.VisitedAt))
+        var stops = trip.Items
+            .Select(item => new TripStopSnapshot(item.ScheduledTime, item.EstimatedDurationMinutes, item.EstimatedBudget))
             .ToList();
 
-        var totals = TripTotalsCalculator.Calculate(items
-            .Select(item => new TripStopSnapshot(item.ScheduledTime, item.EstimatedDurationMinutes, item.EstimatedBudget))
-            .ToList());
+        var items = trip.Items
+            .Select((item, index) =>
+            {
+                int? travelMinutes = null;
+                int? distanceMeters = null;
+                int? walkingMinutes = null;
+                int? motorbikeMinutes = null;
+
+                if (index > 0)
+                {
+                    var previous = trip.Items[index - 1];
+                    var roadKm = TravelTimeEstimator.RoadDistanceKm(
+                        previous.Latitude, previous.Longitude, item.Latitude, item.Longitude);
+                    travelMinutes = TripTotalsCalculator.TravelGapMinutes(stops[index - 1], stops[index]);
+                    distanceMeters = (int)Math.Round(roadKm * 1000);
+                    walkingMinutes = TravelTimeEstimator.WalkingMinutes(roadKm);
+                    motorbikeMinutes = TravelTimeEstimator.MotorbikeMinutes(roadKm);
+                }
+
+                return new TripItemResponse(
+                    item.ItemId,
+                    item.PlaceId,
+                    item.PlaceName,
+                    item.Category.ToString(),
+                    item.ImageUrl,
+                    item.Latitude,
+                    item.Longitude,
+                    item.StationName,
+                    item.OrderIndex,
+                    item.ScheduledTime,
+                    item.EstimatedDurationMinutes,
+                    item.EstimatedBudget,
+                    item.Reasoning,
+                    item.IsVisited,
+                    item.VisitedAt,
+                    travelMinutes,
+                    distanceMeters,
+                    walkingMinutes,
+                    motorbikeMinutes);
+            })
+            .ToList();
+
+        var totals = TripTotalsCalculator.Calculate(stops);
 
         return GetTripDetailResult.Succeeded(new TripDetailResponse(
             trip.Id,
             trip.Status.ToString(),
+            trip.TravelMode.ToString(),
             trip.StartLatitude,
             trip.StartLongitude,
             trip.StationName,

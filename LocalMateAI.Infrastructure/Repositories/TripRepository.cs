@@ -235,6 +235,7 @@ public sealed class TripRepository(AppDbContext dbContext) : ITripRepository
             {
                 candidate.Id,
                 candidate.Status,
+                candidate.TravelMode,
                 candidate.StartLatitude,
                 candidate.StartLongitude,
                 candidate.DurationHours,
@@ -339,7 +340,8 @@ public sealed class TripRepository(AppDbContext dbContext) : ITripRepository
                 .ToList(),
             trip.CreatedAt,
             trip.UpdatedAt,
-            trip.FinalizedAt);
+            trip.FinalizedAt,
+            trip.TravelMode);
     }
 
     public async Task AddAsync(

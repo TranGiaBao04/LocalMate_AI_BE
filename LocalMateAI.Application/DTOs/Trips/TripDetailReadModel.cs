@@ -15,4 +15,5 @@ public sealed record TripDetailReadModel(
     IReadOnlyList<TripItemReadModel> Items,
     DateTime CreatedAt,
     DateTime UpdatedAt,
-    DateTime? FinalizedAt);
+    DateTime? FinalizedAt,
+    TravelMode TravelMode = TravelMode.Auto);

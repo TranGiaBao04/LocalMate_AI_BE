@@ -3,6 +3,7 @@ namespace LocalMateAI.Application.DTOs.Trips;
 public sealed record TripDetailResponse(
     Guid Id,
     string Status,
+    string TravelMode,
     double StartLatitude,
     double StartLongitude,
     string? StationName,
