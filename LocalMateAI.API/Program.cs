@@ -131,6 +131,7 @@ builder.Services.AddScoped<IPlaceRepository, PlaceRepository>();
 builder.Services.AddScoped<ITripRepository, TripRepository>();
 builder.Services.AddScoped<IItineraryItemRepository, ItineraryItemRepository>();
 builder.Services.AddScoped<IFeedbackRepository, FeedbackRepository>();
+builder.Services.AddScoped<IPlaceReviewRepository, PlaceReviewRepository>();
 builder.Services.AddScoped<IGeoService, GeoService>();
 builder.Services.AddScoped<IPlaceQueryService, PlaceQueryService>();
 builder.Services.AddScoped<IAdminPlaceService, AdminPlaceService>();
@@ -159,6 +160,7 @@ builder.Services.AddScoped<ICuratedTripService, CuratedTripService>();
 builder.Services.AddScoped<IFinalizeTripCommand, FinalizeTripCommand>();
 builder.Services.AddScoped<IForkTripCommand, ForkTripCommand>();
 builder.Services.AddScoped<IFeedbackService, FeedbackService>();
+builder.Services.AddScoped<IPlaceReviewService, PlaceReviewService>();
 
 // Register Application Services for Google Maps & Navigation (BE-60, BE-61, BE-62, BE-63)
 builder.Services.AddSingleton<IGoogleMapsUrlBuilderService, GoogleMapsUrlBuilderService>();
