@@ -12,18 +12,16 @@ public static class FallbackItineraryBuilder
     public static IReadOnlyList<FallbackStopDto> BuildStops(
         IReadOnlyList<ScoredPlaceDto> rankedCandidates,
         int durationHours,
+        decimal budgetMax,
         TravelMode travelMode = TravelMode.Auto,
         TimeOnly? startTime = null)
     {
         var inputs = rankedCandidates
-            .Select(scored => new ScheduleInput(
-                scored.Candidate.Latitude,
-                scored.Candidate.Longitude,
-                ItineraryScheduler.VisitMinutesFor(scored.Candidate.Category)))
+            .Select(scored => ItineraryScheduler.ToScheduleInput(scored.Candidate))
             .ToList();
 
         return ItineraryScheduler
-            .Schedule(inputs, startTime ?? ItineraryScheduler.DefaultStartTime, durationHours, travelMode)
+            .Schedule(inputs, startTime ?? ItineraryScheduler.DefaultStartTime, durationHours, travelMode, budgetMax)
             .Select((slot, index) =>
             {
                 var scored = rankedCandidates[slot.SourceIndex];

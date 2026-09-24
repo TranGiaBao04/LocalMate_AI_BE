@@ -36,7 +36,7 @@ public sealed class TripFeasibilityService(
                 origin.NearestStation,
                 criteria.DurationCategory.ToString(),
                 criteria.BudgetTier.ToString(),
-                criteria.EstimatedStopCount,
+                0,
                 0));
         }
 
@@ -47,7 +47,22 @@ public sealed class TripFeasibilityService(
             category: null,
             cancellationToken);
 
-        var isFeasible = candidatePlaces.Count >= criteria.EstimatedStopCount;
+        // Địa điểm chưa xếp hạng theo sở thích nên số chặng chỉ là gần đúng so với lúc tạo lịch trình thật.
+        var planned = ItineraryScheduler.Schedule(
+            candidatePlaces
+                .Where(place => place.EstimatedCostMax <= criteria.BudgetMax)
+                .Select(place => new ScheduleInput(
+                    place.Latitude,
+                    place.Longitude,
+                    ItineraryScheduler.VisitMinutesFor(place.Category),
+                    place.EstimatedCostMax))
+                .ToList(),
+            ItineraryScheduler.DefaultStartTime,
+            request.DurationHours,
+            request.TravelMode,
+            request.BudgetMax);
+
+        var isFeasible = planned.Count >= 1;
 
         return TripFeasibilityResult.Succeeded(new TripFeasibilityResponse(
             isFeasible,
@@ -55,7 +70,7 @@ public sealed class TripFeasibilityService(
             origin.NearestStation,
             criteria.DurationCategory.ToString(),
             criteria.BudgetTier.ToString(),
-            criteria.EstimatedStopCount,
+            planned.Count,
             candidatePlaces.Count));
     }
 

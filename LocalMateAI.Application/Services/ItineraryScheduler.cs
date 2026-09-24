@@ -1,14 +1,16 @@
+using LocalMateAI.Application.DTOs.Matching;
 using LocalMateAI.Domain.Enums;
 
 namespace LocalMateAI.Application.Services;
 
-public sealed record ScheduleInput(double Latitude, double Longitude, int DurationMinutes);
+public sealed record ScheduleInput(double Latitude, double Longitude, int DurationMinutes, decimal Cost = 0);
 
 /// <param name="SourceIndex">Vị trí của chặng này trong danh sách đầu vào (vì Schedule có thể đổi thứ tự).</param>
 public sealed record ScheduledSlot(int SourceIndex, TimeOnly ScheduledTime, int DurationMinutes);
 
 /// <summary>
 /// Xếp giờ cho các chặng (BE-42). Thuần. Giờ là TimeOnly nên chuyến qua nửa đêm sẽ quay về 00:00 (chưa hỗ trợ ngày).
+/// Đây là nơi duy nhất quyết định thời lượng và số chặng của một lịch trình.
 /// </summary>
 public static class ItineraryScheduler
 {
@@ -24,38 +26,60 @@ public static class ItineraryScheduler
         _ => DefaultVisitMinutes
     };
 
+    public static ScheduleInput ToScheduleInput(PlaceCandidateDto candidate) =>
+        new(candidate.Latitude, candidate.Longitude, VisitMinutesFor(candidate.Category), candidate.EstimatedCostMax);
+
     /// <summary>
-    /// Dùng khi tạo mới: giữ chặng đầu (điểm cao nhất), sắp các chặng sau theo gần nhất,
-    /// rồi cắt bớt các chặng cuối nếu vượt durationHours (luôn giữ ít nhất 1 chặng).
+    /// Chọn và xếp giờ: duyệt theo thứ hạng, thêm địa điểm nếu tổng thời lượng ≤ durationHours và tổng chi phí
+    /// ≤ budgetMax, bỏ qua địa điểm không vừa rồi thử địa điểm sau. Luôn giữ chặng xếp hạng cao nhất.
+    /// Các chặng được chọn rồi sắp theo gần nhất, chặng đầu là chặng xếp hạng cao nhất.
     /// </summary>
     public static IReadOnlyList<ScheduledSlot> Schedule(
         IReadOnlyList<ScheduleInput> rankedStops,
         TimeOnly startTime,
         int durationHours,
-        TravelMode mode)
+        TravelMode mode,
+        decimal budgetMax)
     {
         if (rankedStops.Count == 0)
         {
             return [];
         }
 
-        var order = NearestNeighborOrder(rankedStops);
-        var ordered = order.Select(index => rankedStops[index]).ToList();
-        var offsets = StartOffsets(ordered, mode);
         var limitMinutes = durationHours * 60;
+        var selected = new List<int>();
+        var spent = 0m;
 
-        var slots = new List<ScheduledSlot>();
-        for (var i = 0; i < ordered.Count; i++)
+        for (var candidate = 0; candidate < rankedStops.Count; candidate++)
         {
-            if (i > 0 && offsets[i] + ordered[i].DurationMinutes > limitMinutes)
+            if (selected.Count > 0)
             {
-                break; // offsets tăng dần nên các chặng sau cũng vượt
+                if (spent + rankedStops[candidate].Cost > budgetMax)
+                {
+                    continue;
+                }
+
+                var trial = selected.Append(candidate).Select(index => rankedStops[index]).ToList();
+                var (trialOrder, trialOffsets) = Arrange(trial, mode);
+                if (trialOffsets[^1] + trial[trialOrder[^1]].DurationMinutes > limitMinutes)
+                {
+                    continue;
+                }
             }
 
-            slots.Add(new ScheduledSlot(order[i], startTime.AddMinutes(offsets[i]), ordered[i].DurationMinutes));
+            selected.Add(candidate);
+            spent += rankedStops[candidate].Cost;
         }
 
-        return slots;
+        var chosen = selected.Select(index => rankedStops[index]).ToList();
+        var (order, offsets) = Arrange(chosen, mode);
+
+        return order
+            .Select((chosenIndex, position) => new ScheduledSlot(
+                selected[chosenIndex],
+                startTime.AddMinutes(offsets[position]),
+                chosen[chosenIndex].DurationMinutes))
+            .ToList();
     }
 
     /// <summary>Dùng khi sửa lịch (xoá chặng...): giữ nguyên thứ tự và thời lượng, chỉ tính lại giờ.</summary>
@@ -68,6 +92,13 @@ public static class ItineraryScheduler
         return orderedStops
             .Select((stop, index) => new ScheduledSlot(index, startTime.AddMinutes(offsets[index]), stop.DurationMinutes))
             .ToList();
+    }
+
+    // Thứ tự đi (gần nhất) và số phút bắt đầu từng chặng theo thứ tự đó.
+    private static (List<int> Order, List<int> Offsets) Arrange(IReadOnlyList<ScheduleInput> stops, TravelMode mode)
+    {
+        var order = NearestNeighborOrder(stops);
+        return (order, StartOffsets(order.Select(index => stops[index]).ToList(), mode));
     }
 
     // Số phút từ lúc bắt đầu chuyến tới lúc bắt đầu từng chặng = tham quan các chặng trước + di chuyển giữa chúng.

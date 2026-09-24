@@ -8,7 +8,7 @@ public sealed class FallbackItineraryBuilderTests
     [Fact]
     public void BuildStops_EmptyCandidates_ReturnsEmpty()
     {
-        var stops = FallbackItineraryBuilder.BuildStops([], durationHours: 8);
+        var stops = FallbackItineraryBuilder.BuildStops([], durationHours: 8, budgetMax: 1_000_000m);
 
         Assert.Empty(stops);
     }
@@ -23,7 +23,7 @@ public sealed class FallbackItineraryBuilderTests
             Scored(MakeCandidate("Điểm C"))
         };
 
-        var stops = FallbackItineraryBuilder.BuildStops(candidates, durationHours: 8);
+        var stops = FallbackItineraryBuilder.BuildStops(candidates, durationHours: 8, budgetMax: 1_000_000m);
 
         Assert.Equal(3, stops.Count);
         Assert.Equal(0, stops[0].OrderIndex);
@@ -45,7 +45,7 @@ public sealed class FallbackItineraryBuilderTests
         var far = Scored(MakeCandidate("B (xa)", latitude: 10.790));
         var near = Scored(MakeCandidate("C (sát A)", latitude: 10.771));
 
-        var stops = FallbackItineraryBuilder.BuildStops([top, far, near], durationHours: 10);
+        var stops = FallbackItineraryBuilder.BuildStops([top, far, near], durationHours: 10, budgetMax: 1_000_000m);
 
         Assert.Equal(
             ["A (điểm cao nhất)", "C (sát A)", "B (xa)"],
@@ -59,7 +59,7 @@ public sealed class FallbackItineraryBuilderTests
         var candidates = new[] { Scored(MakeCandidate("A")), Scored(MakeCandidate("B")), Scored(MakeCandidate("C")) };
 
         // Kết thúc ở phút 60, 121, 182 → chỉ 2 chặng đầu nằm trong 3 giờ
-        var stops = FallbackItineraryBuilder.BuildStops(candidates, durationHours: 3);
+        var stops = FallbackItineraryBuilder.BuildStops(candidates, durationHours: 3, budgetMax: 1_000_000m);
 
         Assert.Equal(2, stops.Count);
     }
@@ -68,7 +68,7 @@ public sealed class FallbackItineraryBuilderTests
     public void BuildStops_UsesCandidateCostMaxAsBudget()
     {
         var stops = FallbackItineraryBuilder.BuildStops(
-            [Scored(MakeCandidate("Quán ăn", costMax: 150_000m))], durationHours: 8);
+            [Scored(MakeCandidate("Quán ăn", costMax: 150_000m))], durationHours: 8, budgetMax: 1_000_000m);
 
         Assert.Equal(150_000m, stops[0].EstimatedBudget);
     }
@@ -77,7 +77,7 @@ public sealed class FallbackItineraryBuilderTests
     public void BuildStops_ReasoningContainsScoreStationAndDistance()
     {
         var stops = FallbackItineraryBuilder.BuildStops(
-            [Scored(MakeCandidate("Cà phê Bến Thành", distance: 250.0))], durationHours: 8);
+            [Scored(MakeCandidate("Cà phê Bến Thành", distance: 250.0))], durationHours: 8, budgetMax: 1_000_000m);
 
         var reasoning = stops[0].Reasoning;
 
@@ -90,7 +90,7 @@ public sealed class FallbackItineraryBuilderTests
     public void BuildStops_ReasoningFormatsMatchScoreAsPercent()
     {
         var stops = FallbackItineraryBuilder.BuildStops(
-            [Scored(MakeCandidate("Điểm hợp sở thích"), score: 1.0)], durationHours: 8);
+            [Scored(MakeCandidate("Điểm hợp sở thích"), score: 1.0)], durationHours: 8, budgetMax: 1_000_000m);
 
         Assert.Contains("100%", stops[0].Reasoning);
     }

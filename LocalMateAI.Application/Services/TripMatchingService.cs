@@ -46,7 +46,7 @@ public sealed class TripMatchingService(
                     false,
                     "OutOfServiceArea",
                     origin.NearestStation.StationName,
-                    criteria.EstimatedStopCount,
+                    0,
                     criteria.BudgetTier.ToString(),
                     [],
                     []));
@@ -58,7 +58,7 @@ public sealed class TripMatchingService(
             CandidateSearchRadiusMeters,
             cancellationToken);
 
-        // BE-32: lọc ứng viên theo ngân sách & số chặng
+        // BE-32: lọc ứng viên theo ngân sách
         var filtered = candidateFilterService.Filter(candidates, criteria);
 
         // BE-33: chấm điểm tương đồng sở thích ↔ tag địa điểm
@@ -72,10 +72,23 @@ public sealed class TripMatchingService(
         var ranked = scored
             .OrderByDescending(place => place.MatchScore)
             .ThenBy(place => place.Candidate.DistanceFromStationMeters)
-            .Take(criteria.EstimatedStopCount)
             .ToList();
 
-        var isSufficient = ranked.Count >= criteria.EstimatedStopCount;
+        // ItineraryScheduler là nơi duy nhất quyết định số chặng: chọn theo thứ hạng tới khi hết thời lượng hoặc ngân sách.
+        var slots = ItineraryScheduler.Schedule(
+            ranked.Select(place => ItineraryScheduler.ToScheduleInput(place.Candidate)).ToList(),
+            ItineraryScheduler.DefaultStartTime,
+            request.DurationHours,
+            request.TravelMode,
+            request.BudgetMax);
+
+        var selected = slots
+            .Select(slot => slot.SourceIndex)
+            .Order()
+            .Select(index => ranked[index])
+            .ToList();
+
+        var isSufficient = selected.Count >= 1;
 
         return new TripMatchingResult(
             TripMatchingResultStatus.Success,
@@ -83,9 +96,9 @@ public sealed class TripMatchingService(
                 isSufficient,
                 isSufficient ? null : "InsufficientCandidates",
                 origin.NearestStation.StationName,
-                criteria.EstimatedStopCount,
+                selected.Count,
                 criteria.BudgetTier.ToString(),
-                ranked,
+                selected,
                 filtered.Excluded));
     }
 }

@@ -21,18 +21,6 @@ public sealed class TripCriteriaNormalizationServiceTests
     }
 
     [Theory]
-    [InlineData(2, 1)] // 120 phút / (90 + 20) = 1
-    [InlineData(5, 2)] // 300 / 110 = 2
-    [InlineData(6, 3)] // 360 / 110 = 3
-    [InlineData(8, 4)] // 480 / 110 = 4
-    public void Normalize_EstimatesStopCount(int hours, int expectedStops)
-    {
-        var criteria = _sut.Normalize(Request(durationHours: hours, budgetMax: 300_000m));
-
-        Assert.Equal(expectedStops, criteria.EstimatedStopCount);
-    }
-
-    [Theory]
     [InlineData(100_000, BudgetTier.Economy)]
     [InlineData(200_000, BudgetTier.Economy)]
     [InlineData(300_000, BudgetTier.Standard)]
@@ -46,13 +34,12 @@ public sealed class TripCriteriaNormalizationServiceTests
     }
 
     [Fact]
-    public void Normalize_ComputesBudgetPerStop()
+    public void Normalize_KeepsBudgetMaxForWholeTrip()
     {
-        // 6 giờ → 3 chặng; 600k / 3 = 200k mỗi chặng
+        // Số chặng do ItineraryScheduler quyết định; normalization chỉ giữ tổng ngân sách của cả chuyến.
         var criteria = _sut.Normalize(Request(durationHours: 6, budgetMax: 600_000m));
 
-        Assert.Equal(3, criteria.EstimatedStopCount);
-        Assert.Equal(200_000m, criteria.BudgetPerStop);
+        Assert.Equal(600_000m, criteria.BudgetMax);
     }
 
     private static TripRequestDto Request(int durationHours, decimal budgetMax) =>

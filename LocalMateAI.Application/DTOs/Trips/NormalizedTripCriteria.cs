@@ -14,8 +14,8 @@ public enum BudgetTier
     Premium     // > 500,000đ
 }
 
+/// <param name="BudgetMax">Ngân sách tối đa của cả chuyến (VNĐ). Số chặng do ItineraryScheduler quyết định.</param>
 public sealed record NormalizedTripCriteria(
     TripDurationCategory DurationCategory,
-    int EstimatedStopCount,
     BudgetTier BudgetTier,
-    decimal BudgetPerStop);
+    decimal BudgetMax);
