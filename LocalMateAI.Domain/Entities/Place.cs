@@ -18,9 +18,10 @@ public sealed class Place : BaseEntity
     // Dòng được giữ lại vì chặng lịch trình, lịch trình mẫu và đánh giá cũ vẫn tham chiếu tới nó.
     public DateTime? DeletedAt { get; set; }
 
+    // Chi phí ước tính cho một người, đơn vị VNĐ đầy đủ (ví dụ 30000 = 30.000đ, không phải 30 nghìn).
     public decimal EstimatedCostMin { get; set; }
-        public decimal EstimatedCostMax { get; set; }
-        public string? ImageUrl { get; set; }
+    public decimal EstimatedCostMax { get; set; }
+    public string? ImageUrl { get; set; }
 
-        public ICollection<PlaceTag> Tags { get; set; } = [];
-    }
+    public ICollection<PlaceTag> Tags { get; set; } = [];
+}

@@ -4,8 +4,8 @@
     "Description": "Dạo chợ, ăn vặt và ngắm bảo tàng quanh ga Bến Thành",
     "CoverImageUrl": null,
     "EstimatedDurationMinutes": 240,
-    "EstimatedCostMin": 100,
-    "EstimatedCostMax": 300,
+    "EstimatedCostMin": 100000,
+    "EstimatedCostMax": 300000,
     "PlaceNames": [
       "Ben Thanh Market (Chợ Bến Thành)",
       "Bột chiên Cô Mẽ",
