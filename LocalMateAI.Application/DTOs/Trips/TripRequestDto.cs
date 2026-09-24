@@ -1,3 +1,5 @@
+using LocalMateAI.Domain.Enums;
+
 namespace LocalMateAI.Application.DTOs.Trips;
 
 /// <summary>
@@ -10,10 +12,13 @@ namespace LocalMateAI.Application.DTOs.Trips;
 /// <param name="BudgetMax">Ngân sách tối đa, VNĐ, tính cho cả chuyến đi (không chia theo đầu người).
 /// BE chia đều cho số điểm dừng ước tính để lọc địa điểm, xem TripCriteriaNormalizationService.</param>
 /// <param name="TagIds">Danh sách tag sở thích; có thể rỗng.</param>
+/// <param name="TravelMode">Phương tiện dùng để tính thời gian di chuyển giữa các chặng.
+/// Auto (mặc định): ≤ 700 m đi bộ, xa hơn xe máy.</param>
 public sealed record TripRequestDto(
     double StartLatitude,
     double StartLongitude,
     int DurationHours,
     decimal BudgetMin,
     decimal BudgetMax,
-    IReadOnlyList<Guid> TagIds);
+    IReadOnlyList<Guid> TagIds,
+    TravelMode TravelMode = TravelMode.Auto);

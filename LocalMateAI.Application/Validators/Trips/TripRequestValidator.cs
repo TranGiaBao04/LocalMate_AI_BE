@@ -13,6 +13,7 @@ public sealed class TripRequestValidator : AbstractValidator<TripRequestDto>
         RuleFor(x => x.BudgetMin).GreaterThanOrEqualTo(0);
         RuleFor(x => x.BudgetMax).GreaterThanOrEqualTo(x => x.BudgetMin)
             .WithMessage("BudgetMax phải lớn hơn hoặc bằng BudgetMin.");
+        RuleFor(x => x.TravelMode).IsInEnum();
         RuleFor(x => x.TagIds).NotNull();
         RuleForEach(x => x.TagIds).NotEmpty();
     }

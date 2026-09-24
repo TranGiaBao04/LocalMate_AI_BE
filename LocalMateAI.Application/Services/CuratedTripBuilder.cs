@@ -10,8 +10,8 @@ namespace LocalMateAI.Application.Services;
 /// </summary>
 public static class CuratedTripBuilder
 {
-    public static readonly TimeOnly DefaultStartTime = new(8, 0); // khớp FallbackItineraryBuilder.StartHour
-    public const int DefaultMinutesPerStop = 90; // khớp FallbackItineraryBuilder.MinutesPerStop
+    public static readonly TimeOnly DefaultStartTime = ItineraryScheduler.DefaultStartTime;
+    public const int DefaultMinutesPerStop = ItineraryScheduler.DefaultVisitMinutes;
     public const int MinMinutesPerStop = 30;
 
     public static Trip Build(
