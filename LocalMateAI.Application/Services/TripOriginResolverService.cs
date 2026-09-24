@@ -5,7 +5,11 @@ namespace LocalMateAI.Application.Services;
 
 public sealed class TripOriginResolverService(IGeoService geoService) : ITripOriginResolverService
 {
-    private const double MaxServiceAreaDistanceMeters = 3000;
+    // Khoảng cách tối đa (mét, đường chim bay) từ điểm xuất phát tới ga gần nhất để còn được phục vụ.
+    // 12 km ≈ 39 phút di chuyển (×1,3 hệ số đường vòng, 24 km/h) — phủ toàn bộ các quận nội thành,
+    // TP Thủ Đức và Nhà Bè; không phủ Bình Chánh, Hóc Môn, Củ Chi, Cần Giờ.
+    // Đây là cổng lọc thô, không phải quãng đường thật; nếu sau này có API chỉ đường, đổi sang tính theo phút.
+    private const double MaxServiceAreaDistanceMeters = 12000;
 
     public async Task<TripOriginResolution?> ResolveAsync(
         TripRequestDto request,

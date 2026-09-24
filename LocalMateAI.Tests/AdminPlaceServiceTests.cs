@@ -312,7 +312,6 @@ public sealed class AdminPlaceServiceTests
     [Theory]
     [InlineData(DeletePlacePersistenceResult.Deleted, DeleteAdminPlaceResultStatus.Success)]
     [InlineData(DeletePlacePersistenceResult.NotFound, DeleteAdminPlaceResultStatus.NotFound)]
-    [InlineData(DeletePlacePersistenceResult.InUse, DeleteAdminPlaceResultStatus.InUse)]
     public async Task Delete_MapsPersistenceOutcome(
         DeletePlacePersistenceResult persistenceResult,
         DeleteAdminPlaceResultStatus expectedStatus)
@@ -323,6 +322,55 @@ public sealed class AdminPlaceServiceTests
         var result = await service.DeleteAsync(Guid.NewGuid());
 
         Assert.Equal(expectedStatus, result.Status);
+    }
+
+    [Fact]
+    public async Task Update_SoftDeletedPlace_ReturnsNotFoundWithoutWrite()
+    {
+        var place = DeletedPlace();
+        var repository = new FakePlaceRepository(place);
+        var service = new AdminPlaceService(repository, new CoordinatesValidationService());
+
+        var result = await service.UpdateAsync(
+            place.Id,
+            new UpdateAdminPlaceRequest("Place", null, "Address", 10.78, 106.70, PlaceCategory.Food, 0, 100, null));
+
+        Assert.Equal(AdminPlaceOperationResultStatus.NotFound, result.Status);
+        Assert.Equal(0, repository.SaveChangesCalls);
+    }
+
+    [Fact]
+    public async Task UpdateStatus_SoftDeletedPlace_CannotBeReactivated()
+    {
+        var place = DeletedPlace();
+        var repository = new FakePlaceRepository(place);
+        var service = new AdminPlaceService(repository, new CoordinatesValidationService());
+
+        var result = await service.UpdateStatusAsync(place.Id, new UpdatePlaceStatusRequest(PlaceStatus.Active));
+
+        Assert.Equal(AdminPlaceModerationResultStatus.NotFound, result.Status);
+        Assert.Equal(PlaceStatus.Inactive, place.Status);
+        Assert.Equal(0, repository.SaveChangesCalls);
+    }
+
+    [Fact]
+    public async Task UpdateVerification_SoftDeletedPlace_ReturnsNotFoundWithoutWrite()
+    {
+        var place = DeletedPlace();
+        var repository = new FakePlaceRepository(place);
+        var service = new AdminPlaceService(repository, new CoordinatesValidationService());
+
+        var result = await service.UpdateVerificationAsync(place.Id, new UpdatePlaceVerificationRequest(false));
+
+        Assert.Equal(AdminPlaceModerationResultStatus.NotFound, result.Status);
+        Assert.Equal(0, repository.SaveChangesCalls);
+    }
+
+    private static Place DeletedPlace()
+    {
+        var place = ExistingPlace(PlaceStatus.Inactive, isVerified: true);
+        place.DeletedAt = DateTime.UtcNow;
+        return place;
     }
 
     public static TheoryData<CreateAdminPlaceRequest> InvalidCreateRequests =>

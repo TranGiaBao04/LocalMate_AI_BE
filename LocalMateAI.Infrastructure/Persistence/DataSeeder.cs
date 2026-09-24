@@ -267,4 +267,4 @@ public static class DataSeeder
         IReadOnlyList<string> PlaceNames);
 
     public sealed record DevelopmentUserSeedDefinition(string Email, string FullName, UserRole Role);
-}
+}

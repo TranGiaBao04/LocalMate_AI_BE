@@ -38,4 +38,21 @@ public interface ITripRepository
         Guid sourceTripId,
         Guid userId,
         CancellationToken cancellationToken = default);
+
+    // Trả null nếu trip không tồn tại, không thuộc userId hoặc đã bị xoá mềm.
+    Task<TripDetailReadModel?> GetOwnedDetailAsync(
+        Guid tripId,
+        Guid userId,
+        CancellationToken cancellationToken = default);
+
+    // Lưu một Trip mới (kèm Items/Tags). BE-41 generate cũng sẽ dùng lại.
+    Task AddAsync(
+        Trip trip,
+        CancellationToken cancellationToken = default);
+
+    // Xoá mềm (đặt DeletedAt). Trả false nếu không có trip nào thoả điều kiện.
+    Task<bool> SoftDeleteAsync(
+        Guid tripId,
+        Guid userId,
+        CancellationToken cancellationToken = default);
 }

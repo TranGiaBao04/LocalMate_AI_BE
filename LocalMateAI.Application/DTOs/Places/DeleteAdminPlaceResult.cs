@@ -3,8 +3,7 @@ namespace LocalMateAI.Application.DTOs.Places;
 public enum DeleteAdminPlaceResultStatus
 {
     Success,
-    NotFound,
-    InUse
+    NotFound
 }
 
 public sealed record DeleteAdminPlaceResult(DeleteAdminPlaceResultStatus Status)
@@ -14,7 +13,4 @@ public sealed record DeleteAdminPlaceResult(DeleteAdminPlaceResultStatus Status)
 
     public static DeleteAdminPlaceResult Missing() =>
         new(DeleteAdminPlaceResultStatus.NotFound);
-
-    public static DeleteAdminPlaceResult PlaceInUse() =>
-        new(DeleteAdminPlaceResultStatus.InUse);
 }

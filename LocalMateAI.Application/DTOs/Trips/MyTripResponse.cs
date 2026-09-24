@@ -10,4 +10,7 @@ public sealed record MyTripResponse(
     decimal BudgetMax,
     int ItemCount,
     DateTime CreatedAt,
-    DateTime UpdatedAt);
+    DateTime UpdatedAt,
+    string? StationName,
+    decimal EstimatedBudget,
+    DateTime? FinalizedAt);

@@ -18,7 +18,8 @@ public sealed class ItineraryItemRepository(AppDbContext dbContext) : IItinerary
             .AsNoTracking()
             .Where(candidate => candidate.Id == itemId
                                 && candidate.TripId == tripId
-                                && candidate.Trip.UserId == userId)
+                                && candidate.Trip.UserId == userId
+                                && candidate.Trip.DeletedAt == null)
             .Select(candidate => new
             {
                 candidate.Id,
@@ -62,6 +63,7 @@ public sealed class ItineraryItemRepository(AppDbContext dbContext) : IItinerary
             .Where(item => item.Id == itemId
                            && item.TripId == tripId
                            && item.Trip.UserId == userId
+                           && item.Trip.DeletedAt == null
                            && item.Trip.Status == TripStatus.Draft
                            && !dbContext.ItineraryItems.Any(other =>
                                other.TripId == tripId && other.PlaceId == newPlaceId))
@@ -105,7 +107,7 @@ public sealed class ItineraryItemRepository(AppDbContext dbContext) : IItinerary
 
         var tripStatus = await dbContext.Trips
             .AsNoTracking()
-            .Where(trip => trip.Id == tripId && trip.UserId == userId)
+            .Where(trip => trip.Id == tripId && trip.UserId == userId && trip.DeletedAt == null)
             .Select(trip => (TripStatus?)trip.Status)
             .SingleOrDefaultAsync(cancellationToken);
         if (tripStatus is null)

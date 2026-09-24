@@ -63,6 +63,23 @@ public sealed class ForkTripCommandTests
             CancellationToken cancellationToken = default) =>
             Task.FromResult(trip);
 
+        public Task<TripDetailReadModel?> GetOwnedDetailAsync(
+            Guid tripId,
+            Guid userId,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task AddAsync(
+            Trip trip,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<bool> SoftDeleteAsync(
+            Guid tripId,
+            Guid userId,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         public Task<IReadOnlyList<MyTripReadModel>> GetByUserIdAsync(
             Guid userId,
             CancellationToken cancellationToken = default) =>

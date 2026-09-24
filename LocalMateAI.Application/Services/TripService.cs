@@ -32,7 +32,10 @@ public sealed class TripService(
             trip.BudgetMax,
             trip.ItemCount,
             trip.CreatedAt,
-            trip.UpdatedAt)).ToArray());
+            trip.UpdatedAt,
+            trip.StationName,
+            trip.EstimatedBudget,
+            trip.FinalizedAt)).ToArray());
     }
 
     public async Task<SaveTripResult> SaveTripAsync(

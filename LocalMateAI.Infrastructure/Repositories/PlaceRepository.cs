@@ -6,7 +6,6 @@ using LocalMateAI.Infrastructure.Persistence;
 using LocalMateAI.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 using NetTopologySuite.Geometries;
-using Npgsql;
 
 namespace LocalMateAI.Infrastructure.Repositories;
 
@@ -107,6 +106,7 @@ public sealed class PlaceRepository(AppDbContext dbContext) : IPlaceRepository
     {
         return await dbContext.Places
             .AsNoTracking()
+            .Where(place => place.DeletedAt == null)
             .OrderBy(place => place.Name)
             .ThenBy(place => place.Id)
             .Select(place => new AdminPlaceResponse(
@@ -133,7 +133,7 @@ public sealed class PlaceRepository(AppDbContext dbContext) : IPlaceRepository
     {
         return await dbContext.Places
             .AsNoTracking()
-            .Where(place => place.Id == placeId)
+            .Where(place => place.Id == placeId && place.DeletedAt == null)
             .Select(place => new AdminPlaceResponse(
                 place.Id,
                 place.Name,
@@ -173,56 +173,21 @@ public sealed class PlaceRepository(AppDbContext dbContext) : IPlaceRepository
         Guid placeId,
         CancellationToken cancellationToken = default)
     {
-        var place = await dbContext.Places.SingleOrDefaultAsync(
-            candidate => candidate.Id == placeId,
-            cancellationToken);
+        var now = DateTime.UtcNow;
 
-        if (place is null)
-        {
-            return DeletePlacePersistenceResult.NotFound;
-        }
+        // Xoá mềm: đặt Status = Inactive để mọi truy vấn "Status = 'Active'" hiện có tự loại địa điểm này,
+        // còn DeletedAt để ẩn khỏi Admin và chặn kích hoạt lại. Không xoá dòng hay PlaceTags.
+        var rowsChanged = await dbContext.Places
+            .Where(place => place.Id == placeId && place.DeletedAt == null)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(place => place.DeletedAt, (DateTime?)now)
+                .SetProperty(place => place.Status, PlaceStatus.Inactive)
+                .SetProperty(place => place.UpdatedAt, now), cancellationToken);
 
-        var isReferenced = await dbContext.ItineraryItems.AnyAsync(
-                item => item.PlaceId == placeId,
-                cancellationToken)
-            || await dbContext.CuratedItineraryItems.AnyAsync(
-                item => item.PlaceId == placeId,
-                cancellationToken)
-            || await dbContext.PlaceReviews.AnyAsync(
-                review => review.PlaceId == placeId,
-                cancellationToken);
-
-        if (isReferenced)
-        {
-            return DeletePlacePersistenceResult.InUse;
-        }
-
-        var placeTags = await dbContext.PlaceTags
-            .Where(placeTag => placeTag.PlaceId == placeId)
-            .ToListAsync(cancellationToken);
-
-        dbContext.PlaceTags.RemoveRange(placeTags);
-        dbContext.Places.Remove(place);
-
-        try
-        {
-            await dbContext.SaveChangesAsync(cancellationToken);
-            return DeletePlacePersistenceResult.Deleted;
-        }
-        catch (DbUpdateException exception) when (IsHistoricalPlaceReferenceViolation(exception))
-        {
-            return DeletePlacePersistenceResult.InUse;
-        }
+        return rowsChanged == 1
+            ? DeletePlacePersistenceResult.Deleted
+            : DeletePlacePersistenceResult.NotFound;
     }
-
-    private static bool IsHistoricalPlaceReferenceViolation(DbUpdateException exception) =>
-        exception.InnerException is PostgresException
-        {
-            SqlState: PostgresErrorCodes.ForeignKeyViolation,
-            ConstraintName: "FK_ItineraryItems_Places_PlaceId"
-                or "FK_CuratedItineraryItems_Places_PlaceId"
-                or "FK_PlaceReviews_Places_PlaceId"
-        };
 
     public async Task<PlaceReadModel?> GetActiveByIdAsync(
         Guid id,

@@ -1,18 +1,18 @@
-using LocalMateAI.Domain.Enums;
-
 namespace LocalMateAI.Application.DTOs.Trips;
 
-public sealed record MyTripReadModel(
+public sealed record TripDetailResponse(
     Guid Id,
-    TripStatus Status,
+    string Status,
     double StartLatitude,
     double StartLongitude,
+    string? StationName,
     int DurationHours,
     decimal BudgetMin,
     decimal BudgetMax,
-    int ItemCount,
+    decimal EstimatedBudget,
+    int TotalDurationMinutes,
+    IReadOnlyList<Guid> TagIds,
+    IReadOnlyList<TripItemResponse> Items,
     DateTime CreatedAt,
     DateTime UpdatedAt,
-    string? StationName,
-    decimal EstimatedBudget,
     DateTime? FinalizedAt);
