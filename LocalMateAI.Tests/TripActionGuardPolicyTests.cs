@@ -89,6 +89,18 @@ public sealed class TripActionGuardPolicyTests
     }
 
     [Fact]
+    public void ShouldGuard_DeleteTripBareId_ReturnsFalse()
+    {
+        // Xoá mềm trip được phép cả khi trip đã Finalized
+        var tripId = Guid.NewGuid();
+
+        var guarded = TripActionGuardPolicy.ShouldGuard("DELETE", $"/api/trips/{tripId}", out var parsedTripId);
+
+        Assert.False(guarded);
+        Assert.Equal(tripId, parsedTripId);
+    }
+
+    [Fact]
     public void ShouldGuard_NonGuidTripSegment_ReturnsFalse()
     {
         var guarded = TripActionGuardPolicy.ShouldGuard(

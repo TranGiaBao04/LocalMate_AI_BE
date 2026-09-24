@@ -3,7 +3,8 @@ namespace LocalMateAI.Application.Security;
 /// <summary>
 /// BE-58: Policy thuần quyết định request mutation lên /api/trips/{tripId}/...
 /// có cần guard trạng thái Finalized hay không.
-/// Exempt: "finalize" (chính transition) và "fork" (BE-59 — nhân bản thành draft mới).
+/// Exempt: "finalize" (chính transition), "fork" (BE-59 — nhân bản thành draft mới)
+/// và DELETE /api/trips/{id} (xoá mềm, được phép cả với trip đã chốt).
 /// Lưu ý: mọi endpoint items/... của trip Finalized hợp lệ sau này (nếu có) phải thêm exempt.
 /// </summary>
 public static class TripActionGuardPolicy
@@ -33,6 +34,12 @@ public static class TripActionGuardPolicy
         }
 
         tripId = parsedTripId;
+
+        // DELETE /api/trips/{id} (đúng 3 đoạn) là xoá mềm nên không bị khoá bởi trạng thái Finalized.
+        if (string.Equals(httpMethod, "DELETE", StringComparison.OrdinalIgnoreCase) && segments.Length == 3)
+        {
+            return false;
+        }
 
         var suffix = segments.Length > 3 ? segments[3] : string.Empty;
         return !ExemptSuffixes.Contains(suffix); // suffix rỗng → guard (mọi mutation trực tiếp lên trip)

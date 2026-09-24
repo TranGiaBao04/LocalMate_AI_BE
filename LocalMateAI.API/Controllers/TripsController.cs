@@ -18,7 +18,9 @@ public sealed class TripsController(
     IForkTripCommand forkTripCommand,
     ITripAlternativesService tripAlternativesService,
     ITripItemReplacementService tripItemReplacementService,
-    ITripItemDeletionService tripItemDeletionService) : ControllerBase
+    ITripItemDeletionService tripItemDeletionService,
+    ITripDetailService tripDetailService,
+    ITripDeletionService tripDeletionService) : ControllerBase
 {
     [HttpPost("feasibility-check")]
     [AllowAnonymous]
@@ -401,6 +403,92 @@ public sealed class TripsController(
                     "The last remaining itinerary item cannot be deleted.",
                     "cannot_delete_last_item")),
             _ => throw new InvalidOperationException("Unsupported delete itinerary item result status.")
+        };
+    }
+
+    [HttpGet("{tripId:guid}")]
+    [Authorize(Roles = "User,Admin")]
+    [ProducesResponseType<TripDetailResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<TripDetailResponse>> GetTripDetailAsync(
+        Guid tripId,
+        CancellationToken cancellationToken)
+    {
+        var subject = User.FindFirst("sub")?.Value;
+        if (!Guid.TryParse(subject, out var userId) || userId == Guid.Empty)
+        {
+            return Unauthorized(CreateProblem(
+                StatusCodes.Status401Unauthorized,
+                "Authentication identity is invalid.",
+                "invalid_identity"));
+        }
+
+        var result = await tripDetailService.GetAsync(userId, tripId, cancellationToken);
+        return result.Status switch
+        {
+            GetTripDetailResultStatus.Success => Ok(result.Response),
+            GetTripDetailResultStatus.InvalidTripId =>
+                BadRequest(CreateProblem(
+                    StatusCodes.Status400BadRequest,
+                    "Trip ID is invalid.",
+                    "invalid_trip_id")),
+            GetTripDetailResultStatus.UserNotFound =>
+                StatusCode(StatusCodes.Status403Forbidden, CreateProblem(
+                    StatusCodes.Status403Forbidden,
+                    "A persisted user account is required to view a trip.",
+                    "trip_detail_requires_persisted_user")),
+            GetTripDetailResultStatus.TripNotFound =>
+                NotFound(CreateProblem(
+                    StatusCodes.Status404NotFound,
+                    "Trip was not found.",
+                    "trip_not_found")),
+            _ => throw new InvalidOperationException("Unsupported trip detail result status.")
+        };
+    }
+
+    [HttpDelete("{tripId:guid}")]
+    [Authorize(Roles = "User,Admin")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeleteTripAsync(
+        Guid tripId,
+        CancellationToken cancellationToken)
+    {
+        var subject = User.FindFirst("sub")?.Value;
+        if (!Guid.TryParse(subject, out var userId) || userId == Guid.Empty)
+        {
+            return Unauthorized(CreateProblem(
+                StatusCodes.Status401Unauthorized,
+                "Authentication identity is invalid.",
+                "invalid_identity"));
+        }
+
+        var result = await tripDeletionService.DeleteAsync(userId, tripId, cancellationToken);
+        return result.Status switch
+        {
+            DeleteTripResultStatus.Success => NoContent(),
+            DeleteTripResultStatus.InvalidTripId =>
+                BadRequest(CreateProblem(
+                    StatusCodes.Status400BadRequest,
+                    "Trip ID is invalid.",
+                    "invalid_trip_id")),
+            DeleteTripResultStatus.UserNotFound =>
+                StatusCode(StatusCodes.Status403Forbidden, CreateProblem(
+                    StatusCodes.Status403Forbidden,
+                    "A persisted user account is required to delete a trip.",
+                    "delete_trip_requires_persisted_user")),
+            DeleteTripResultStatus.TripNotFound =>
+                NotFound(CreateProblem(
+                    StatusCodes.Status404NotFound,
+                    "Trip was not found.",
+                    "trip_not_found")),
+            _ => throw new InvalidOperationException("Unsupported delete trip result status.")
         };
     }
 

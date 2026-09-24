@@ -85,7 +85,8 @@ public sealed class AdminPlaceService(
         }
 
         var place = await placeRepository.GetByIdAsync(placeId, cancellationToken);
-        if (place is null)
+        // Địa điểm đã xoá mềm coi như không tồn tại.
+        if (place is null || place.DeletedAt is not null)
         {
             return AdminPlaceOperationResult.Missing();
         }
@@ -114,7 +115,6 @@ public sealed class AdminPlaceService(
         {
             DeletePlacePersistenceResult.Deleted => DeleteAdminPlaceResult.Succeeded(),
             DeletePlacePersistenceResult.NotFound => DeleteAdminPlaceResult.Missing(),
-            DeletePlacePersistenceResult.InUse => DeleteAdminPlaceResult.PlaceInUse(),
             _ => throw new InvalidOperationException("Unknown Place delete result.")
         };
     }
@@ -132,7 +132,8 @@ public sealed class AdminPlaceService(
         }
 
         var place = await placeRepository.GetByIdAsync(placeId, cancellationToken);
-        if (place is null)
+        // Địa điểm đã xoá mềm coi như không tồn tại, để Admin không kích hoạt lại hay sửa nó.
+        if (place is null || place.DeletedAt is not null)
         {
             return AdminPlaceModerationResult.Missing();
         }
@@ -161,7 +162,8 @@ public sealed class AdminPlaceService(
         ArgumentNullException.ThrowIfNull(request);
 
         var place = await placeRepository.GetByIdAsync(placeId, cancellationToken);
-        if (place is null)
+        // Địa điểm đã xoá mềm coi như không tồn tại, để Admin không kích hoạt lại hay sửa nó.
+        if (place is null || place.DeletedAt is not null)
         {
             return AdminPlaceModerationResult.Missing();
         }

@@ -151,7 +151,6 @@ public sealed class AdminPlacesController(IAdminPlaceService adminPlaceService) 
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
-    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> DeleteAsync(
         Guid id,
         CancellationToken cancellationToken)
@@ -162,7 +161,6 @@ public sealed class AdminPlacesController(IAdminPlaceService adminPlaceService) 
         {
             DeleteAdminPlaceResultStatus.Success => NoContent(),
             DeleteAdminPlaceResultStatus.NotFound => NotFound(CreatePlaceNotFoundProblem()),
-            DeleteAdminPlaceResultStatus.InUse => Conflict(CreatePlaceInUseProblem()),
             _ => throw new InvalidOperationException("Unknown Admin Place delete result.")
         };
     }
@@ -194,20 +192,6 @@ public sealed class AdminPlacesController(IAdminPlaceService adminPlaceService) 
         };
 
         problem.Extensions["code"] = "place_not_found";
-        return problem;
-    }
-
-    private ProblemDetails CreatePlaceInUseProblem()
-    {
-        var problem = new ProblemDetails
-        {
-            Status = StatusCodes.Status409Conflict,
-            Title = "Place is referenced by itinerary history.",
-            Type = "https://httpstatuses.com/409",
-            Instance = HttpContext.Request.Path
-        };
-
-        problem.Extensions["code"] = "place_in_use";
         return problem;
     }
 

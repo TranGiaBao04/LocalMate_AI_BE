@@ -17,7 +17,7 @@ public sealed class FeedbackRepository(AppDbContext dbContext) : IFeedbackReposi
         dbContext.Trips
             .AsNoTracking()
             .SingleOrDefaultAsync(
-                trip => trip.Id == tripId && trip.UserId == userId,
+                trip => trip.Id == tripId && trip.UserId == userId && trip.DeletedAt == null,
                 cancellationToken);
 
     public Task<bool> ExistsAsync(

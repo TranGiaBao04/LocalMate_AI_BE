@@ -13,6 +13,11 @@ public sealed class Place : BaseEntity
     public PlaceCategory Category { get; set; }
     public PlaceStatus Status { get; set; } = PlaceStatus.Pending;
     public bool IsVerified { get; set; }
+
+    // Xoá mềm bởi Admin: luôn đi kèm Status = Inactive để các truy vấn "Status = 'Active'" tự loại địa điểm này.
+    // Dòng được giữ lại vì chặng lịch trình, lịch trình mẫu và đánh giá cũ vẫn tham chiếu tới nó.
+    public DateTime? DeletedAt { get; set; }
+
     public decimal EstimatedCostMin { get; set; }
         public decimal EstimatedCostMax { get; set; }
         public string? ImageUrl { get; set; }

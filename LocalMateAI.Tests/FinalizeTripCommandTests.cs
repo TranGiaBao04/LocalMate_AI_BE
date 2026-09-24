@@ -137,5 +137,22 @@ public sealed class FinalizeTripCommandTests
             Guid userId,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
+
+        public Task<TripDetailReadModel?> GetOwnedDetailAsync(
+            Guid tripId,
+            Guid userId,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task AddAsync(
+            Trip trip,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<bool> SoftDeleteAsync(
+            Guid tripId,
+            Guid userId,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 }
