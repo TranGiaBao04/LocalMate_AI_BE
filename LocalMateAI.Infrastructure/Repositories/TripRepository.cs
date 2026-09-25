@@ -9,6 +9,15 @@ namespace LocalMateAI.Infrastructure.Repositories;
 
 public sealed class TripRepository(AppDbContext dbContext) : ITripRepository
 {
+    public Task<int> CountFinalizedByUserAsync(
+        Guid userId,
+        CancellationToken cancellationToken = default) =>
+        dbContext.Trips
+            .AsNoTracking()
+            .CountAsync(trip => trip.UserId == userId
+                                && trip.Status == TripStatus.Finalized
+                                && trip.DeletedAt == null, cancellationToken);
+
     public async Task<IReadOnlyList<MyTripReadModel>> GetByUserIdAsync(
         Guid userId,
         CancellationToken cancellationToken = default)

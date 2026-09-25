@@ -14,6 +14,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<Tag> Tags => Set<Tag>();
     public DbSet<UserPreferenceTag> UserPreferenceTags => Set<UserPreferenceTag>();
     public DbSet<Trip> Trips => Set<Trip>();
+    public DbSet<UserSubscription> UserSubscriptions => Set<UserSubscription>();
+    public DbSet<PaymentOrder> PaymentOrders => Set<PaymentOrder>();
+    public DbSet<UsageEvent> UsageEvents => Set<UsageEvent>();
     public DbSet<ItineraryItem> ItineraryItems => Set<ItineraryItem>();
     public DbSet<Feedback> Feedbacks => Set<Feedback>();
     public DbSet<PlaceReview> PlaceReviews => Set<PlaceReview>();

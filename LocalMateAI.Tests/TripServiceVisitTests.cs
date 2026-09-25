@@ -141,6 +141,9 @@ public sealed class TripServiceVisitTests
         OwnedItineraryItemVisitReadModel? item = null,
         Guid? ownerId = null) : ITripRepository
     {
+        public Task<int> CountFinalizedByUserAsync(Guid userId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         private readonly Guid owningUserId = ownerId ?? UserId;
 
         public bool MarkResult { get; init; } = true;

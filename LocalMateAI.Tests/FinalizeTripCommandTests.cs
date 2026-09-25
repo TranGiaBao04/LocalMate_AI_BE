@@ -99,6 +99,9 @@ public sealed class FinalizeTripCommandTests
 
     private sealed class FakeTripRepository(Trip? trip, bool finalizeResult = true) : ITripRepository
     {
+        public Task<int> CountFinalizedByUserAsync(Guid userId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         public Task<Trip?> GetByIdAsync(Guid tripId, CancellationToken cancellationToken = default) =>
             Task.FromResult(trip);
 
