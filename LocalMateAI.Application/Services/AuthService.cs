@@ -10,9 +10,12 @@ namespace LocalMateAI.Application.Services;
 public sealed class AuthService(
     IUserRepository userRepository,
     IExternalLoginRepository externalLoginRepository,
+    IPendingRegistrationRepository pendingRegistrationRepository,
+    IEmailOtpService emailOtpService,
     IPasswordHashService passwordHashService,
     IAccessTokenService accessTokenService,
-    IGoogleIdentityTokenValidator googleIdentityTokenValidator) : IAuthService
+    IGoogleIdentityTokenValidator googleIdentityTokenValidator,
+    TimeProvider timeProvider) : IAuthService
 {
     private const string GoogleProvider = "Google";
     private const int MaximumFullNameLength = 200;
@@ -21,6 +24,10 @@ public sealed class AuthService(
     private const int MaximumGoogleIdTokenLength = 16_384;
     private const int MinimumPasswordLength = 8;
     private const int MaximumPasswordLength = 128;
+    private const int OtpCodeLength = 6;
+
+    // Bản đăng ký chưa nhập OTP được giữ 24 giờ; quá hạn phải đăng ký lại.
+    private static readonly TimeSpan PendingRegistrationLifetime = TimeSpan.FromHours(24);
 
     private static readonly EmailAddressAttribute EmailValidator = new();
 
@@ -46,19 +53,83 @@ public sealed class AuthService(
             return RegisterResult.EmailAlreadyExists();
         }
 
+        var passwordHash = passwordHashService.HashPassword(
+            new User { FullName = fullName, Email = email },
+            password);
+
+        // Phát mã trước: đang trong thời gian chờ thì không ghi đè tên/mật khẩu của bản đăng ký tạm.
+        var issueResult = await emailOtpService.IssueAsync(email, OtpPurpose.Registration, cancellationToken);
+        switch (issueResult.Status)
+        {
+            case OtpIssueStatus.Cooldown:
+                return RegisterResult.Cooldown(issueResult.RetryAfterSeconds);
+            case OtpIssueStatus.RateLimited:
+                return RegisterResult.RateLimited(issueResult.RetryAfterSeconds);
+        }
+
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        await pendingRegistrationRepository.UpsertAsync(
+            email,
+            fullName,
+            passwordHash,
+            now + PendingRegistrationLifetime,
+            now,
+            cancellationToken);
+
+        return RegisterResult.Succeeded(CreateOtpDispatchResponse(email));
+    }
+
+    public async Task<VerifyRegistrationResult> VerifyRegistrationAsync(
+        VerifyRegistrationRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var email = request.Email?.Trim().ToLowerInvariant() ?? string.Empty;
+        var code = request.Code?.Trim() ?? string.Empty;
+
+        var validationErrors = ValidateOtpVerification(email, code);
+        if (validationErrors.Count > 0)
+        {
+            return VerifyRegistrationResult.ValidationFailed(validationErrors);
+        }
+
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        var pending = await pendingRegistrationRepository.GetByEmailAsync(email, cancellationToken);
+        if (pending is null || pending.ExpiresAt <= now)
+        {
+            return VerifyRegistrationResult.InvalidOtp();
+        }
+
+        var otpResult = await emailOtpService.VerifyAsync(
+            email,
+            OtpPurpose.Registration,
+            code,
+            cancellationToken);
+
+        switch (otpResult.Status)
+        {
+            case OtpVerifyStatus.Invalid:
+                return VerifyRegistrationResult.InvalidOtp(otpResult.RemainingAttempts);
+            case OtpVerifyStatus.Expired:
+                return VerifyRegistrationResult.OtpExpired();
+            case OtpVerifyStatus.AttemptsExceeded:
+                return VerifyRegistrationResult.OtpAttemptsExceeded();
+        }
+
         var user = new User
         {
-            FullName = fullName,
-            Email = email,
+            FullName = pending.FullName,
+            Email = pending.Email,
+            PasswordHash = pending.PasswordHash,
             Role = UserRole.User
         };
 
-        user.PasswordHash = passwordHashService.HashPassword(user, password);
-
-        var added = await userRepository.TryAddAsync(user, cancellationToken);
-        if (!added)
+        var created = await pendingRegistrationRepository.TryCompleteRegistrationAsync(user, cancellationToken);
+        if (!created)
         {
-            return RegisterResult.EmailAlreadyExists();
+            // Email vừa được dùng để tạo tài khoản khác (vd. đăng nhập Google) trong lúc chờ OTP.
+            return VerifyRegistrationResult.EmailAlreadyExists();
         }
 
         var response = new RegisterResponse(
@@ -68,7 +139,130 @@ public sealed class AuthService(
             user.Role.ToString(),
             user.CreatedAt);
 
-        return RegisterResult.Succeeded(response);
+        return VerifyRegistrationResult.Succeeded(response);
+    }
+
+    public async Task<OtpRequestResult> ResendRegistrationOtpAsync(
+        ResendRegistrationOtpRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var email = request.Email?.Trim().ToLowerInvariant() ?? string.Empty;
+
+        var validationErrors = ValidateEmailOnly(email);
+        if (validationErrors.Count > 0)
+        {
+            return OtpRequestResult.ValidationFailed(validationErrors);
+        }
+
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        var pending = await pendingRegistrationRepository.GetByEmailAsync(email, cancellationToken);
+
+        // Không có bản đăng ký tạm vẫn trả như đã gửi, để không lộ email nào đang chờ xác thực.
+        if (pending is null || pending.ExpiresAt <= now)
+        {
+            return OtpRequestResult.Accepted(CreateOtpDispatchResponse(email));
+        }
+
+        var issueResult = await emailOtpService.IssueAsync(email, OtpPurpose.Registration, cancellationToken);
+
+        return issueResult.Status switch
+        {
+            OtpIssueStatus.Cooldown => OtpRequestResult.Cooldown(issueResult.RetryAfterSeconds),
+            OtpIssueStatus.RateLimited => OtpRequestResult.RateLimited(issueResult.RetryAfterSeconds),
+            _ => OtpRequestResult.Accepted(CreateOtpDispatchResponse(email))
+        };
+    }
+
+    public async Task<OtpRequestResult> RequestPasswordResetAsync(
+        RequestPasswordResetRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var email = request.Email?.Trim().ToLowerInvariant() ?? string.Empty;
+
+        var validationErrors = ValidateEmailOnly(email);
+        if (validationErrors.Count > 0)
+        {
+            return OtpRequestResult.ValidationFailed(validationErrors);
+        }
+
+        var user = await userRepository.GetByEmailAsync(email, cancellationToken);
+
+        // Email chưa đăng ký vẫn trả như đã gửi, để không lộ email nào có tài khoản.
+        if (user is null)
+        {
+            return OtpRequestResult.Accepted(CreateOtpDispatchResponse(email));
+        }
+
+        // Tài khoản chỉ đăng nhập bằng Google không có mật khẩu để đặt lại (và không được thêm mật khẩu qua đường này).
+        if (user.PasswordHash is null)
+        {
+            return OtpRequestResult.GoogleAccountWithoutPassword();
+        }
+
+        var issueResult = await emailOtpService.IssueAsync(email, OtpPurpose.PasswordReset, cancellationToken);
+
+        return issueResult.Status switch
+        {
+            OtpIssueStatus.Cooldown => OtpRequestResult.Cooldown(issueResult.RetryAfterSeconds),
+            OtpIssueStatus.RateLimited => OtpRequestResult.RateLimited(issueResult.RetryAfterSeconds),
+            _ => OtpRequestResult.Accepted(CreateOtpDispatchResponse(email))
+        };
+    }
+
+    public async Task<PasswordResetResult> ConfirmPasswordResetAsync(
+        ConfirmPasswordResetRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var email = request.Email?.Trim().ToLowerInvariant() ?? string.Empty;
+        var code = request.Code?.Trim() ?? string.Empty;
+        var newPassword = request.NewPassword ?? string.Empty;
+
+        // Kiểm tra mật khẩu mới trước khi đụng tới mã, để nhập sai mật khẩu không tốn lượt nhập mã.
+        var validationErrors = ValidateOtpVerification(email, code);
+        var passwordError = GetPasswordError(newPassword);
+        if (passwordError is not null)
+        {
+            validationErrors["newPassword"] = [passwordError];
+        }
+
+        if (validationErrors.Count > 0)
+        {
+            return PasswordResetResult.ValidationFailed(validationErrors);
+        }
+
+        var user = await userRepository.GetByEmailAsync(email, cancellationToken);
+        if (user is null || user.PasswordHash is null)
+        {
+            // Không có tài khoản mật khẩu thì cũng không bao giờ có mã: trả như mã sai.
+            return PasswordResetResult.InvalidOtp();
+        }
+
+        var otpResult = await emailOtpService.VerifyAsync(
+            email,
+            OtpPurpose.PasswordReset,
+            code,
+            cancellationToken);
+
+        switch (otpResult.Status)
+        {
+            case OtpVerifyStatus.Invalid:
+                return PasswordResetResult.InvalidOtp(otpResult.RemainingAttempts);
+            case OtpVerifyStatus.Expired:
+                return PasswordResetResult.OtpExpired();
+            case OtpVerifyStatus.AttemptsExceeded:
+                return PasswordResetResult.OtpAttemptsExceeded();
+        }
+
+        var newPasswordHash = passwordHashService.HashPassword(user, newPassword);
+        await userRepository.UpdatePasswordHashAsync(user, newPasswordHash, cancellationToken);
+
+        return PasswordResetResult.Succeeded();
     }
 
     public async Task<LoginResult> LoginAsync(
@@ -191,6 +385,8 @@ public sealed class AuthService(
 
         if (created)
         {
+            // Email đã được Google xác nhận: bản đăng ký bằng mật khẩu đang chờ OTP (nếu có) không còn cần nữa.
+            await pendingRegistrationRepository.DeleteByEmailAsync(email, cancellationToken);
             return GoogleSignInResult.Succeeded(CreateLoginResponse(user));
         }
 
@@ -251,21 +447,10 @@ public sealed class AuthService(
             errors["email"] = ["Email format is invalid."];
         }
 
-        if (string.IsNullOrEmpty(password))
+        var passwordError = GetPasswordError(password);
+        if (passwordError is not null)
         {
-            errors["password"] = ["Password is required."];
-        }
-        else if (password.Length < MinimumPasswordLength)
-        {
-            errors["password"] = [$"Password must contain at least {MinimumPasswordLength} characters."];
-        }
-        else if (password.Length > MaximumPasswordLength)
-        {
-            errors["password"] = [$"Password must not exceed {MaximumPasswordLength} characters."];
-        }
-        else if (string.IsNullOrWhiteSpace(password))
-        {
-            errors["password"] = ["Password must contain at least one non-whitespace character."];
+            errors["password"] = [passwordError];
         }
 
         return errors;
@@ -312,6 +497,70 @@ public sealed class AuthService(
 
         return errors;
     }
+
+    private static string? GetPasswordError(string password)
+    {
+        if (string.IsNullOrEmpty(password))
+        {
+            return "Password is required.";
+        }
+
+        if (password.Length < MinimumPasswordLength)
+        {
+            return $"Password must contain at least {MinimumPasswordLength} characters.";
+        }
+
+        if (password.Length > MaximumPasswordLength)
+        {
+            return $"Password must not exceed {MaximumPasswordLength} characters.";
+        }
+
+        return string.IsNullOrWhiteSpace(password)
+            ? "Password must contain at least one non-whitespace character."
+            : null;
+    }
+
+    private static Dictionary<string, string[]> ValidateEmailOnly(string email)
+    {
+        var errors = new Dictionary<string, string[]>(StringComparer.Ordinal);
+
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            errors["email"] = ["Email is required."];
+        }
+        else if (email.Length > MaximumEmailLength)
+        {
+            errors["email"] = [$"Email must not exceed {MaximumEmailLength} characters."];
+        }
+        else if (!EmailValidator.IsValid(email))
+        {
+            errors["email"] = ["Email format is invalid."];
+        }
+
+        return errors;
+    }
+
+    private static Dictionary<string, string[]> ValidateOtpVerification(string email, string code)
+    {
+        var errors = ValidateEmailOnly(email);
+
+        if (string.IsNullOrEmpty(code))
+        {
+            errors["code"] = ["Verification code is required."];
+        }
+        else if (code.Length != OtpCodeLength || !code.All(char.IsAsciiDigit))
+        {
+            errors["code"] = [$"Verification code must be exactly {OtpCodeLength} digits."];
+        }
+
+        return errors;
+    }
+
+    private static OtpDispatchResponse CreateOtpDispatchResponse(string email) =>
+        new(
+            email,
+            (int)EmailOtpService.CodeLifetime.TotalSeconds,
+            (int)EmailOtpService.ResendCooldown.TotalSeconds);
 
     private static bool IsValidExternalEmail(string email) =>
         !string.IsNullOrWhiteSpace(email)

@@ -8,7 +8,7 @@ namespace LocalMateAI.Infrastructure.Repositories;
 
 public sealed class UserRepository(AppDbContext dbContext) : IUserRepository
 {
-    private const string UserEmailConstraintName = "UX_USERS_Email";
+    private const string UserEmailConstraintName = "UX_Users_Email";
 
     public Task<bool> EmailExistsAsync(string email, CancellationToken cancellationToken = default) =>
         dbContext.Users.AsNoTracking().AnyAsync(user => user.Email == email, cancellationToken);

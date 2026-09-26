@@ -26,6 +26,9 @@ services:
       ConnectionStrings__DefaultConnection: "Host=database;Port=5432;Database=${POSTGRES_DB:-localmateai};Username=${POSTGRES_USER:-localmate};Password=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}"
       Jwt__SigningKey: "${Jwt__SigningKey:?Set Jwt__SigningKey in .env}"
       GoogleAuth__ClientId: "${GoogleAuth__ClientId:?Set GoogleAuth__ClientId in .env}"
+      Otp__HashKey: "${Otp__HashKey:-}"
+      Smtp__Username: "${Smtp__Username:-}"
+      Smtp__Password: "${Smtp__Password:-}"
     ports:
       - "5286:5286"
     depends_on:
