@@ -24,6 +24,8 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "postgis");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.HasSequence("PaymentOrderCodeSequence");
+
             modelBuilder.Entity("LocalMateAI.Domain.Entities.CuratedItinerary", b =>
                 {
                     b.Property<Guid>("Id")
@@ -244,7 +246,9 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(20)");
 
                     b.Property<long>("ProviderOrderCode")
-                        .HasColumnType("bigint");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValueSql("nextval('\"PaymentOrderCodeSequence\"')");
 
                     b.Property<string>("QrCode")
                         .HasColumnType("text");

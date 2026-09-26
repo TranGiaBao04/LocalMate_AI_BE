@@ -13,7 +13,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace LocalMateAI.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260925235025_AddSubscriptionPhase1")]
+    [Migration("20260926000246_AddSubscriptionPhase1")]
     partial class AddSubscriptionPhase1
     {
         /// <inheritdoc />
@@ -26,6 +26,8 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "postgis");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
+
+            modelBuilder.HasSequence("PaymentOrderCodeSequence");
 
             modelBuilder.Entity("LocalMateAI.Domain.Entities.CuratedItinerary", b =>
                 {
@@ -247,7 +249,9 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(20)");
 
                     b.Property<long>("ProviderOrderCode")
-                        .HasColumnType("bigint");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValueSql("nextval('\"PaymentOrderCodeSequence\"')");
 
                     b.Property<string>("QrCode")
                         .HasColumnType("text");

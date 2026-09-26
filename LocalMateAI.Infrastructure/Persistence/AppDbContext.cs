@@ -1,5 +1,6 @@
 using LocalMateAI.Domain.Common;
 using LocalMateAI.Domain.Entities;
+using LocalMateAI.Infrastructure.Persistence.Configurations;
 using Microsoft.EntityFrameworkCore;
 
 namespace LocalMateAI.Infrastructure.Persistence;
@@ -26,6 +27,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        SubscriptionModelConfiguration.Configure(modelBuilder);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
 
         base.OnModelCreating(modelBuilder);

@@ -11,6 +11,9 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.CreateSequence(
+                name: "PaymentOrderCodeSequence");
+
             migrationBuilder.CreateTable(
                 name: "PaymentOrders",
                 columns: table => new
@@ -21,7 +24,7 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
                     Type = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
                     Amount = table.Column<decimal>(type: "numeric(12,0)", nullable: false),
                     Status = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
-                    ProviderOrderCode = table.Column<long>(type: "bigint", nullable: false),
+                    ProviderOrderCode = table.Column<long>(type: "bigint", nullable: false, defaultValueSql: "nextval('\"PaymentOrderCodeSequence\"')"),
                     CheckoutUrl = table.Column<string>(type: "text", nullable: true),
                     QrCode = table.Column<string>(type: "text", nullable: true),
                     ExpiresAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
@@ -130,6 +133,9 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
 
             migrationBuilder.DropTable(
                 name: "UserSubscriptions");
+
+            migrationBuilder.DropSequence(
+                name: "PaymentOrderCodeSequence");
         }
     }
 }

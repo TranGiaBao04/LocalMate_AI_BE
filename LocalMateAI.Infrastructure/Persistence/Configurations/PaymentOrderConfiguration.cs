@@ -14,6 +14,8 @@ public sealed class PaymentOrderConfiguration : IEntityTypeConfiguration<Payment
         builder.Property(order => order.Type).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.Property(order => order.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.Property(order => order.Amount).HasColumnType("numeric(12,0)");
+        builder.Property(order => order.ProviderOrderCode)
+            .HasDefaultValueSql("nextval('\"PaymentOrderCodeSequence\"')");
         builder.Property(order => order.CheckoutUrl).IsRequired(false);
         builder.Property(order => order.QrCode).IsRequired(false);
         builder.HasIndex(order => order.ProviderOrderCode)
