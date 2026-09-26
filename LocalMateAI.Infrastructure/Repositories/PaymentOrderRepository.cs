@@ -31,6 +31,20 @@ public sealed class PaymentOrderRepository(AppDbContext dbContext) : IPaymentOrd
                 order => order.Id == orderId && order.UserId == userId,
                 cancellationToken);
 
+    public async Task<bool> MarkExpiredIfPendingAsync(
+        Guid orderId,
+        DateTime updatedAt,
+        CancellationToken cancellationToken = default) =>
+        await dbContext.PaymentOrders
+            .Where(order => order.Id == orderId
+                            && order.Status == PaymentOrderStatus.Pending)
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(
+                    order => order.Status,
+                    PaymentOrderStatus.Expired)
+                    .SetProperty(order => order.UpdatedAt, updatedAt),
+                cancellationToken) == 1;
+
     public async Task AddAsync(
         PaymentOrder order,
         CancellationToken cancellationToken = default)

@@ -16,6 +16,11 @@ public interface IPaymentOrderRepository
         Guid userId,
         CancellationToken cancellationToken = default);
 
+    Task<bool> MarkExpiredIfPendingAsync(
+        Guid orderId,
+        DateTime updatedAt,
+        CancellationToken cancellationToken = default);
+
     Task AddAsync(PaymentOrder order, CancellationToken cancellationToken = default);
 
     Task SaveChangesAsync(CancellationToken cancellationToken = default);

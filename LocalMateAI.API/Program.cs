@@ -19,6 +19,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
+using PayOS;
 using Serilog;
 
 try
@@ -83,6 +84,10 @@ if (googleAuthValidationResult.Failed)
         googleAuthValidationResult.Failures);
 }
 
+var payOSConfiguration = builder.Configuration.GetSection(PayOSGatewayOptions.SectionName);
+var configuredPayOSOptions =
+    payOSConfiguration.Get<PayOSGatewayOptions>() ?? new PayOSGatewayOptions();
+
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
@@ -114,6 +119,7 @@ builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.Configure<JwtOptions>(jwtConfiguration);
 builder.Services.Configure<GoogleAuthOptions>(googleAuthConfiguration);
+builder.Services.Configure<PayOSGatewayOptions>(payOSConfiguration);
 builder.Services.Configure<PasswordHasherOptions>(options =>
 {
     options.CompatibilityMode = PasswordHasherCompatibilityMode.IdentityV3;
@@ -136,8 +142,26 @@ builder.Services.AddScoped<IUsageEventRepository, UsageEventRepository>();
 builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
 builder.Services.AddScoped<IPaymentOrderRepository, PaymentOrderRepository>();
 builder.Services.AddScoped<IPaymentOperationExecutor, PaymentOperationExecutor>();
+builder.Services.AddScoped<IPaymentSettlementExecutor, PaymentSettlementExecutor>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
-builder.Services.AddScoped<IPaymentGateway, UnavailablePaymentGateway>();
+builder.Services.AddScoped<IPaymentSettlementService, PaymentSettlementService>();
+builder.Services.AddScoped<IPaymentWebhookService, PaymentWebhookService>();
+if (configuredPayOSOptions.IsComplete())
+{
+    builder.Services.AddSingleton(configuredPayOSOptions);
+    builder.Services.AddSingleton(new PayOSClient(new PayOSOptions
+    {
+        ClientId = configuredPayOSOptions.ClientId,
+        ApiKey = configuredPayOSOptions.ApiKey,
+        ChecksumKey = configuredPayOSOptions.ChecksumKey,
+        LogLevel = LogLevel.None
+    }));
+    builder.Services.AddScoped<IPaymentGateway, PayOSPaymentGateway>();
+}
+else
+{
+    builder.Services.AddScoped<IPaymentGateway, UnavailablePaymentGateway>();
+}
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<IItineraryItemRepository, ItineraryItemRepository>();
 builder.Services.AddScoped<IFeedbackRepository, FeedbackRepository>();

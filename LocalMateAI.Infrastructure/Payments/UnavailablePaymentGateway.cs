@@ -9,4 +9,14 @@ public sealed class UnavailablePaymentGateway : IPaymentGateway
         PaymentLinkRequest request,
         CancellationToken cancellationToken = default) =>
         Task.FromResult(PaymentLinkResult.Unavailable());
+
+    public Task<PaymentGatewayOrderResult> GetPaymentAsync(
+        long providerOrderCode,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(PaymentGatewayOrderResult.Unavailable(providerOrderCode));
+
+    public Task<PaymentWebhookVerificationResult> VerifyWebhookAsync(
+        string rawPayload,
+        CancellationToken cancellationToken = default) =>
+        Task.FromResult(PaymentWebhookVerificationResult.Invalid());
 }

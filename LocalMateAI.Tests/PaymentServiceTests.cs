@@ -5,6 +5,7 @@ using LocalMateAI.Application.Payments;
 using LocalMateAI.Application.Services;
 using LocalMateAI.Domain.Entities;
 using LocalMateAI.Domain.Enums;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace LocalMateAI.Tests;
 
@@ -277,6 +278,101 @@ public sealed class PaymentServiceTests
         Assert.Equal(0, fixture.Orders.LookupCalls);
     }
 
+    [Fact]
+    public async Task GetOrder_ProviderPaid_UsesSharedSettlementAndReturnsPaid()
+    {
+        var order = Pending(PlanCode.Membership, PaymentOrderType.Purchase, Now.AddMinutes(5));
+        var settlement = new RecordingSettlementService(order);
+        var gateway = new FakeGateway(
+            _ => PaymentLinkResult.Unavailable(),
+            code => new PaymentGatewayOrderResult(
+                true,
+                code,
+                order.Amount,
+                PaymentGatewayOrderStatus.Paid));
+        var fixture = new Fixture(
+            existingOrders: [order],
+            gateway: gateway,
+            settlementService: settlement);
+
+        var result = await fixture.Service.GetOrderAsync(UserId, order.Id);
+
+        Assert.Equal("Paid", result.Response!.Status);
+        Assert.Equal(1, gateway.LookupCalls);
+        Assert.Single(settlement.Notifications);
+    }
+
+    [Fact]
+    public async Task GetOrder_GatewayUnavailable_PreservesRetryableLocalState()
+    {
+        var order = Pending(PlanCode.TripPass, PaymentOrderType.Purchase, Now.AddMinutes(5));
+        var gateway = new FakeGateway(
+            _ => PaymentLinkResult.Unavailable(),
+            PaymentGatewayOrderResult.Unavailable);
+        var fixture = new Fixture(existingOrders: [order], gateway: gateway);
+
+        var result = await fixture.Service.GetOrderAsync(UserId, order.Id);
+
+        Assert.Equal(PaymentOrderLookupStatus.Success, result.Status);
+        Assert.Equal("Pending", result.Response!.Status);
+        Assert.Equal(PaymentOrderStatus.Pending, order.Status);
+    }
+
+    [Fact]
+    public async Task GetOrder_ProviderCancelled_UsesSettlementFailurePath()
+    {
+        var order = Pending(PlanCode.TripPass, PaymentOrderType.Purchase, Now.AddMinutes(5));
+        var settlement = new RecordingSettlementService(order);
+        var gateway = new FakeGateway(
+            _ => PaymentLinkResult.Unavailable(),
+            code => new PaymentGatewayOrderResult(
+                true,
+                code,
+                order.Amount,
+                PaymentGatewayOrderStatus.Cancelled));
+        var fixture = new Fixture(
+            existingOrders: [order],
+            gateway: gateway,
+            settlementService: settlement);
+
+        var result = await fixture.Service.GetOrderAsync(UserId, order.Id);
+
+        Assert.Equal("Failed", result.Response!.Status);
+        Assert.False(Assert.Single(settlement.Notifications).IsSuccessful);
+    }
+
+    [Fact]
+    public async Task GetOrder_ProviderPendingPastLocalExpiry_MarksExpired()
+    {
+        var order = Pending(PlanCode.TripPass, PaymentOrderType.Purchase, Now.AddSeconds(-1));
+        var gateway = new FakeGateway(
+            _ => PaymentLinkResult.Unavailable(),
+            code => new PaymentGatewayOrderResult(
+                true,
+                code,
+                order.Amount,
+                PaymentGatewayOrderStatus.Pending));
+        var fixture = new Fixture(existingOrders: [order], gateway: gateway);
+
+        var result = await fixture.Service.GetOrderAsync(UserId, order.Id);
+
+        Assert.Equal("Expired", result.Response!.Status);
+    }
+
+    [Fact]
+    public async Task GetOrder_PaidOrderDoesNotQueryProvider()
+    {
+        var order = Pending(PlanCode.TripPass, PaymentOrderType.Purchase, Now.AddMinutes(5));
+        order.Status = PaymentOrderStatus.Paid;
+        var gateway = new FakeGateway(_ => PaymentLinkResult.Unavailable());
+        var fixture = new Fixture(existingOrders: [order], gateway: gateway);
+
+        var result = await fixture.Service.GetOrderAsync(UserId, order.Id);
+
+        Assert.Equal("Paid", result.Response!.Status);
+        Assert.Equal(0, gateway.LookupCalls);
+    }
+
     private static UserSubscription Active(PlanCode planCode) =>
         new() { UserId = UserId, PlanCode = planCode, EndsAt = Now.AddDays(10) };
 
@@ -304,7 +400,8 @@ public sealed class PaymentServiceTests
             bool persistedUser = true,
             IReadOnlyList<UserSubscription>? subscriptions = null,
             IReadOnlyList<PaymentOrder>? existingOrders = null,
-            FakeGateway? gateway = null)
+            FakeGateway? gateway = null,
+            IPaymentSettlementService? settlementService = null)
         {
             Orders = new FakePaymentOrderRepository(existingOrders ?? []);
             Gateway = gateway ?? new FakeGateway(_ =>
@@ -315,7 +412,9 @@ public sealed class PaymentServiceTests
                 Orders,
                 new FakePaymentOperationExecutor(persistedUser),
                 Gateway,
-                new FixedTimeProvider(Now));
+                settlementService ?? new FakeSettlementService(),
+                new FixedTimeProvider(Now),
+                NullLogger<PaymentService>.Instance);
         }
 
         public PaymentService Service { get; }
@@ -371,14 +470,33 @@ public sealed class PaymentServiceTests
             return Task.CompletedTask;
         }
 
+        public Task<bool> MarkExpiredIfPendingAsync(
+            Guid orderId,
+            DateTime updatedAt,
+            CancellationToken cancellationToken = default)
+        {
+            var order = Items.Single(candidate => candidate.Id == orderId);
+            if (order.Status != PaymentOrderStatus.Pending)
+            {
+                return Task.FromResult(false);
+            }
+
+            order.Status = PaymentOrderStatus.Expired;
+            order.UpdatedAt = updatedAt;
+            return Task.FromResult(true);
+        }
+
         public Task SaveChangesAsync(CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
     }
 
-    private sealed class FakeGateway(Func<PaymentLinkRequest, PaymentLinkResult> create)
+    private sealed class FakeGateway(
+        Func<PaymentLinkRequest, PaymentLinkResult> create,
+        Func<long, PaymentGatewayOrderResult>? lookup = null)
         : IPaymentGateway
     {
         public List<PaymentLinkRequest> Requests { get; } = [];
+        public int LookupCalls { get; private set; }
 
         public Task<PaymentLinkResult> CreatePaymentLinkAsync(
             PaymentLinkRequest request,
@@ -387,6 +505,20 @@ public sealed class PaymentServiceTests
             Requests.Add(request);
             return Task.FromResult(create(request));
         }
+
+        public Task<PaymentGatewayOrderResult> GetPaymentAsync(
+            long providerOrderCode,
+            CancellationToken cancellationToken = default)
+        {
+            LookupCalls++;
+            return Task.FromResult(lookup?.Invoke(providerOrderCode)
+                                   ?? PaymentGatewayOrderResult.Unavailable(providerOrderCode));
+        }
+
+        public Task<PaymentWebhookVerificationResult> VerifyWebhookAsync(
+            string rawPayload,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(PaymentWebhookVerificationResult.Invalid());
     }
 
     private sealed class FakeSubscriptionRepository(IReadOnlyList<UserSubscription> subscriptions)
@@ -396,6 +528,48 @@ public sealed class PaymentServiceTests
             Guid userId, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<UserSubscription>>(
                 subscriptions.Where(subscription => subscription.UserId == userId).ToArray());
+
+        public Task<UserSubscription?> GetByUserAndPlanAsync(
+            Guid userId, PlanCode planCode, CancellationToken cancellationToken = default) =>
+            Task.FromResult(subscriptions.SingleOrDefault(subscription =>
+                subscription.UserId == userId && subscription.PlanCode == planCode));
+
+        public Task AddAsync(
+            UserSubscription subscription,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+    }
+
+    private sealed class FakeSettlementService : IPaymentSettlementService
+    {
+        public Task<PaymentSettlementResult> ApplyVerifiedPaymentAsync(
+            VerifiedPaymentNotification notification,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new PaymentSettlementResult(PaymentSettlementStatus.UnknownOrder));
+    }
+
+    private sealed class RecordingSettlementService(PaymentOrder order)
+        : IPaymentSettlementService
+    {
+        public List<VerifiedPaymentNotification> Notifications { get; } = [];
+
+        public Task<PaymentSettlementResult> ApplyVerifiedPaymentAsync(
+            VerifiedPaymentNotification notification,
+            CancellationToken cancellationToken = default)
+        {
+            Notifications.Add(notification);
+            if (notification.IsSuccessful && notification.Amount == order.Amount)
+            {
+                order.Status = PaymentOrderStatus.Paid;
+                order.PaidAt = Now;
+                return Task.FromResult(
+                    new PaymentSettlementResult(PaymentSettlementStatus.Settled));
+            }
+
+            order.Status = PaymentOrderStatus.Failed;
+            return Task.FromResult(
+                new PaymentSettlementResult(PaymentSettlementStatus.NonSuccessful));
+        }
     }
 
     private sealed class FakeUserRepository(bool persistedUser) : IUserRepository

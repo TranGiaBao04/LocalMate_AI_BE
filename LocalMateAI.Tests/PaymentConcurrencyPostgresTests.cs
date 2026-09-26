@@ -7,6 +7,7 @@ using LocalMateAI.Domain.Enums;
 using LocalMateAI.Infrastructure.Persistence;
 using LocalMateAI.Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace LocalMateAI.Tests;
 
@@ -127,13 +128,21 @@ public sealed class PaymentConcurrencyPostgresTests
         IPaymentGateway gateway)
     {
         var context = CreateContext(connectionString);
+        var subscriptionRepository = new SubscriptionRepository(context);
+        var settlementService = new PaymentSettlementService(
+            new PaymentSettlementExecutor(context),
+            subscriptionRepository,
+            TimeProvider.System,
+            NullLogger<PaymentSettlementService>.Instance);
         var service = new PaymentService(
             new UserRepository(context),
-            new SubscriptionRepository(context),
+            subscriptionRepository,
             new PaymentOrderRepository(context),
             new PaymentOperationExecutor(context),
             gateway,
-            TimeProvider.System);
+            settlementService,
+            TimeProvider.System,
+            NullLogger<PaymentService>.Instance);
         return new PaymentServiceScope(context, service);
     }
 
@@ -172,6 +181,16 @@ public sealed class PaymentConcurrencyPostgresTests
                 $"https://checkout.test/{request.ProviderOrderCode}",
                 $"qr-{request.ProviderOrderCode}");
         }
+
+        public Task<PaymentGatewayOrderResult> GetPaymentAsync(
+            long providerOrderCode,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(PaymentGatewayOrderResult.Unavailable(providerOrderCode));
+
+        public Task<PaymentWebhookVerificationResult> VerifyWebhookAsync(
+            string rawPayload,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(PaymentWebhookVerificationResult.Invalid());
     }
 
     private sealed class ImmediateSuccessGateway : IPaymentGateway
@@ -182,5 +201,15 @@ public sealed class PaymentConcurrencyPostgresTests
             Task.FromResult(PaymentLinkResult.Succeeded(
                 $"https://checkout.test/{request.ProviderOrderCode}",
                 $"qr-{request.ProviderOrderCode}"));
+
+        public Task<PaymentGatewayOrderResult> GetPaymentAsync(
+            long providerOrderCode,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(PaymentGatewayOrderResult.Unavailable(providerOrderCode));
+
+        public Task<PaymentWebhookVerificationResult> VerifyWebhookAsync(
+            string rawPayload,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(PaymentWebhookVerificationResult.Invalid());
     }
 }

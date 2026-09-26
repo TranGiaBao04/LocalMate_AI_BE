@@ -171,6 +171,16 @@ public sealed class SubscriptionServiceTests
             return Task.FromResult<IReadOnlyList<UserSubscription>>(
                 subscriptions.Where(subscription => subscription.UserId == userId).ToArray());
         }
+
+        public Task<UserSubscription?> GetByUserAndPlanAsync(
+            Guid userId, PlanCode planCode, CancellationToken cancellationToken = default) =>
+            Task.FromResult(subscriptions.SingleOrDefault(subscription =>
+                subscription.UserId == userId && subscription.PlanCode == planCode));
+
+        public Task AddAsync(
+            UserSubscription subscription,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 
     private sealed class FakeUsageRepository(IReadOnlyList<DateTime> events) : IUsageEventRepository

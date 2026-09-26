@@ -5,6 +5,7 @@ using LocalMateAI.Application.Interfaces.Services;
 using LocalMateAI.Application.Payments;
 using LocalMateAI.Domain.Entities;
 using LocalMateAI.Domain.Enums;
+using Microsoft.Extensions.Logging;
 
 namespace LocalMateAI.Application.Services;
 
@@ -14,7 +15,9 @@ public sealed class PaymentService(
     IPaymentOrderRepository paymentOrderRepository,
     IPaymentOperationExecutor paymentOperationExecutor,
     IPaymentGateway paymentGateway,
-    TimeProvider timeProvider) : IPaymentService
+    IPaymentSettlementService paymentSettlementService,
+    TimeProvider timeProvider,
+    ILogger<PaymentService> logger) : IPaymentService
 {
     private static readonly TimeSpan PaymentIntentLifetime = TimeSpan.FromMinutes(15);
 
@@ -64,12 +67,108 @@ public sealed class PaymentService(
             orderId,
             userId,
             cancellationToken);
-        // S2 exposes local order state only. S3 will reconcile Pending with the provider.
-        return order is null
-            ? new PaymentOrderLookupResult(PaymentOrderLookupStatus.NotFound)
-            : new PaymentOrderLookupResult(
-                PaymentOrderLookupStatus.Success,
-                ToOrderResponse(order));
+        if (order is null)
+        {
+            return new PaymentOrderLookupResult(PaymentOrderLookupStatus.NotFound);
+        }
+
+        if (order.Status != PaymentOrderStatus.Paid && HasUsablePaymentLink(order))
+        {
+            await ReconcileOrderAsync(order, cancellationToken);
+            order = await paymentOrderRepository.GetOwnedByIdAsync(
+                orderId,
+                userId,
+                cancellationToken);
+            if (order is null)
+            {
+                return new PaymentOrderLookupResult(PaymentOrderLookupStatus.NotFound);
+            }
+        }
+
+        return new PaymentOrderLookupResult(
+            PaymentOrderLookupStatus.Success,
+            ToOrderResponse(order));
+    }
+
+    private async Task ReconcileOrderAsync(
+        PaymentOrder order,
+        CancellationToken cancellationToken)
+    {
+        PaymentGatewayOrderResult providerOrder;
+        try
+        {
+            providerOrder = await paymentGateway.GetPaymentAsync(
+                order.ProviderOrderCode,
+                cancellationToken);
+        }
+        catch (Exception exception) when (
+            exception is PaymentGatewayUnavailableException or TimeoutException)
+        {
+            return;
+        }
+
+        if (!providerOrder.IsAvailable)
+        {
+            return;
+        }
+
+        if (providerOrder.ProviderOrderCode != order.ProviderOrderCode)
+        {
+            logger.LogWarning(
+                "Ignored payment lookup with mismatched provider order code for local order {OrderId}",
+                order.Id);
+            return;
+        }
+
+        switch (providerOrder.Status)
+        {
+            case PaymentGatewayOrderStatus.Paid:
+                await paymentSettlementService.ApplyVerifiedPaymentAsync(
+                    new VerifiedPaymentNotification(
+                        providerOrder.ProviderOrderCode,
+                        providerOrder.Amount,
+                        IsSuccessful: true),
+                    cancellationToken);
+                break;
+            case PaymentGatewayOrderStatus.Cancelled:
+            case PaymentGatewayOrderStatus.Underpaid:
+            case PaymentGatewayOrderStatus.Failed:
+                await paymentSettlementService.ApplyVerifiedPaymentAsync(
+                    new VerifiedPaymentNotification(
+                        providerOrder.ProviderOrderCode,
+                        providerOrder.Amount,
+                        IsSuccessful: false),
+                    cancellationToken);
+                break;
+            case PaymentGatewayOrderStatus.Expired:
+                await paymentOrderRepository.MarkExpiredIfPendingAsync(
+                    order.Id,
+                    timeProvider.GetUtcNow().UtcDateTime,
+                    cancellationToken);
+                break;
+            case PaymentGatewayOrderStatus.Pending:
+                if (order.Status == PaymentOrderStatus.Pending
+                    && order.ExpiresAt <= timeProvider.GetUtcNow().UtcDateTime)
+                {
+                    await paymentOrderRepository.MarkExpiredIfPendingAsync(
+                        order.Id,
+                        timeProvider.GetUtcNow().UtcDateTime,
+                        cancellationToken);
+                }
+                break;
+            case PaymentGatewayOrderStatus.Processing:
+                break;
+            case PaymentGatewayOrderStatus.Unknown:
+                logger.LogWarning(
+                    "Ignored unknown provider payment status for order {ProviderOrderCode}",
+                    order.ProviderOrderCode);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(
+                    nameof(providerOrder.Status),
+                    providerOrder.Status,
+                    "Unsupported provider payment status.");
+        }
     }
 
     private async Task<PaymentIntentResult> CheckoutLockedAsync(
@@ -141,7 +240,7 @@ public sealed class PaymentService(
         {
             if (pending.ExpiresAt <= nowUtc)
             {
-                // S2 expires locally; S3 must reconcile with the provider before finalizing this state.
+                // A later verified webhook or owned-order lookup can still settle this order.
                 pending.Status = PaymentOrderStatus.Expired;
                 await paymentOrderRepository.SaveChangesAsync(cancellationToken);
             }
