@@ -135,7 +135,7 @@ public sealed class TripsController(
     [ProducesResponseType<FinalizeTripResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<FinalizeTripResponse>> FinalizeTripAsync(
@@ -170,6 +170,10 @@ public sealed class TripsController(
                     StatusCodes.Status409Conflict,
                     "Trip is already finalized.",
                     "already_finalized")),
+            FinalizeTripResultStatus.SavedTripQuotaExceeded =>
+                StatusCode(
+                    StatusCodes.Status403Forbidden,
+                    CreateSavedTripQuotaProblem(result)),
             _ => throw new InvalidOperationException("Unsupported finalize trip result status.")
         };
     }
@@ -579,6 +583,18 @@ public sealed class TripsController(
         };
 
         problem.Extensions["code"] = code;
+        return problem;
+    }
+
+    private ProblemDetails CreateSavedTripQuotaProblem(FinalizeTripResult result)
+    {
+        var problem = CreateProblem(
+            StatusCodes.Status403Forbidden,
+            "The finalized trip quota for the current plan has been reached.",
+            "saved_trip_quota_exceeded");
+        problem.Extensions["used"] = result.Used;
+        problem.Extensions["limit"] = result.Limit;
+        problem.Extensions["upgradeRequired"] = true;
         return problem;
     }
 

@@ -143,6 +143,7 @@ builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
 builder.Services.AddScoped<IPaymentOrderRepository, PaymentOrderRepository>();
 builder.Services.AddScoped<IPaymentOperationExecutor, PaymentOperationExecutor>();
 builder.Services.AddScoped<IPaymentSettlementExecutor, PaymentSettlementExecutor>();
+builder.Services.AddScoped<ITripFinalizeQuotaExecutor, TripFinalizeQuotaExecutor>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
 builder.Services.AddScoped<IPaymentSettlementService, PaymentSettlementService>();
 builder.Services.AddScoped<IPaymentWebhookService, PaymentWebhookService>();
