@@ -8,12 +8,14 @@ namespace LocalMateAI.Tests;
 public sealed class GeneratedTripBuilderTests
 {
     private static readonly Guid UserId = Guid.NewGuid();
+    private static readonly DateTime PlannedStart = new(2026, 10, 3, 18, 30, 0, DateTimeKind.Unspecified);
 
     [Fact]
     public void Build_CopiesRequestIntoDraftTrip()
     {
-        var trip = GeneratedTripBuilder.Build(UserId, Request(), [Stop(0, 8, 0)], []);
+        var trip = GeneratedTripBuilder.Build(UserId, Request(), [Stop(0, 8, 0)], [], PlannedStart);
 
+        Assert.Equal(PlannedStart, trip.PlannedStartAt);
         Assert.Equal(UserId, trip.UserId);
         Assert.Equal(TripStatus.Draft, trip.Status);
         Assert.Equal(10.77, trip.StartLatitude);
@@ -30,7 +32,7 @@ public sealed class GeneratedTripBuilderTests
         var first = Stop(0, 8, 0, minutes: 60, budget: 100_000m, reasoning: "Lý do A");
         var second = Stop(1, 9, 5, minutes: 45, budget: 0m, reasoning: "Lý do B");
 
-        var trip = GeneratedTripBuilder.Build(UserId, Request(), [first, second], []);
+        var trip = GeneratedTripBuilder.Build(UserId, Request(), [first, second], [], PlannedStart);
 
         var items = trip.Items.OrderBy(item => item.OrderIndex).ToList();
         Assert.Equal(2, items.Count);
@@ -51,7 +53,7 @@ public sealed class GeneratedTripBuilderTests
         var tagA = Guid.NewGuid();
         var tagB = Guid.NewGuid();
 
-        var trip = GeneratedTripBuilder.Build(UserId, Request(), [Stop(0, 8, 0)], [tagA, tagB]);
+        var trip = GeneratedTripBuilder.Build(UserId, Request(), [Stop(0, 8, 0)], [tagA, tagB], PlannedStart);
 
         Assert.Equal([tagA, tagB], trip.Tags.Select(tag => tag.TagId));
         Assert.All(trip.Tags, tag => Assert.Equal(trip.Id, tag.TripId));
@@ -60,7 +62,7 @@ public sealed class GeneratedTripBuilderTests
     [Fact]
     public void Build_NoStops_Throws()
     {
-        Assert.Throws<ArgumentException>(() => GeneratedTripBuilder.Build(UserId, Request(), [], []));
+        Assert.Throws<ArgumentException>(() => GeneratedTripBuilder.Build(UserId, Request(), [], [], PlannedStart));
     }
 
     private static TripRequestDto Request() =>

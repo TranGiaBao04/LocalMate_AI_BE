@@ -6,4 +6,5 @@ public sealed record MetroExperienceClusterResponse(
     int StationOrder,
     double StationLatitude,
     double StationLongitude,
-    IReadOnlyList<MetroExperiencePlaceResponse> Places);
+    IReadOnlyList<MetroExperiencePlaceResponse> Places,
+    int PlaceCount);

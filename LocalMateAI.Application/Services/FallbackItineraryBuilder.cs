@@ -14,14 +14,15 @@ public static class FallbackItineraryBuilder
         int durationHours,
         decimal budgetMax,
         TravelMode travelMode = TravelMode.Auto,
-        TimeOnly? startTime = null)
+        TimeOnly? startTime = null,
+        ScheduleOrigin? origin = null)
     {
         var inputs = rankedCandidates
             .Select(scored => ItineraryScheduler.ToScheduleInput(scored.Candidate))
             .ToList();
 
         return ItineraryScheduler
-            .Schedule(inputs, startTime ?? ItineraryScheduler.DefaultStartTime, durationHours, travelMode, budgetMax)
+            .Schedule(inputs, startTime ?? ItineraryScheduler.DefaultStartTime, durationHours, travelMode, budgetMax, origin)
             .Select((slot, index) =>
             {
                 var scored = rankedCandidates[slot.SourceIndex];

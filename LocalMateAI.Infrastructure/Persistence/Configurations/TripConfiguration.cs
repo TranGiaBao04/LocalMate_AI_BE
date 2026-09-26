@@ -20,6 +20,9 @@ public sealed class TripConfiguration : IEntityTypeConfiguration<Trip>
             .IsRequired()
             .HasDefaultValue(TravelMode.Auto);
 
+        builder.Property(trip => trip.PlannedStartAt)
+            .HasColumnType("timestamp without time zone");
+
         builder.Property(trip => trip.BudgetMin)
             .HasColumnType("numeric(12,0)");
 

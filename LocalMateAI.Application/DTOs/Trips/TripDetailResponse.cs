@@ -20,4 +20,7 @@ public sealed record TripDetailResponse(
     IReadOnlyList<TripItemResponse> Items,
     DateTime CreatedAt,
     DateTime UpdatedAt,
-    DateTime? FinalizedAt);
+    DateTime? FinalizedAt,
+    DateOnly? PlannedDate = null, // null với trip cũ chưa đặt ngày
+    TimeOnly? StartTime = null, // giờ RỜI điểm xuất phát
+    int? TravelMinutesFromOrigin = null); // thời gian đi từ điểm xuất phát tới chặng đầu

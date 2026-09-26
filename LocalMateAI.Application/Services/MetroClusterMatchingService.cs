@@ -8,6 +8,9 @@ public sealed class MetroClusterMatchingService(
     IPlaceRepository placeRepository,
     IMetroStationRepository stationRepository) : IMetroClusterMatchingService
 {
+    /// <summary>Bán kính (mét) quanh ga để tìm địa điểm ứng viên; dùng chung cho matching và feasibility-check.</summary>
+    public const double CandidateRadiusMeters = 800;
+
     private const int AdjacentStationWindow = 1; // ±1 ga dọc tuyến Metro số 1
 
     public async Task<IReadOnlyList<PlaceCandidateDto>> GetCandidatesAsync(

@@ -15,8 +15,6 @@ public sealed class TripMatchingService(
     ITagSimilarityScorer tagSimilarityScorer,
     IPlaceRepository placeRepository) : ITripMatchingService
 {
-    private const double CandidateSearchRadiusMeters = 800;
-
     public async Task<TripMatchingResult> MatchAsync(
         TripRequestDto request,
         CancellationToken cancellationToken = default)
@@ -55,7 +53,7 @@ public sealed class TripMatchingService(
         // BE-31: lọc địa điểm theo cụm ga Metro (PostGIS)
         var candidates = await metroClusterMatchingService.GetCandidatesAsync(
             origin.NearestStation.StationId,
-            CandidateSearchRadiusMeters,
+            MetroClusterMatchingService.CandidateRadiusMeters,
             cancellationToken);
 
         // BE-32: lọc ứng viên theo ngân sách
@@ -77,10 +75,11 @@ public sealed class TripMatchingService(
         // ItineraryScheduler là nơi duy nhất quyết định số chặng: chọn theo thứ hạng tới khi hết thời lượng hoặc ngân sách.
         var slots = ItineraryScheduler.Schedule(
             ranked.Select(place => ItineraryScheduler.ToScheduleInput(place.Candidate)).ToList(),
-            ItineraryScheduler.DefaultStartTime,
+            request.StartTime ?? ItineraryScheduler.DefaultStartTime,
             request.DurationHours,
             request.TravelMode,
-            request.BudgetMax);
+            request.BudgetMax,
+            new ScheduleOrigin(request.StartLatitude, request.StartLongitude));
 
         var selected = slots
             .Select(slot => slot.SourceIndex)

@@ -32,7 +32,8 @@ public sealed class TripRepository(AppDbContext dbContext) : ITripRepository
                 EstimatedBudget = trip.Items.Sum(item => item.EstimatedBudget),
                 trip.CreatedAt,
                 trip.UpdatedAt,
-                trip.FinalizedAt
+                trip.FinalizedAt,
+                trip.PlannedStartAt
             })
             .ToListAsync(cancellationToken);
 
@@ -68,7 +69,8 @@ public sealed class TripRepository(AppDbContext dbContext) : ITripRepository
                 trip.UpdatedAt,
                 stationsByTripId.GetValueOrDefault(trip.Id),
                 trip.EstimatedBudget,
-                trip.FinalizedAt))
+                trip.FinalizedAt,
+                trip.PlannedStartAt))
             .ToList();
     }
 
@@ -243,7 +245,8 @@ public sealed class TripRepository(AppDbContext dbContext) : ITripRepository
                 candidate.BudgetMax,
                 candidate.CreatedAt,
                 candidate.UpdatedAt,
-                candidate.FinalizedAt
+                candidate.FinalizedAt,
+                candidate.PlannedStartAt
             })
             .SingleOrDefaultAsync(cancellationToken);
 
@@ -341,7 +344,8 @@ public sealed class TripRepository(AppDbContext dbContext) : ITripRepository
             trip.CreatedAt,
             trip.UpdatedAt,
             trip.FinalizedAt,
-            trip.TravelMode);
+            trip.TravelMode,
+            trip.PlannedStartAt);
     }
 
     public async Task AddAsync(

@@ -7,6 +7,8 @@ public enum ApplyCuratedItineraryResultStatus
     Success,
     InvalidId,
     InvalidStart,
+    ValidationFailed,
+    OutOfServiceArea,
     UserNotFound,
     ItineraryNotFound,
     ItineraryUnavailable
@@ -14,7 +16,8 @@ public enum ApplyCuratedItineraryResultStatus
 
 public sealed record ApplyCuratedItineraryResult(
     ApplyCuratedItineraryResultStatus Status,
-    TripDetailResponse? Response = null)
+    TripDetailResponse? Response = null,
+    IReadOnlyDictionary<string, string[]>? ValidationErrors = null)
 {
     public static ApplyCuratedItineraryResult Succeeded(TripDetailResponse response) =>
         new(ApplyCuratedItineraryResultStatus.Success, response);
@@ -24,6 +27,12 @@ public sealed record ApplyCuratedItineraryResult(
 
     public static ApplyCuratedItineraryResult InvalidStartLocation() =>
         new(ApplyCuratedItineraryResultStatus.InvalidStart);
+
+    public static ApplyCuratedItineraryResult Invalid(IReadOnlyDictionary<string, string[]> errors) =>
+        new(ApplyCuratedItineraryResultStatus.ValidationFailed, ValidationErrors: errors);
+
+    public static ApplyCuratedItineraryResult OutsideServiceArea() =>
+        new(ApplyCuratedItineraryResultStatus.OutOfServiceArea);
 
     public static ApplyCuratedItineraryResult MissingUser() =>
         new(ApplyCuratedItineraryResultStatus.UserNotFound);

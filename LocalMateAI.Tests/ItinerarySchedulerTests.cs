@@ -101,19 +101,76 @@ public sealed class ItinerarySchedulerTests
     }
 
     [Fact]
-    public void Schedule_AlwaysKeepsTopStop_EvenIfItExceedsBudget()
+    public void Schedule_ReturnsEmpty_WhenEvenTheTopStopExceedsBudget()
     {
-        // Bộ lọc ứng viên đã loại địa điểm vượt ngân sách trước đó; scheduler luôn giữ chặng hạng cao nhất.
         var slots = ItineraryScheduler.Schedule([new ScheduleInput(10.770, 106.70, 60, 500_000m)], Start, 6, TravelMode.Auto, 100_000m);
 
-        Assert.Single(slots);
+        Assert.Empty(slots);
     }
 
     [Fact]
-    public void Schedule_AlwaysKeepsFirstStop_EvenIfItAloneOverflows()
+    public void Schedule_ReturnsEmpty_WhenNoStopFitsTheDuration()
     {
         var slots = ItineraryScheduler.Schedule([At(10.770, 90)], Start, 1, TravelMode.Auto, 1_000_000m);
 
-        Assert.Single(slots);
+        Assert.Empty(slots);
+    }
+
+    [Fact]
+    public void Schedule_SkipsTopStopThatIsTooLong_AndUsesNextRankedOne()
+    {
+        // Hạng 1 cần 90' nhưng chỉ rảnh 1 giờ; hạng 2 cần 45' → chọn hạng 2.
+        var slots = ItineraryScheduler.Schedule([At(10.770, 90), At(10.770, 45)], Start, 1, TravelMode.Auto, 1_000_000m);
+
+        Assert.Equal([1], slots.Select(slot => slot.SourceIndex));
+        Assert.Equal(Start, slots[0].ScheduledTime);
+    }
+
+    // 0,02° vĩ độ ≈ 2,89 km đường bộ → Auto đi xe máy 8 phút.
+    private static readonly ScheduleOrigin FarOrigin = new(10.750, 106.70);
+
+    [Fact]
+    public void Schedule_WithOrigin_FirstStopStartsAfterTravelFromOrigin()
+    {
+        var withOrigin = ItineraryScheduler.Schedule([At(10.770)], Start, 6, TravelMode.Auto, 1_000_000m, FarOrigin);
+        var withoutOrigin = ItineraryScheduler.Schedule([At(10.770)], Start, 6, TravelMode.Auto, 1_000_000m);
+
+        Assert.Equal(new TimeOnly(8, 8), withOrigin[0].ScheduledTime);
+        Assert.Equal(Start, withoutOrigin[0].ScheduledTime);
+    }
+
+    [Fact]
+    public void Schedule_WithOrigin_TravelFromOriginCountsTowardDuration()
+    {
+        // 60' tham quan + 8' đi tới = 68' > 60' rảnh.
+        var slots = ItineraryScheduler.Schedule([At(10.770, 60)], Start, 1, TravelMode.Auto, 1_000_000m, FarOrigin);
+
+        Assert.Empty(slots);
+    }
+
+    [Fact]
+    public void Schedule_WithOriginAtTheStop_CostsOneMinute()
+    {
+        var slots = ItineraryScheduler.Schedule([At(10.770)], Start, 6, TravelMode.Auto, 1_000_000m, new ScheduleOrigin(10.770, 106.70));
+
+        Assert.Equal(new TimeOnly(8, 1), slots[0].ScheduledTime);
+    }
+
+    [Fact]
+    public void Reschedule_WithOrigin_AddsTravelFromOriginBeforeFirstStop()
+    {
+        var slots = ItineraryScheduler.Reschedule([At(10.770, 60), At(10.771, 45)], Start, TravelMode.Auto, FarOrigin);
+
+        Assert.Equal(new TimeOnly(8, 8), slots[0].ScheduledTime);
+        Assert.Equal(new TimeOnly(9, 10), slots[1].ScheduledTime); // 8' + 60' + 2' đi bộ
+    }
+
+    [Fact]
+    public void TotalMinutes_SumsVisitsAndTravel_AndIsZeroForNoStops()
+    {
+        Assert.Equal(0, ItineraryScheduler.TotalMinutes([], TravelMode.Auto, null));
+        // 60' + 2' đi bộ ~145 m + 45' = 107'
+        Assert.Equal(107, ItineraryScheduler.TotalMinutes([At(10.770, 60), At(10.771, 45)], TravelMode.Auto, null));
+        Assert.Equal(115, ItineraryScheduler.TotalMinutes([At(10.770, 60), At(10.771, 45)], TravelMode.Auto, FarOrigin)); // + 8' đi tới chặng đầu
     }
 }

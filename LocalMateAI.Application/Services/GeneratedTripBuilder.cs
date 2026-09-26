@@ -12,7 +12,8 @@ public static class GeneratedTripBuilder
         Guid userId,
         TripRequestDto request,
         IReadOnlyList<FallbackStopDto> stops,
-        IReadOnlyList<Guid> tagIds)
+        IReadOnlyList<Guid> tagIds,
+        DateTime plannedStartAt)
     {
         if (stops.Count == 0)
         {
@@ -32,6 +33,7 @@ public static class GeneratedTripBuilder
             BudgetMin = request.BudgetMin,
             BudgetMax = request.BudgetMax,
             TravelMode = request.TravelMode,
+            PlannedStartAt = plannedStartAt,
             Status = TripStatus.Draft,
             CreatedAt = now,
             UpdatedAt = now,

@@ -78,6 +78,18 @@ public sealed class TripDetailService(
 
         var totals = TripTotalsCalculator.Calculate(stops);
 
+        // Đoạn đi từ điểm xuất phát tới chặng đầu = giờ chặng đầu - giờ rời. Không lưu riêng nên suy ra như đoạn giữa
+        // các chặng; trip cũ chưa có PlannedStartAt thì để null và không đổi các tổng.
+        int? originMinutes = null;
+        if (trip.PlannedStartAt is { } plannedStart && trip.Items.Count > 0)
+        {
+            var gap = (int)(trip.Items[0].ScheduledTime.ToTimeSpan()
+                            - TimeOnly.FromDateTime(plannedStart).ToTimeSpan()).TotalMinutes;
+            originMinutes = Math.Max(0, gap);
+        }
+
+        var travelMinutes = totals.TotalTravelMinutes + (originMinutes ?? 0);
+
         return GetTripDetailResult.Succeeded(new TripDetailResponse(
             trip.Id,
             trip.Status.ToString(),
@@ -91,13 +103,16 @@ public sealed class TripDetailService(
             totals.TotalBudget,
             totals.TotalVisitMinutes, // TotalDurationMinutes: giữ nghĩa cũ, chưa gồm di chuyển
             totals.TotalVisitMinutes,
-            totals.TotalTravelMinutes,
-            totals.TotalMinutes,
+            travelMinutes, // đã gồm đoạn đi tới chặng đầu
+            totals.TotalVisitMinutes + travelMinutes,
             totals.EndTime,
             trip.TagIds,
             items,
             trip.CreatedAt,
             trip.UpdatedAt,
-            trip.FinalizedAt));
+            trip.FinalizedAt,
+            trip.PlannedStartAt is { } date ? DateOnly.FromDateTime(date) : null,
+            trip.PlannedStartAt is { } time ? TimeOnly.FromDateTime(time) : null,
+            originMinutes));
     }
 }

@@ -1,15 +1,20 @@
+using LocalMateAI.Application.DTOs.Geo;
 using LocalMateAI.Application.DTOs.Itineraries;
 using LocalMateAI.Application.DTOs.Trips;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Interfaces.Services;
 using LocalMateAI.Application.Services;
 using LocalMateAI.Domain.Entities;
+using LocalMateAI.Domain.Enums;
 
 namespace LocalMateAI.Tests;
 
 public sealed class CuratedTripServiceTests
 {
     private static readonly Guid UserId = Guid.NewGuid();
+
+    // 2026-09-26 08:00 UTC = 15:00 giờ Việt Nam.
+    private static readonly FixedTimeProvider Clock = new(new DateTimeOffset(2026, 9, 26, 8, 0, 0, TimeSpan.Zero));
 
     [Fact]
     public async Task Apply_EmptyCuratedId_ReturnsInvalidIdWithoutAnyLookup()
@@ -86,25 +91,121 @@ public sealed class CuratedTripServiceTests
     {
         var source = Source(places:
         [
-            new CuratedPlaceForApplyReadModel(Guid.NewGuid(), 0, 10.77, 106.70, 50_000m),
-            new CuratedPlaceForApplyReadModel(Guid.NewGuid(), 1, 10.78, 106.69, 30_000m)
+            new CuratedPlaceForApplyReadModel(Guid.NewGuid(), 0, 10.77, 106.70, 50_000m, PlaceCategory.Cafe),
+            new CuratedPlaceForApplyReadModel(Guid.NewGuid(), 1, 10.78, 106.69, 30_000m, PlaceCategory.Food)
         ]);
         var fixture = new Fixture(source: source);
 
         var result = await fixture.Service.ApplyAsync(
             UserId,
             source.Id,
-            new ApplyCuratedItineraryRequest(10.80, 106.65, new TimeOnly(9, 0)));
+            new ApplyCuratedItineraryRequest(10.80, 106.65, new TimeOnly(18, 0)));
 
         Assert.Equal(ApplyCuratedItineraryResultStatus.Success, result.Status);
         var saved = Assert.Single(fixture.Trips.Added);
         Assert.Equal(UserId, saved.UserId);
         Assert.Equal(10.80, saved.StartLatitude);
         Assert.Equal(2, saved.Items.Count);
-        Assert.Equal(new TimeOnly(9, 0), saved.Items.OrderBy(item => item.OrderIndex).First().ScheduledTime);
+        // Xuất phát 18:00 từ toạ độ user; chặng đầu bắt đầu sau khi cộng thời gian đi tới đó.
+        Assert.True(saved.Items.OrderBy(item => item.OrderIndex).First().ScheduledTime > new TimeOnly(18, 0));
+        Assert.Equal(new DateTime(2026, 9, 26, 18, 0, 0), saved.PlannedStartAt);
+        Assert.Equal(TravelMode.Auto, saved.TravelMode);
         Assert.Same(fixture.Detail.Response, result.Response);
         Assert.Equal(saved.Id, fixture.Detail.RequestedTripId);
     }
+
+    [Fact]
+    public async Task Apply_CoordinateFarFromAnyStation_ReturnsOutOfServiceAreaWithoutReadingItinerary()
+    {
+        var fixture = new Fixture(source: Source([Place(0)]), withinServiceArea: false);
+
+        var result = await fixture.Service.ApplyAsync(
+            UserId, Guid.NewGuid(), new ApplyCuratedItineraryRequest(10.80, 106.65, null));
+
+        Assert.Equal(ApplyCuratedItineraryResultStatus.OutOfServiceArea, result.Status);
+        Assert.Equal(0, fixture.Curated.ReadCalls);
+        Assert.Empty(fixture.Trips.Added);
+    }
+
+    [Fact]
+    public async Task Apply_PastPlannedDate_ReturnsValidationErrorOnPlannedDate()
+    {
+        var fixture = new Fixture(source: Source([Place(0)]));
+
+        var result = await fixture.Service.ApplyAsync(
+            UserId, Guid.NewGuid(), new ApplyCuratedItineraryRequest(null, null, null, new DateOnly(2026, 9, 25)));
+
+        Assert.Equal(ApplyCuratedItineraryResultStatus.ValidationFailed, result.Status);
+        Assert.Contains("PlannedDate", result.ValidationErrors!.Keys);
+        Assert.Empty(fixture.Trips.Added);
+    }
+
+    [Fact]
+    public async Task Apply_StartTimeInThePastToday_ReturnsValidationErrorOnStartTime()
+    {
+        var fixture = new Fixture(source: Source([Place(0)]));
+
+        var result = await fixture.Service.ApplyAsync(
+            UserId, Guid.NewGuid(), new ApplyCuratedItineraryRequest(null, null, new TimeOnly(9, 0)));
+
+        Assert.Equal(ApplyCuratedItineraryResultStatus.ValidationFailed, result.Status);
+        Assert.Contains("StartTime", result.ValidationErrors!.Keys);
+    }
+
+    [Fact]
+    public async Task Apply_ItineraryRunningPastMidnight_ReturnsValidationErrorOnStartTimeAndSavesNothing()
+    {
+        // 3 địa điểm Culture (3 x 90') + 2 phút đi = 272 phút; 22:00 + 272' vượt 24:00.
+        var fixture = new Fixture(source: Source([Place(0), Place(1), Place(2)]));
+
+        var result = await fixture.Service.ApplyAsync(
+            UserId, Guid.NewGuid(), new ApplyCuratedItineraryRequest(null, null, new TimeOnly(22, 0)));
+
+        Assert.Equal(ApplyCuratedItineraryResultStatus.ValidationFailed, result.Status);
+        Assert.Contains("StartTime", result.ValidationErrors!.Keys);
+        Assert.Empty(fixture.Trips.Added);
+    }
+
+    [Fact]
+    public async Task Apply_WithoutCoordinates_FirstStopStartsExactlyAtStartTime()
+    {
+        var fixture = new Fixture(source: Source([Place(0)]));
+
+        await fixture.Service.ApplyAsync(
+            UserId, Guid.NewGuid(), new ApplyCuratedItineraryRequest(null, null, new TimeOnly(18, 0)));
+
+        Assert.Equal(new TimeOnly(18, 0), Assert.Single(fixture.Trips.Added).Items.Single().ScheduledTime);
+    }
+
+    [Fact]
+    public async Task Apply_WithDateAndTravelMode_SavesThemOnTheTrip()
+    {
+        var fixture = new Fixture(source: Source([Place(0)]));
+
+        await fixture.Service.ApplyAsync(
+            UserId,
+            Guid.NewGuid(),
+            new ApplyCuratedItineraryRequest(null, null, new TimeOnly(8, 0), new DateOnly(2026, 10, 3), TravelMode.Walking));
+
+        var saved = Assert.Single(fixture.Trips.Added);
+        Assert.Equal(new DateTime(2026, 10, 3, 8, 0, 0), saved.PlannedStartAt);
+        Assert.Equal(TravelMode.Walking, saved.TravelMode);
+    }
+
+    [Fact]
+    public async Task Apply_UnknownTravelMode_ReturnsValidationErrorOnTravelMode()
+    {
+        var fixture = new Fixture(source: Source([Place(0)]));
+
+        var result = await fixture.Service.ApplyAsync(
+            UserId, Guid.NewGuid(), new ApplyCuratedItineraryRequest(null, null, null, null, (TravelMode)99));
+
+        Assert.Equal(ApplyCuratedItineraryResultStatus.ValidationFailed, result.Status);
+        Assert.Contains("TravelMode", result.ValidationErrors!.Keys);
+    }
+
+    private static CuratedPlaceForApplyReadModel Place(int order) =>
+        new(Guid.NewGuid(), order, 10.77, 106.70, 50_000m, PlaceCategory.Culture);
 
     private static CuratedItineraryForApplyReadModel Source(
         IReadOnlyList<CuratedPlaceForApplyReadModel> places) =>
@@ -112,7 +213,10 @@ public sealed class CuratedTripServiceTests
 
     private sealed class Fixture
     {
-        public Fixture(bool userExists = true, CuratedItineraryForApplyReadModel? source = null)
+        public Fixture(
+            bool userExists = true,
+            CuratedItineraryForApplyReadModel? source = null,
+            bool withinServiceArea = true)
         {
             Curated = new FakeCuratedRepository(source);
             Trips = new FakeTripRepository();
@@ -122,13 +226,33 @@ public sealed class CuratedTripServiceTests
                 Curated,
                 Trips,
                 Detail,
-                new CoordinatesValidationService());
+                new CoordinatesValidationService(),
+                new FakeOrigin(withinServiceArea),
+                Clock);
         }
 
         public CuratedTripService Service { get; }
         public FakeCuratedRepository Curated { get; }
         public FakeTripRepository Trips { get; }
         public FakeTripDetailService Detail { get; }
+    }
+
+    private sealed class FakeOrigin(bool withinServiceArea) : ITripOriginResolverService
+    {
+        public Task<TripOriginResolution?> ResolveAsync(
+            TripRequestDto request, CancellationToken cancellationToken = default) =>
+            ResolveAsync(request.StartLatitude, request.StartLongitude, cancellationToken);
+
+        public Task<TripOriginResolution?> ResolveAsync(
+            double latitude, double longitude, CancellationToken cancellationToken = default) =>
+            Task.FromResult<TripOriginResolution?>(new TripOriginResolution(
+                new NearestStationResult(Guid.NewGuid(), "Bến Thành", 10.7721, 106.6980, withinServiceArea ? 300 : 50_000),
+                withinServiceArea));
+    }
+
+    private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => utcNow;
     }
 
     private sealed class FakeCuratedRepository(CuratedItineraryForApplyReadModel? source) : ICuratedItineraryRepository

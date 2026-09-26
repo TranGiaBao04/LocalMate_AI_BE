@@ -3,6 +3,7 @@ using LocalMateAI.Application.DTOs.Trips;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Interfaces.Services;
 using LocalMateAI.Application.Services;
+using LocalMateAI.Application.Validators.Trips;
 using LocalMateAI.Domain.Entities;
 using LocalMateAI.Domain.Enums;
 
@@ -11,6 +12,9 @@ namespace LocalMateAI.Tests;
 public sealed class TripGenerationServiceTests
 {
     private static readonly Guid UserId = Guid.NewGuid();
+
+    // 2026-09-26 08:00 UTC = 15:00 giờ Việt Nam.
+    private static readonly FixedTimeProvider Clock = new(new DateTimeOffset(2026, 9, 26, 8, 0, 0, TimeSpan.Zero));
 
     [Fact]
     public async Task Generate_MissingUser_ReturnsUserNotFoundWithoutRunningEngine()
@@ -62,7 +66,42 @@ public sealed class TripGenerationServiceTests
         var result = await fixture.Service.GenerateAsync(UserId, Request(tagIds: [Guid.NewGuid()]));
 
         Assert.Equal(GenerateTripResultStatus.InvalidTags, result.Status);
+        Assert.Equal(0, fixture.Engine.Calls); // kiểm tra tag trước matching
         Assert.Empty(fixture.Trips.Added);
+    }
+
+    [Fact]
+    public async Task Generate_InvalidPlannedDate_ReturnsValidationErrorWithoutRunningEngine()
+    {
+        var fixture = new Fixture(Sufficient());
+
+        var result = await fixture.Service.GenerateAsync(UserId, Request(plannedDate: new DateOnly(2026, 9, 25)));
+
+        Assert.Equal(GenerateTripResultStatus.ValidationFailed, result.Status);
+        Assert.Contains("PlannedDate", result.ValidationErrors!.Keys);
+        Assert.Equal(0, fixture.Engine.Calls);
+        Assert.Empty(fixture.Trips.Added);
+    }
+
+    [Fact]
+    public async Task Generate_WithoutDateOrTime_SavesPlannedStartAtAsTodayAtEightVietnamTime()
+    {
+        var fixture = new Fixture(Sufficient());
+
+        await fixture.Service.GenerateAsync(UserId, Request());
+
+        Assert.Equal(new DateTime(2026, 9, 26, 8, 0, 0), Assert.Single(fixture.Trips.Added).PlannedStartAt);
+    }
+
+    [Fact]
+    public async Task Generate_WithDateAndTime_SavesPlannedStartAtAsGiven()
+    {
+        var fixture = new Fixture(Sufficient());
+
+        await fixture.Service.GenerateAsync(
+            UserId, Request(plannedDate: new DateOnly(2026, 10, 3), startTime: new TimeOnly(18, 0)));
+
+        Assert.Equal(new DateTime(2026, 10, 3, 18, 0, 0), Assert.Single(fixture.Trips.Added).PlannedStartAt);
     }
 
     [Fact]
@@ -96,8 +135,9 @@ public sealed class TripGenerationServiceTests
         Assert.Equal(saved.Id, fixture.Detail.RequestedTripId);
     }
 
-    private static TripRequestDto Request(IReadOnlyList<Guid>? tagIds = null) =>
-        new(10.77, 106.69, 6, 0m, 900_000m, tagIds ?? [], TravelMode.Motorbike);
+    private static TripRequestDto Request(
+        IReadOnlyList<Guid>? tagIds = null, DateOnly? plannedDate = null, TimeOnly? startTime = null) =>
+        new(10.77, 106.69, 6, 0m, 900_000m, tagIds ?? [], TravelMode.Motorbike, plannedDate, startTime);
 
     private static FallbackItineraryResult Sufficient(bool isSufficient = true, string? reason = null) =>
         new(
@@ -116,6 +156,11 @@ public sealed class TripGenerationServiceTests
             Guid.NewGuid(), $"Place {order}", "Địa chỉ", 10.77, 106.69, "Cafe",
             order, new TimeOnly(hour, minute), 60, 50_000m, "lý do", 1.0, 100, "Bến Thành");
 
+    private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => utcNow;
+    }
+
     private sealed class Fixture
     {
         public Fixture(
@@ -128,10 +173,12 @@ public sealed class TripGenerationServiceTests
             Detail = new FakeTripDetailService();
             Service = new TripGenerationService(
                 new FakeUserRepository(userExists ? UserId : null),
+                new TripRequestValidator(Clock),
                 new FakeTagRepository(tags ?? []),
                 Engine,
                 Trips,
-                Detail);
+                Detail,
+                Clock);
         }
 
         public TripGenerationService Service { get; }

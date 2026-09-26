@@ -16,4 +16,5 @@ public sealed record TripDetailReadModel(
     DateTime CreatedAt,
     DateTime UpdatedAt,
     DateTime? FinalizedAt,
-    TravelMode TravelMode = TravelMode.Auto);
+    TravelMode TravelMode = TravelMode.Auto,
+    DateTime? PlannedStartAt = null);
