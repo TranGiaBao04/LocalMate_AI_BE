@@ -4,28 +4,34 @@ public enum RegisterResultStatus
 {
     Success,
     ValidationFailed,
-    DuplicateEmail
+    DuplicateEmail,
+    Cooldown,
+    RateLimited
 }
 
 public sealed class RegisterResult
 {
     private RegisterResult(
         RegisterResultStatus status,
-        RegisterResponse? response = null,
-        IReadOnlyDictionary<string, string[]>? validationErrors = null)
+        OtpDispatchResponse? response = null,
+        IReadOnlyDictionary<string, string[]>? validationErrors = null,
+        int retryAfterSeconds = 0)
     {
         Status = status;
         Response = response;
         ValidationErrors = validationErrors;
+        RetryAfterSeconds = retryAfterSeconds;
     }
 
     public RegisterResultStatus Status { get; }
 
-    public RegisterResponse? Response { get; }
+    public OtpDispatchResponse? Response { get; }
 
     public IReadOnlyDictionary<string, string[]>? ValidationErrors { get; }
 
-    public static RegisterResult Succeeded(RegisterResponse response) =>
+    public int RetryAfterSeconds { get; }
+
+    public static RegisterResult Succeeded(OtpDispatchResponse response) =>
         new(RegisterResultStatus.Success, response);
 
     public static RegisterResult ValidationFailed(
@@ -34,4 +40,10 @@ public sealed class RegisterResult
 
     public static RegisterResult EmailAlreadyExists() =>
         new(RegisterResultStatus.DuplicateEmail);
+
+    public static RegisterResult Cooldown(int retryAfterSeconds) =>
+        new(RegisterResultStatus.Cooldown, retryAfterSeconds: retryAfterSeconds);
+
+    public static RegisterResult RateLimited(int retryAfterSeconds) =>
+        new(RegisterResultStatus.RateLimited, retryAfterSeconds: retryAfterSeconds);
 }

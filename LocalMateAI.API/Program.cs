@@ -9,6 +9,7 @@ using LocalMateAI.Application.Interfaces.Services;
 using LocalMateAI.Application.Services;
 using LocalMateAI.Application.Validators.Trips;
 using LocalMateAI.Domain.Enums;
+using LocalMateAI.Infrastructure.Email;
 using LocalMateAI.Infrastructure.Persistence;
 using LocalMateAI.Infrastructure.Repositories;
 using LocalMateAI.Infrastructure.Security;
@@ -114,6 +115,11 @@ builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.Configure<JwtOptions>(jwtConfiguration);
 builder.Services.Configure<GoogleAuthOptions>(googleAuthConfiguration);
+// Cấu hình OTP/SMTP được kiểm tra lúc dùng (không chặn khởi động) để ai chưa có App Password vẫn chạy được API.
+builder.Services.Configure<OtpOptions>(builder.Configuration.GetSection(OtpOptions.SectionName));
+builder.Services.AddSingleton<IValidateOptions<OtpOptions>, OtpOptionsValidator>();
+builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection(SmtpOptions.SectionName));
+builder.Services.AddSingleton<IValidateOptions<SmtpOptions>, SmtpOptionsValidator>();
 builder.Services.Configure<PasswordHasherOptions>(options =>
 {
     options.CompatibilityMode = PasswordHasherCompatibilityMode.IdentityV3;
@@ -121,6 +127,7 @@ builder.Services.Configure<PasswordHasherOptions>(options =>
 });
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IExternalLoginRepository, ExternalLoginRepository>();
+builder.Services.AddScoped<IPendingRegistrationRepository, PendingRegistrationRepository>();
 builder.Services.AddScoped<ITagRepository, TagRepository>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IUserService, UserService>();
@@ -128,6 +135,11 @@ builder.Services.AddScoped<ITagService, TagService>();
 builder.Services.AddScoped<IPasswordHashService, AspNetCorePasswordHashService>();
 builder.Services.AddScoped<IAccessTokenService, JwtAccessTokenService>();
 builder.Services.AddScoped<IGoogleIdentityTokenValidator, GoogleIdentityTokenValidator>();
+builder.Services.AddScoped<IEmailOtpCodeRepository, EmailOtpCodeRepository>();
+builder.Services.AddSingleton<IOtpCodeHasher, HmacOtpCodeHasher>();
+builder.Services.AddSingleton<IEmailTemplateRenderer, FluidEmailTemplateRenderer>();
+builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
+builder.Services.AddScoped<IEmailOtpService, EmailOtpService>();
 builder.Services.AddScoped<IMetroStationRepository, MetroStationRepository>();
 builder.Services.AddScoped<IPlaceRepository, PlaceRepository>();
 builder.Services.AddScoped<ITripRepository, TripRepository>();
@@ -198,6 +210,11 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 builder.Services.AddAuthorization();
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddPolicy(OtpRateLimitPolicy.Name, OtpRateLimitPolicy.Partition);
+    options.OnRejected = OtpRateLimitPolicy.OnRejectedAsync;
+});
 builder.Services.AddCors(options =>
     options.AddPolicy(frontendClientPolicy, policy =>
         policy.WithOrigins(allowedOrigins)
@@ -229,6 +246,7 @@ app.UseSerilogRequestLogging();
 app.UseExceptionHandler();
 app.UseHttpsRedirection();
 app.UseCors(frontendClientPolicy);
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<TripActionGuardMiddleware>();

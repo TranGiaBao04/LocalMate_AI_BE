@@ -20,6 +20,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<TripTag> TripTags => Set<TripTag>();
         public DbSet<PlaceTag> PlaceTags => Set<PlaceTag>();
         public DbSet<UserExternalLogin> UserExternalLogins => Set<UserExternalLogin>();
+    public DbSet<PendingRegistration> PendingRegistrations => Set<PendingRegistration>();
+    public DbSet<EmailOtpCode> EmailOtpCodes => Set<EmailOtpCode>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
