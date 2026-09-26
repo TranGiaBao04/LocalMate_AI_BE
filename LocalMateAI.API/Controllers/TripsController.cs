@@ -123,6 +123,10 @@ public sealed class TripsController(
                     StatusCodes.Status403Forbidden,
                     "A persisted user account is required to generate a trip.",
                     "generate_requires_persisted_user")),
+            GenerateTripResultStatus.QuotaExceeded =>
+                StatusCode(
+                    StatusCodes.Status403Forbidden,
+                    CreateGenerateQuotaProblem(result)),
             GenerateTripResultStatus.NoPlaces when result.Reason == "OutOfServiceArea" =>
                 Conflict(CreateProblem(
                     StatusCodes.Status409Conflict,
@@ -644,6 +648,19 @@ public sealed class TripsController(
             "saved_trip_quota_exceeded");
         problem.Extensions["used"] = result.Used;
         problem.Extensions["limit"] = result.Limit;
+        problem.Extensions["upgradeRequired"] = true;
+        return problem;
+    }
+
+    private ProblemDetails CreateGenerateQuotaProblem(GenerateTripResult result)
+    {
+        var problem = CreateProblem(
+            StatusCodes.Status403Forbidden,
+            "The monthly trip generation quota for the current plan has been reached.",
+            "generate_quota_exceeded");
+        problem.Extensions["used"] = result.Used;
+        problem.Extensions["limit"] = result.Limit;
+        problem.Extensions["resetAt"] = result.ResetAt;
         problem.Extensions["upgradeRequired"] = true;
         return problem;
     }

@@ -1,4 +1,5 @@
 using LocalMateAI.Application.Interfaces.Repositories;
+using LocalMateAI.Domain.Entities;
 using LocalMateAI.Domain.Enums;
 using LocalMateAI.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -19,4 +20,17 @@ public sealed class UsageEventRepository(AppDbContext dbContext) : IUsageEventRe
                                  && usage.Type == type
                                  && usage.CreatedAt >= startUtc
                                  && usage.CreatedAt < nextStartUtc, cancellationToken);
+
+    public async Task AddAsync(
+        UsageEvent usageEvent,
+        CancellationToken cancellationToken = default)
+    {
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"""
+            INSERT INTO "UsageEvents" ("Id", "CreatedAt", "TripId", "Type", "UpdatedAt", "UserId")
+            VALUES ({usageEvent.Id}, {usageEvent.CreatedAt}, {usageEvent.TripId},
+                    {usageEvent.Type.ToString()}, {usageEvent.UpdatedAt}, {usageEvent.UserId})
+            """,
+            cancellationToken);
+    }
 }

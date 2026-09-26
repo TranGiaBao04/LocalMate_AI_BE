@@ -40,6 +40,7 @@ public sealed class TripGenerationServiceTests
         Assert.Equal(GenerateTripResultStatus.ValidationFailed, result.Status);
         Assert.Same(errors, result.ValidationErrors);
         Assert.Empty(fixture.Trips.Added);
+        Assert.Empty(fixture.Usage.Added);
     }
 
     [Theory]
@@ -56,6 +57,7 @@ public sealed class TripGenerationServiceTests
         Assert.Equal(GenerateTripResultStatus.NoPlaces, result.Status);
         Assert.Equal(expectedReason, result.Reason);
         Assert.Empty(fixture.Trips.Added);
+        Assert.Empty(fixture.Usage.Added);
     }
 
     [Fact]
@@ -68,6 +70,7 @@ public sealed class TripGenerationServiceTests
         Assert.Equal(GenerateTripResultStatus.InvalidTags, result.Status);
         Assert.Equal(0, fixture.Engine.Calls); // kiểm tra tag trước matching
         Assert.Empty(fixture.Trips.Added);
+        Assert.Empty(fixture.Usage.Added);
     }
 
     [Fact]
@@ -81,6 +84,7 @@ public sealed class TripGenerationServiceTests
         Assert.Contains("PlannedDate", result.ValidationErrors!.Keys);
         Assert.Equal(0, fixture.Engine.Calls);
         Assert.Empty(fixture.Trips.Added);
+        Assert.Empty(fixture.Usage.Added);
     }
 
     [Fact]
@@ -114,6 +118,7 @@ public sealed class TripGenerationServiceTests
 
         Assert.Equal(GenerateTripResultStatus.InvalidTags, result.Status);
         Assert.Empty(fixture.Trips.Added);
+        Assert.Empty(fixture.Usage.Added);
     }
 
     [Fact]
@@ -133,6 +138,134 @@ public sealed class TripGenerationServiceTests
         Assert.Equal(tag.Id, Assert.Single(saved.Tags).TagId);
         Assert.Same(fixture.Detail.Response, result.Response);
         Assert.Equal(saved.Id, fixture.Detail.RequestedTripId);
+    }
+
+    [Fact]
+    public async Task Generate_FreeUser_WritesGenerateUsageForPersistedTrip()
+    {
+        var fixture = new Fixture(Sufficient());
+
+        var result = await fixture.Service.GenerateAsync(UserId, Request());
+
+        Assert.Equal(GenerateTripResultStatus.Success, result.Status);
+        var trip = Assert.Single(fixture.Trips.Added);
+        var usage = Assert.Single(fixture.Usage.Added);
+        Assert.Equal(UserId, usage.UserId);
+        Assert.Equal(UsageEventType.Generate, usage.Type);
+        Assert.Equal(trip.Id, usage.TripId);
+        Assert.Equal(Clock.GetUtcNow().UtcDateTime, usage.CreatedAt);
+    }
+
+    [Fact]
+    public async Task Generate_FreeUserAtLimit_ReturnsQuotaMetadataWithoutPersisting()
+    {
+        var fixture = new Fixture(Sufficient(), usageCount: 1);
+
+        var result = await fixture.Service.GenerateAsync(UserId, Request());
+
+        Assert.Equal(GenerateTripResultStatus.QuotaExceeded, result.Status);
+        Assert.Equal(1, result.Used);
+        Assert.Equal(1, result.Limit);
+        Assert.Equal(new DateTime(2026, 9, 30, 17, 0, 0, DateTimeKind.Utc), result.ResetAt);
+        Assert.Empty(fixture.Trips.Added);
+        Assert.Empty(fixture.Usage.Added);
+        Assert.Equal(1, fixture.Engine.Calls);
+    }
+
+    [Fact]
+    public async Task Generate_FreeUser_SecondSuccessfulRequestIsBlocked()
+    {
+        var fixture = new Fixture(Sufficient());
+
+        var first = await fixture.Service.GenerateAsync(UserId, Request());
+        var second = await fixture.Service.GenerateAsync(UserId, Request());
+
+        Assert.Equal(GenerateTripResultStatus.Success, first.Status);
+        Assert.Equal(GenerateTripResultStatus.QuotaExceeded, second.Status);
+        Assert.Single(fixture.Trips.Added);
+        Assert.Single(fixture.Usage.Added);
+    }
+
+    [Theory]
+    [InlineData(PlanCode.TripPass)]
+    [InlineData(PlanCode.Membership)]
+    public async Task Generate_ActivePaidPlan_IsUnlimitedAndWritesNoUsageEvent(PlanCode planCode)
+    {
+        var fixture = new Fixture(
+            Sufficient(),
+            subscriptions: [Subscription(planCode, Clock.GetUtcNow().UtcDateTime.AddDays(1))],
+            usageCount: 7);
+
+        var result = await fixture.Service.GenerateAsync(UserId, Request());
+
+        Assert.Equal(GenerateTripResultStatus.Success, result.Status);
+        Assert.Single(fixture.Trips.Added);
+        Assert.Empty(fixture.Usage.Added);
+        Assert.Equal(0, fixture.Usage.CountCalls);
+    }
+
+    [Fact]
+    public async Task Generate_ExpiredPaidPlan_FallsBackToFreeQuota()
+    {
+        var fixture = new Fixture(
+            Sufficient(),
+            subscriptions: [Subscription(PlanCode.Membership, Clock.GetUtcNow().UtcDateTime)],
+            usageCount: 1);
+
+        var result = await fixture.Service.GenerateAsync(UserId, Request());
+
+        Assert.Equal(GenerateTripResultStatus.QuotaExceeded, result.Status);
+        Assert.Empty(fixture.Trips.Added);
+    }
+
+    [Fact]
+    public async Task Generate_ActiveMembershipWinsOverTripPassAndFreeUsage()
+    {
+        var now = Clock.GetUtcNow().UtcDateTime;
+        var fixture = new Fixture(
+            Sufficient(),
+            subscriptions:
+            [
+                Subscription(PlanCode.TripPass, now.AddDays(7)),
+                Subscription(PlanCode.Membership, now.AddDays(1))
+            ],
+            usageCount: 1);
+
+        var result = await fixture.Service.GenerateAsync(UserId, Request());
+
+        Assert.Equal(GenerateTripResultStatus.Success, result.Status);
+        Assert.Empty(fixture.Usage.Added);
+        Assert.Equal(0, fixture.Usage.CountCalls);
+    }
+
+    [Theory]
+    [InlineData("2026-09-30T16:59:59Z", "2026-08-31T17:00:00Z", "2026-09-30T17:00:00Z")]
+    [InlineData("2026-09-30T17:00:00Z", "2026-09-30T17:00:00Z", "2026-10-31T17:00:00Z")]
+    public async Task Generate_FreeQuota_UsesVietnamCalendarMonth(
+        string nowValue,
+        string expectedStart,
+        string expectedReset)
+    {
+        var fixture = new Fixture(
+            Sufficient(),
+            clock: new FixedTimeProvider(DateTimeOffset.Parse(nowValue)));
+
+        await fixture.Service.GenerateAsync(UserId, Request());
+
+        Assert.Equal(DateTime.Parse(expectedStart).ToUniversalTime(), fixture.Usage.LastStartUtc);
+        Assert.Equal(DateTime.Parse(expectedReset).ToUniversalTime(), fixture.Usage.LastNextStartUtc);
+    }
+
+    [Fact]
+    public async Task Generate_UserRemovedBeforePersistence_ReturnsUserNotFoundWithoutWrites()
+    {
+        var fixture = new Fixture(Sufficient(), lockedUserExists: false);
+
+        var result = await fixture.Service.GenerateAsync(UserId, Request());
+
+        Assert.Equal(GenerateTripResultStatus.UserNotFound, result.Status);
+        Assert.Empty(fixture.Trips.Added);
+        Assert.Empty(fixture.Usage.Added);
     }
 
     private static TripRequestDto Request(
@@ -156,6 +289,15 @@ public sealed class TripGenerationServiceTests
             Guid.NewGuid(), $"Place {order}", "Địa chỉ", 10.77, 106.69, "Cafe",
             order, new TimeOnly(hour, minute), 60, 50_000m, "lý do", 1.0, 100, "Bến Thành");
 
+    private static UserSubscription Subscription(PlanCode planCode, DateTime endsAt) =>
+        new()
+        {
+            UserId = UserId,
+            PlanCode = planCode,
+            StartsAt = endsAt.AddDays(-1),
+            EndsAt = endsAt
+        };
+
     private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => utcNow;
@@ -166,24 +308,34 @@ public sealed class TripGenerationServiceTests
         public Fixture(
             FallbackItineraryResult? engineResult = null,
             bool userExists = true,
-            IReadOnlyList<Tag>? tags = null)
+            IReadOnlyList<Tag>? tags = null,
+            IReadOnlyList<UserSubscription>? subscriptions = null,
+            int usageCount = 0,
+            TimeProvider? clock = null,
+            bool lockedUserExists = true)
         {
+            var effectiveClock = clock ?? Clock;
             Engine = new FakeEngine(engineResult ?? Sufficient());
             Trips = new FakeTripRepository();
+            Usage = new FakeUsageRepository(usageCount);
             Detail = new FakeTripDetailService();
             Service = new TripGenerationService(
                 new FakeUserRepository(userExists ? UserId : null),
-                new TripRequestValidator(Clock),
+                new TripRequestValidator(effectiveClock),
                 new FakeTagRepository(tags ?? []),
                 Engine,
                 Trips,
+                new FakeSubscriptionRepository(subscriptions ?? []),
+                Usage,
+                new FakeQuotaExecutor(lockedUserExists),
                 Detail,
-                Clock);
+                effectiveClock);
         }
 
         public TripGenerationService Service { get; }
         public FakeEngine Engine { get; }
         public FakeTripRepository Trips { get; }
+        public FakeUsageRepository Usage { get; }
         public FakeTripDetailService Detail { get; }
     }
 
@@ -265,6 +417,64 @@ public sealed class TripGenerationServiceTests
 
         public Task<bool> SoftDeleteAsync(Guid tripId, Guid userId, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
+    }
+
+    private sealed class FakeSubscriptionRepository(IReadOnlyList<UserSubscription> subscriptions)
+        : ISubscriptionRepository
+    {
+        public Task<IReadOnlyList<UserSubscription>> GetByUserIdAsync(
+            Guid userId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(subscriptions);
+
+        public Task<UserSubscription?> GetByUserAndPlanAsync(
+            Guid userId,
+            PlanCode planCode,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task AddAsync(
+            UserSubscription subscription,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+    }
+
+    private sealed class FakeUsageRepository(int initialCount) : IUsageEventRepository
+    {
+        public List<UsageEvent> Added { get; } = [];
+        public int CountCalls { get; private set; }
+        public DateTime? LastStartUtc { get; private set; }
+        public DateTime? LastNextStartUtc { get; private set; }
+
+        public Task<int> CountAsync(
+            Guid userId,
+            UsageEventType type,
+            DateTime startUtc,
+            DateTime nextStartUtc,
+            CancellationToken cancellationToken = default)
+        {
+            CountCalls++;
+            LastStartUtc = startUtc;
+            LastNextStartUtc = nextStartUtc;
+            return Task.FromResult(initialCount + Added.Count);
+        }
+
+        public Task AddAsync(UsageEvent usageEvent, CancellationToken cancellationToken = default)
+        {
+            Added.Add(usageEvent);
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FakeQuotaExecutor(bool persistedUserExists) : ITripGenerationQuotaExecutor
+    {
+        public async Task<TripGenerationQuotaExecution<T>> ExecuteForUserAsync<T>(
+            Guid userId,
+            Func<CancellationToken, Task<T>> operation,
+            CancellationToken cancellationToken = default) =>
+            persistedUserExists
+                ? new TripGenerationQuotaExecution<T>(true, await operation(cancellationToken))
+                : new TripGenerationQuotaExecution<T>(false, default);
     }
 
     private sealed class FakeUserRepository(Guid? userId = null) : IUserRepository

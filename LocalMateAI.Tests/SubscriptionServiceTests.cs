@@ -200,6 +200,9 @@ public sealed class SubscriptionServiceTests
             LastEnd = nextStartUtc;
             return Task.FromResult(events.Count(date => date >= startUtc && date < nextStartUtc));
         }
+
+        public Task AddAsync(UsageEvent usageEvent, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 
     private sealed class FakeTripRepository(IReadOnlyList<Trip> trips) : ITripRepository
