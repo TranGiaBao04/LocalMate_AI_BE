@@ -219,6 +219,9 @@ public sealed class TripDetailServiceTests
 
     private sealed class FakeTripRepository(TripDetailReadModel? detail) : ITripRepository
     {
+        public Task<int> CountFinalizedByUserAsync(Guid userId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         public int ReadCalls { get; private set; }
 
         public Task<TripDetailReadModel?> GetOwnedDetailAsync(

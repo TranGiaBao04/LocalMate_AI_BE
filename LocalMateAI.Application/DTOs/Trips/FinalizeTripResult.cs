@@ -5,12 +5,15 @@ public enum FinalizeTripResultStatus
     Success,
     InvalidTripId,
     TripNotFound,
-    AlreadyFinalized
+    AlreadyFinalized,
+    SavedTripQuotaExceeded
 }
 
 public sealed record FinalizeTripResult(
     FinalizeTripResultStatus Status,
-    FinalizeTripResponse? Response = null)
+    FinalizeTripResponse? Response = null,
+    int? Used = null,
+    int? Limit = null)
 {
     public static FinalizeTripResult Succeeded(FinalizeTripResponse response) =>
         new(FinalizeTripResultStatus.Success, response);
@@ -23,4 +26,7 @@ public sealed record FinalizeTripResult(
 
     public static FinalizeTripResult AlreadyFinalized() =>
         new(FinalizeTripResultStatus.AlreadyFinalized);
+
+    public static FinalizeTripResult QuotaExceeded(int used, int limit) =>
+        new(FinalizeTripResultStatus.SavedTripQuotaExceeded, Used: used, Limit: limit);
 }

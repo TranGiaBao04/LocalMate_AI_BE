@@ -5,6 +5,10 @@ namespace LocalMateAI.Application.Interfaces.Repositories;
 
 public interface ITripRepository
 {
+    Task<int> CountFinalizedByUserAsync(
+        Guid userId,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<MyTripReadModel>> GetByUserIdAsync(
         Guid userId,
         CancellationToken cancellationToken = default);

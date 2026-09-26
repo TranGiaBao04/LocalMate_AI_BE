@@ -1,5 +1,6 @@
 using LocalMateAI.Application.DTOs.Trips;
 using LocalMateAI.Application.Interfaces.Repositories;
+using LocalMateAI.Application.Services;
 using LocalMateAI.Domain.Enums;
 
 namespace LocalMateAI.Application.Commands;
@@ -9,7 +10,11 @@ namespace LocalMateAI.Application.Commands;
 /// Chứa toàn bộ logic nghiệp vụ (ownership, idempotency, transition guard);
 /// TripService chỉ delegate — một nguồn sự thật cho luồng finalize.
 /// </summary>
-public sealed class FinalizeTripCommand(ITripRepository tripRepository) : IFinalizeTripCommand
+public sealed class FinalizeTripCommand(
+    ITripRepository tripRepository,
+    ISubscriptionRepository subscriptionRepository,
+    ITripFinalizeQuotaExecutor quotaExecutor,
+    TimeProvider timeProvider) : IFinalizeTripCommand
 {
     public async Task<FinalizeTripResult> ExecuteAsync(
         Guid userId,
@@ -21,21 +26,53 @@ public sealed class FinalizeTripCommand(ITripRepository tripRepository) : IFinal
             return FinalizeTripResult.InvalidTrip();
         }
 
-        var trip = await tripRepository.GetByIdAsync(tripId, cancellationToken);
-        if (trip is null || trip.UserId != userId)
-        {
-            return FinalizeTripResult.MissingTrip();
-        }
+        var execution = await quotaExecutor.ExecuteForUserAsync(
+            userId,
+            async transactionCancellationToken =>
+            {
+                var trip = await tripRepository.GetByIdAsync(tripId, transactionCancellationToken);
+                if (trip is null || trip.UserId != userId)
+                {
+                    return FinalizeTripResult.MissingTrip();
+                }
 
-        if (trip.Status == TripStatus.Finalized)
-        {
-            return FinalizeTripResult.AlreadyFinalized();
-        }
+                if (trip.Status == TripStatus.Finalized)
+                {
+                    return FinalizeTripResult.AlreadyFinalized();
+                }
 
-        var finalized = await tripRepository.FinalizeTripAsync(tripId, userId, cancellationToken);
+                var nowUtc = timeProvider.GetUtcNow().UtcDateTime;
+                var subscriptions = await subscriptionRepository.GetByUserIdAsync(
+                    userId,
+                    transactionCancellationToken);
+                var effective = SubscriptionCatalog.ResolveEffectivePaid(subscriptions, nowUtc);
+                var plan = SubscriptionCatalog.Get(effective?.PlanCode ?? PlanCode.Free);
 
-        return finalized
-            ? FinalizeTripResult.Succeeded(new FinalizeTripResponse(tripId, TripStatus.Finalized.ToString()))
+                if (plan.SavedTripLimit is { } limit)
+                {
+                    var used = await tripRepository.CountFinalizedByUserAsync(
+                        userId,
+                        transactionCancellationToken);
+                    if (used >= limit)
+                    {
+                        return FinalizeTripResult.QuotaExceeded(used, limit);
+                    }
+                }
+
+                var finalized = await tripRepository.FinalizeTripAsync(
+                    tripId,
+                    userId,
+                    transactionCancellationToken);
+
+                return finalized
+                    ? FinalizeTripResult.Succeeded(
+                        new FinalizeTripResponse(tripId, TripStatus.Finalized.ToString()))
+                    : FinalizeTripResult.MissingTrip();
+            },
+            cancellationToken);
+
+        return execution.PersistedUserExists && execution.Result is not null
+            ? execution.Result
             : FinalizeTripResult.MissingTrip();
     }
 }
