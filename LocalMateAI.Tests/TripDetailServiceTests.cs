@@ -86,19 +86,127 @@ public sealed class TripDetailServiceTests
         Assert.Equal(model.FinalizedAt, response.FinalizedAt);
     }
 
+    [Fact]
+    public async Task Get_OwnedTrip_ReportsTravelPerLegAndTotals()
+    {
+        var tripId = Guid.NewGuid();
+        var model = new TripDetailReadModel(
+            tripId,
+            TripStatus.Draft,
+            10.80,
+            106.65,
+            "Bến Thành",
+            4,
+            0m,
+            300_000m,
+            [],
+            [
+                Item(0, new TimeOnly(8, 0), 90, 50_000m, isVisited: false),
+                Item(1, new TimeOnly(9, 45), 60, 120_000m, isVisited: false, latitude: 10.79) // trống 15' sau 09:30
+            ],
+            DateTime.UtcNow,
+            DateTime.UtcNow,
+            null,
+            TravelMode.Motorbike);
+        var service = new TripDetailService(new FakeUserRepository(UserId), new FakeTripRepository(model));
+
+        var response = (await service.GetAsync(UserId, tripId)).Response!;
+
+        Assert.Equal("Motorbike", response.TravelMode);
+        Assert.Null(response.Items[0].TravelMinutesFromPrevious);
+        Assert.Null(response.Items[0].DistanceMetersFromPrevious);
+        Assert.Equal(15, response.Items[1].TravelMinutesFromPrevious);
+        Assert.Equal(2890, response.Items[1].DistanceMetersFromPrevious); // ~2,22 km chim bay × 1,3
+        Assert.Equal(37, response.Items[1].WalkingMinutes);
+        Assert.Equal(8, response.Items[1].MotorbikeMinutes);
+        Assert.Equal(150, response.TotalVisitMinutes);
+        Assert.Equal(15, response.TotalTravelMinutes);
+        Assert.Equal(165, response.TotalMinutes);
+        Assert.Equal(new TimeOnly(10, 45), response.EndTime);
+    }
+
+    private static TripDetailReadModel Model(Guid tripId, DateTime? plannedStartAt, TimeOnly firstStopTime) =>
+        new(
+            tripId,
+            TripStatus.Draft,
+            10.80,
+            106.65,
+            "Bến Thành",
+            4,
+            0m,
+            300_000m,
+            [],
+            [
+                Item(0, firstStopTime, 90, 50_000m, isVisited: false),
+                Item(1, firstStopTime.AddMinutes(105), 60, 120_000m, isVisited: false) // trống 15' sau chặng đầu
+            ],
+            DateTime.UtcNow,
+            DateTime.UtcNow,
+            null,
+            TravelMode.Auto,
+            plannedStartAt);
+
+    [Fact]
+    public async Task Get_TripWithPlannedStart_ReportsDateTimeAndTravelFromOriginInsideTotals()
+    {
+        var tripId = Guid.NewGuid();
+        var model = Model(tripId, new DateTime(2026, 10, 3, 8, 0, 0), new TimeOnly(8, 20));
+        var service = new TripDetailService(new FakeUserRepository(UserId), new FakeTripRepository(model));
+
+        var response = (await service.GetAsync(UserId, tripId)).Response!;
+
+        Assert.Equal(new DateOnly(2026, 10, 3), response.PlannedDate);
+        Assert.Equal(new TimeOnly(8, 0), response.StartTime);
+        Assert.Equal(20, response.TravelMinutesFromOrigin);
+        Assert.Null(response.Items[0].TravelMinutesFromPrevious); // đoạn đi tới chặng đầu không nằm ở chặng
+        Assert.Equal(15 + 20, response.TotalTravelMinutes);
+        Assert.Equal(150 + 15 + 20, response.TotalMinutes);
+        Assert.Equal(new TimeOnly(11, 5), response.EndTime);
+    }
+
+    [Fact]
+    public async Task Get_TripWithoutPlannedStart_LeavesNewFieldsNullAndTotalsUnchanged()
+    {
+        var tripId = Guid.NewGuid();
+        var model = Model(tripId, null, new TimeOnly(8, 20));
+        var service = new TripDetailService(new FakeUserRepository(UserId), new FakeTripRepository(model));
+
+        var response = (await service.GetAsync(UserId, tripId)).Response!;
+
+        Assert.Null(response.PlannedDate);
+        Assert.Null(response.StartTime);
+        Assert.Null(response.TravelMinutesFromOrigin);
+        Assert.Equal(15, response.TotalTravelMinutes);
+        Assert.Equal(165, response.TotalMinutes);
+    }
+
+    [Fact]
+    public async Task Get_PlannedStartLaterThanFirstStop_ClampsTravelFromOriginToZero()
+    {
+        var tripId = Guid.NewGuid();
+        var model = Model(tripId, new DateTime(2026, 10, 3, 9, 0, 0), new TimeOnly(8, 20));
+        var service = new TripDetailService(new FakeUserRepository(UserId), new FakeTripRepository(model));
+
+        var response = (await service.GetAsync(UserId, tripId)).Response!;
+
+        Assert.Equal(0, response.TravelMinutesFromOrigin);
+        Assert.Equal(15, response.TotalTravelMinutes);
+    }
+
     private static TripItemReadModel Item(
         int order,
         TimeOnly time,
         int minutes,
         decimal budget,
-        bool isVisited) =>
+        bool isVisited,
+        double latitude = 10.77) =>
         new(
             Guid.NewGuid(),
             Guid.NewGuid(),
             $"Place {order}",
             PlaceCategory.Cafe,
             null,
-            10.77,
+            latitude,
             106.69,
             "Bến Thành",
             order,

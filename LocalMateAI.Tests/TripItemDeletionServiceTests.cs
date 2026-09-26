@@ -2,6 +2,7 @@ using LocalMateAI.Application.DTOs.Trips;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Services;
 using LocalMateAI.Domain.Entities;
+using LocalMateAI.Domain.Enums;
 
 namespace LocalMateAI.Tests;
 
@@ -77,14 +78,14 @@ public sealed class TripItemDeletionServiceTests
     [Fact]
     public async Task DeleteAsync_PassesTimelineRecalculatorToRepository()
     {
-        var first = new TimelineItemSnapshot(Guid.NewGuid(), 0, new TimeOnly(8, 0), 90);
-        var third = new TimelineItemSnapshot(Guid.NewGuid(), 2, new TimeOnly(11, 0), 90);
+        var first = new TimelineItemSnapshot(Guid.NewGuid(), 0, new TimeOnly(8, 0), 90, 10.77, 106.70);
+        var third = new TimelineItemSnapshot(Guid.NewGuid(), 2, new TimeOnly(11, 0), 90, 10.77, 106.70);
         var (sut, items) = Create(snapshotsToRecalculate: [first, third]);
 
         await sut.DeleteAsync(UserId, TripId, ItemId);
 
         Assert.Equal(
-            new[] { new TimelineItemUpdate(third.ItemId, 1, new TimeOnly(9, 30)) },
+            new[] { new TimelineItemUpdate(third.ItemId, 1, new TimeOnly(9, 31)) },
             items.RecalculatedUpdates!.ToArray());
     }
 
@@ -140,10 +141,10 @@ public sealed class TripItemDeletionServiceTests
             Guid tripId,
             Guid itemId,
             Guid userId,
-            Func<IReadOnlyList<TimelineItemSnapshot>, IReadOnlyList<TimelineItemUpdate>> recalculateTimeline,
+            Func<TimelineRecalculationInput, IReadOnlyList<TimelineItemUpdate>> recalculateTimeline,
             CancellationToken cancellationToken = default)
         {
-            RecalculatedUpdates = recalculateTimeline(snapshotsToRecalculate);
+            RecalculatedUpdates = recalculateTimeline(new TimelineRecalculationInput(snapshotsToRecalculate, new TimeOnly(8, 0), TravelMode.Auto));
             return Task.FromResult(persistence);
         }
 

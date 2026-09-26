@@ -1,3 +1,5 @@
+using LocalMateAI.Domain.Enums;
+
 namespace LocalMateAI.Application.DTOs.Itineraries;
 
 public sealed record CuratedPlaceForApplyReadModel(
@@ -5,4 +7,5 @@ public sealed record CuratedPlaceForApplyReadModel(
     int OrderIndex,
     double Latitude,
     double Longitude,
-    decimal EstimatedCostMax);
+    decimal EstimatedCostMax,
+    PlaceCategory Category);

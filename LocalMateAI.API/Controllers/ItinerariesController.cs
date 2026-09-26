@@ -25,7 +25,7 @@ public sealed class ItinerariesController(
     [HttpPost("curated/{curatedId:guid}/apply")]
     [Authorize(Roles = "User,Admin")]
     [ProducesResponseType<TripDetailResponse>(StatusCodes.Status201Created)]
-    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
@@ -59,6 +59,13 @@ public sealed class ItinerariesController(
                     StatusCodes.Status400BadRequest,
                     "Start location must include both latitude and longitude inside Ho Chi Minh City.",
                     "invalid_start_location")),
+            ApplyCuratedItineraryResultStatus.ValidationFailed =>
+                CreateValidationProblem(result.ValidationErrors!),
+            ApplyCuratedItineraryResultStatus.OutOfServiceArea =>
+                Conflict(CreateProblem(
+                    StatusCodes.Status409Conflict,
+                    "The start location is outside the Metro Line 1 service area.",
+                    "out_of_service_area")),
             ApplyCuratedItineraryResultStatus.UserNotFound =>
                 StatusCode(StatusCodes.Status403Forbidden, CreateProblem(
                     StatusCodes.Status403Forbidden,
@@ -76,6 +83,20 @@ public sealed class ItinerariesController(
                     "curated_itinerary_unavailable")),
             _ => throw new InvalidOperationException("Unsupported apply curated itinerary result status.")
         };
+    }
+
+    private ObjectResult CreateValidationProblem(IReadOnlyDictionary<string, string[]> validationErrors)
+    {
+        var problem = new ValidationProblemDetails(
+            validationErrors.ToDictionary(error => error.Key, error => error.Value))
+        {
+            Status = StatusCodes.Status400BadRequest,
+            Title = "One or more validation errors occurred.",
+            Type = "https://httpstatuses.com/400",
+            Instance = HttpContext.Request.Path
+        };
+
+        return BadRequest(problem);
     }
 
     private ProblemDetails CreateProblem(int status, string title, string code)

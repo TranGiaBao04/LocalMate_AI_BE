@@ -1,6 +1,5 @@
 using FluentValidation;
 using LocalMateAI.Application.DTOs.Trips;
-using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Interfaces.Services;
 
 namespace LocalMateAI.Application.Services;
@@ -9,10 +8,9 @@ public sealed class TripFeasibilityService(
     IValidator<TripRequestDto> validator,
     ITripOriginResolverService tripOriginResolverService,
     ITripCriteriaNormalizationService tripCriteriaNormalizationService,
-    IPlaceRepository placeRepository) : ITripFeasibilityService
+    IMetroClusterMatchingService metroClusterMatchingService,
+    ICandidateFilterService candidateFilterService) : ITripFeasibilityService
 {
-    private const double CandidateSearchRadiusMeters = 800;
-
     public async Task<TripFeasibilityResult> CheckFeasibilityAsync(
         TripRequestDto request,
         CancellationToken cancellationToken = default)
@@ -36,18 +34,32 @@ public sealed class TripFeasibilityService(
                 origin.NearestStation,
                 criteria.DurationCategory.ToString(),
                 criteria.BudgetTier.ToString(),
-                criteria.EstimatedStopCount,
+                0,
                 0));
         }
 
-        var candidatePlaces = await placeRepository.GetActiveWithinRadiusAsync(
-            origin.NearestStation.StationLatitude,
-            origin.NearestStation.StationLongitude,
-            CandidateSearchRadiusMeters,
-            category: null,
+        // Cùng nguồn ứng viên và cùng luật lọc ngân sách với /match và /generate.
+        var candidates = await metroClusterMatchingService.GetCandidatesAsync(
+            origin.NearestStation.StationId,
+            MetroClusterMatchingService.CandidateRadiusMeters,
             cancellationToken);
 
-        var isFeasible = candidatePlaces.Count >= criteria.EstimatedStopCount;
+        var filtered = candidateFilterService.Filter(candidates, criteria);
+
+        // Chưa chấm điểm theo tag nên xếp theo khoảng cách tới ga: đúng thứ tự của generate khi user không chọn tag
+        // (mọi điểm 0,5, hoà thì gần ga trước). Có chọn tag thì số chặng chỉ gần đúng.
+        var planned = ItineraryScheduler.Schedule(
+            filtered.Passed
+                .OrderBy(candidate => candidate.DistanceFromStationMeters)
+                .Select(ItineraryScheduler.ToScheduleInput)
+                .ToList(),
+            request.StartTime ?? ItineraryScheduler.DefaultStartTime,
+            request.DurationHours,
+            request.TravelMode,
+            request.BudgetMax,
+            new ScheduleOrigin(request.StartLatitude, request.StartLongitude));
+
+        var isFeasible = planned.Count >= 1;
 
         return TripFeasibilityResult.Succeeded(new TripFeasibilityResponse(
             isFeasible,
@@ -55,8 +67,8 @@ public sealed class TripFeasibilityService(
             origin.NearestStation,
             criteria.DurationCategory.ToString(),
             criteria.BudgetTier.ToString(),
-            criteria.EstimatedStopCount,
-            candidatePlaces.Count));
+            planned.Count,
+            candidates.Count));
     }
 
     private static IReadOnlyDictionary<string, string[]> ToValidationErrors(

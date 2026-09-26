@@ -20,7 +20,8 @@ public sealed class TripsController(
     ITripItemReplacementService tripItemReplacementService,
     ITripItemDeletionService tripItemDeletionService,
     ITripDetailService tripDetailService,
-    ITripDeletionService tripDeletionService) : ControllerBase
+    ITripDeletionService tripDeletionService,
+    ITripGenerationService tripGenerationService) : ControllerBase
 {
     [HttpPost("feasibility-check")]
     [AllowAnonymous]
@@ -84,6 +85,55 @@ public sealed class TripsController(
             FallbackItineraryStatus.ValidationFailed =>
                 CreateValidationProblem(result.ValidationErrors!),
             _ => throw new InvalidOperationException("Unsupported fallback itinerary result status.")
+        };
+    }
+
+    [HttpPost("generate")]
+    [Authorize(Roles = "User,Admin")]
+    [ProducesResponseType<TripDetailResponse>(StatusCodes.Status201Created)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<TripDetailResponse>> GenerateTripAsync(
+        [FromBody] TripRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        var subject = User.FindFirst("sub")?.Value;
+        if (!Guid.TryParse(subject, out var userId) || userId == Guid.Empty)
+        {
+            return Unauthorized(CreateProblem(
+                StatusCodes.Status401Unauthorized,
+                "Authentication identity is invalid.",
+                "invalid_identity"));
+        }
+
+        var result = await tripGenerationService.GenerateAsync(userId, request, cancellationToken);
+        return result.Status switch
+        {
+            GenerateTripResultStatus.Success => StatusCode(StatusCodes.Status201Created, result.Response),
+            GenerateTripResultStatus.ValidationFailed => CreateValidationProblem(result.ValidationErrors!),
+            GenerateTripResultStatus.InvalidTags =>
+                BadRequest(CreateProblem(
+                    StatusCodes.Status400BadRequest,
+                    "One or more tag IDs do not exist or are inactive.",
+                    "invalid_tag_ids")),
+            GenerateTripResultStatus.UserNotFound =>
+                StatusCode(StatusCodes.Status403Forbidden, CreateProblem(
+                    StatusCodes.Status403Forbidden,
+                    "A persisted user account is required to generate a trip.",
+                    "generate_requires_persisted_user")),
+            GenerateTripResultStatus.NoPlaces when result.Reason == "OutOfServiceArea" =>
+                Conflict(CreateProblem(
+                    StatusCodes.Status409Conflict,
+                    "The start location is outside the Metro Line 1 service area.",
+                    "out_of_service_area")),
+            GenerateTripResultStatus.NoPlaces =>
+                Conflict(CreateProblem(
+                    StatusCodes.Status409Conflict,
+                    "No suitable places were found for this request.",
+                    "insufficient_candidates")),
+            _ => throw new InvalidOperationException("Unsupported generate trip result status.")
         };
     }
 

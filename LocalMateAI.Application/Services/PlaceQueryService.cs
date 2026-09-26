@@ -47,7 +47,8 @@ public sealed class PlaceQueryService(
                     station.StationOrder,
                     station.StationLatitude,
                     station.StationLongitude,
-                    places);
+                    places,
+                    places.Count);
             })
             .OrderBy(cluster => cluster.StationOrder)
             .ThenBy(cluster => cluster.StationName, StringComparer.Ordinal)

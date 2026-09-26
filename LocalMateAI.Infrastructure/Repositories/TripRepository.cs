@@ -32,7 +32,8 @@ public sealed class TripRepository(AppDbContext dbContext) : ITripRepository
                 EstimatedBudget = trip.Items.Sum(item => item.EstimatedBudget),
                 trip.CreatedAt,
                 trip.UpdatedAt,
-                trip.FinalizedAt
+                trip.FinalizedAt,
+                trip.PlannedStartAt
             })
             .ToListAsync(cancellationToken);
 
@@ -68,7 +69,8 @@ public sealed class TripRepository(AppDbContext dbContext) : ITripRepository
                 trip.UpdatedAt,
                 stationsByTripId.GetValueOrDefault(trip.Id),
                 trip.EstimatedBudget,
-                trip.FinalizedAt))
+                trip.FinalizedAt,
+                trip.PlannedStartAt))
             .ToList();
     }
 
@@ -181,6 +183,7 @@ public sealed class TripRepository(AppDbContext dbContext) : ITripRepository
             DurationHours = source.DurationHours,
             BudgetMin = source.BudgetMin,
             BudgetMax = source.BudgetMax,
+            TravelMode = source.TravelMode,
             Status = TripStatus.Draft,
             CreatedAt = now,
             UpdatedAt = now,
@@ -234,6 +237,7 @@ public sealed class TripRepository(AppDbContext dbContext) : ITripRepository
             {
                 candidate.Id,
                 candidate.Status,
+                candidate.TravelMode,
                 candidate.StartLatitude,
                 candidate.StartLongitude,
                 candidate.DurationHours,
@@ -241,7 +245,8 @@ public sealed class TripRepository(AppDbContext dbContext) : ITripRepository
                 candidate.BudgetMax,
                 candidate.CreatedAt,
                 candidate.UpdatedAt,
-                candidate.FinalizedAt
+                candidate.FinalizedAt,
+                candidate.PlannedStartAt
             })
             .SingleOrDefaultAsync(cancellationToken);
 
@@ -338,7 +343,9 @@ public sealed class TripRepository(AppDbContext dbContext) : ITripRepository
                 .ToList(),
             trip.CreatedAt,
             trip.UpdatedAt,
-            trip.FinalizedAt);
+            trip.FinalizedAt,
+            trip.TravelMode,
+            trip.PlannedStartAt);
     }
 
     public async Task AddAsync(

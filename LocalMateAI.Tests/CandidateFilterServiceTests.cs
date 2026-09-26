@@ -9,10 +9,10 @@ public sealed class CandidateFilterServiceTests
     private readonly CandidateFilterService _sut = new();
 
     [Fact]
-    public void Filter_ExpensivePlace_BeyondBudgetPerStop_IsExcludedWithBudgetReason()
+    public void Filter_ExpensivePlace_BeyondBudgetMax_IsExcludedWithBudgetReason()
     {
         // Arrange
-        var criteria = Criteria(budgetPerStop: 100_000m);
+        var criteria = Criteria(budgetMax: 100_000m);
         var candidate = MakeCandidate("Quán đắt", costMax: 150_000m);
 
         // Act
@@ -25,10 +25,10 @@ public sealed class CandidateFilterServiceTests
     }
 
     [Fact]
-    public void Filter_PlaceCostExactlyBudgetPerStop_Passes()
+    public void Filter_PlaceCostExactlyBudgetMax_Passes()
     {
         // Arrange
-        var criteria = Criteria(budgetPerStop: 100_000m);
+        var criteria = Criteria(budgetMax: 100_000m);
         var candidate = MakeCandidate("Quán vừa khít", costMax: 100_000m);
 
         // Act
@@ -43,7 +43,7 @@ public sealed class CandidateFilterServiceTests
     public void Filter_FreePlace_PassesEvenWithZeroBudget()
     {
         // Arrange
-        var criteria = Criteria(budgetPerStop: 0m, stopCount: 1);
+        var criteria = Criteria(budgetMax: 0m);
         var candidate = MakeCandidate("Công viên miễn phí", costMax: 0m);
 
         // Act
@@ -58,7 +58,7 @@ public sealed class CandidateFilterServiceTests
     public void Filter_KeepsAllAffordablePlaces_DoesNotTruncateByStopCount()
     {
         // Arrange — việc lấy top N do orchestrator (TripMatchingService) đảm nhiệm, filter không được cắt danh sách.
-        var criteria = Criteria(budgetPerStop: 100_000m, stopCount: 2);
+        var criteria = Criteria(budgetMax: 100_000m);
         var candidates = Enumerable.Range(1, 5)
             .Select(i => MakeCandidate($"Địa điểm {i}", costMax: 50_000m))
             .ToList();
@@ -75,7 +75,7 @@ public sealed class CandidateFilterServiceTests
     public void Filter_MixedList_OnlyBudgetViolationsAreExcluded()
     {
         // Arrange
-        var criteria = Criteria(budgetPerStop: 100_000m);
+        var criteria = Criteria(budgetMax: 100_000m);
         var cheap = MakeCandidate("Rẻ", costMax: 30_000m);
         var expensive = MakeCandidate("Đắt", costMax: 500_000m);
 
@@ -90,8 +90,8 @@ public sealed class CandidateFilterServiceTests
         Assert.Equal("budget", excluded.Reason);
     }
 
-    private static NormalizedTripCriteria Criteria(decimal budgetPerStop, int stopCount = 3) =>
-        new(TripDurationCategory.HalfDay, stopCount, BudgetTier.Standard, budgetPerStop);
+    private static NormalizedTripCriteria Criteria(decimal budgetMax) =>
+        new(TripDurationCategory.HalfDay, BudgetTier.Standard, budgetMax);
 
     private static PlaceCandidateDto MakeCandidate(string name, decimal costMax) =>
         new(

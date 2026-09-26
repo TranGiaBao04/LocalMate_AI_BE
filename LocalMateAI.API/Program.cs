@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using FluentValidation;
 using LocalMateAI.API;
 using LocalMateAI.API.Middlewares;
@@ -81,7 +82,8 @@ if (googleAuthValidationResult.Failed)
         googleAuthValidationResult.Failures);
 }
 
-builder.Services.AddControllers();
+builder.Services.AddControllers().AddJsonOptions(options =>
+    options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -136,6 +138,7 @@ builder.Services.AddScoped<IGeoService, GeoService>();
 builder.Services.AddScoped<IPlaceQueryService, PlaceQueryService>();
 builder.Services.AddScoped<IAdminPlaceService, AdminPlaceService>();
 builder.Services.AddMemoryCache();
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<IMasterDataService, MasterDataService>();
 builder.Services.AddScoped<ICuratedItineraryRepository, CuratedItineraryRepository>();
 builder.Services.AddScoped<ICuratedItineraryService, CuratedItineraryService>();
@@ -157,6 +160,7 @@ builder.Services.AddScoped<ITripItemDeletionService, TripItemDeletionService>();
 builder.Services.AddScoped<ITripDetailService, TripDetailService>();
 builder.Services.AddScoped<ITripDeletionService, TripDeletionService>();
 builder.Services.AddScoped<ICuratedTripService, CuratedTripService>();
+builder.Services.AddScoped<ITripGenerationService, TripGenerationService>();
 builder.Services.AddScoped<IFinalizeTripCommand, FinalizeTripCommand>();
 builder.Services.AddScoped<IForkTripCommand, ForkTripCommand>();
 builder.Services.AddScoped<IFeedbackService, FeedbackService>();

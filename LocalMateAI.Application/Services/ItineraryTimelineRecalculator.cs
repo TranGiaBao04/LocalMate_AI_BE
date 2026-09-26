@@ -5,32 +5,31 @@ namespace LocalMateAI.Application.Services;
 
 public sealed class ItineraryTimelineRecalculator : IItineraryTimelineRecalculator
 {
-    public IReadOnlyList<TimelineItemUpdate> Recalculate(IReadOnlyList<TimelineItemSnapshot> remainingItems)
+    public IReadOnlyList<TimelineItemUpdate> Recalculate(TimelineRecalculationInput input)
     {
-        var updates = new List<TimelineItemUpdate>();
-        var ordered = remainingItems
+        var ordered = input.RemainingItems
             .OrderBy(item => item.OrderIndex)
             .ThenBy(item => item.ItemId)
             .ToList();
 
-        var previousEnd = TimeSpan.Zero;
+        // Giữ nguyên thứ tự và thời lượng, xếp lại giờ theo toạ độ và phương tiện của trip (chặng đầu lấy mốc bắt đầu chuyến).
+        var slots = ItineraryScheduler.Reschedule(
+            ordered
+                .Select(item => new ScheduleInput(item.Latitude, item.Longitude, item.EstimatedDurationMinutes))
+                .ToList(),
+            input.TripStartTime,
+            input.TravelMode);
+
+        var updates = new List<TimelineItemUpdate>();
         for (var index = 0; index < ordered.Count; index++)
         {
             var item = ordered[index];
-            var currentTime = item.ScheduledTime.ToTimeSpan();
+            var scheduledTime = slots[index].ScheduledTime;
 
-            // Item đầu giữ nguyên giờ; các item sau dồn sát item trước, không bao giờ bị đẩy muộn hơn giờ cũ.
-            var newTime = index == 0 || currentTime < previousEnd ? currentTime : previousEnd;
-
-            if (item.OrderIndex != index || newTime != currentTime)
+            if (item.OrderIndex != index || item.ScheduledTime != scheduledTime)
             {
-                updates.Add(new TimelineItemUpdate(
-                    item.ItemId,
-                    index,
-                    TimeOnly.FromTimeSpan(newTime)));
+                updates.Add(new TimelineItemUpdate(item.ItemId, index, scheduledTime));
             }
-
-            previousEnd = newTime + TimeSpan.FromMinutes(item.EstimatedDurationMinutes);
         }
 
         return updates;

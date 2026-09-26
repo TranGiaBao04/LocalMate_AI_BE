@@ -5,20 +5,10 @@ namespace LocalMateAI.Application.Services;
 
 public sealed class TripCriteriaNormalizationService : ITripCriteriaNormalizationService
 {
-    private const int AverageMinutesPerStop = 90;
-    private const int AverageMinutesTravelBetweenStops = 20;
-
-    public NormalizedTripCriteria Normalize(TripRequestDto request)
-    {
-        var estimatedStopCount = EstimateStopCount(request.DurationHours);
-        var budgetPerStop = request.BudgetMax / estimatedStopCount;
-
-        return new NormalizedTripCriteria(
-            ClassifyDuration(request.DurationHours),
-            estimatedStopCount,
-            ClassifyBudget(request.BudgetMax),
-            budgetPerStop);
-    }
+    public NormalizedTripCriteria Normalize(TripRequestDto request) => new(
+        ClassifyDuration(request.DurationHours),
+        ClassifyBudget(request.BudgetMax),
+        request.BudgetMax);
 
     private static TripDurationCategory ClassifyDuration(int hours) => hours switch
     {
@@ -26,13 +16,6 @@ public sealed class TripCriteriaNormalizationService : ITripCriteriaNormalizatio
         <= 6 => TripDurationCategory.HalfDay,
         _ => TripDurationCategory.FullDay
     };
-
-    private static int EstimateStopCount(int hours)
-    {
-        var totalMinutes = hours * 60;
-        var minutesPerStop = AverageMinutesPerStop + AverageMinutesTravelBetweenStops;
-        return Math.Max(1, totalMinutes / minutesPerStop);
-    }
 
     private static BudgetTier ClassifyBudget(decimal budgetMax) => budgetMax switch
     {

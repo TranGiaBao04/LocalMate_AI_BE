@@ -35,7 +35,8 @@ public sealed class TripService(
             trip.UpdatedAt,
             trip.StationName,
             trip.EstimatedBudget,
-            trip.FinalizedAt)).ToArray());
+            trip.FinalizedAt,
+            trip.PlannedStartAt is { } plannedStartAt ? DateOnly.FromDateTime(plannedStartAt) : null)).ToArray());
     }
 
     public async Task<SaveTripResult> SaveTripAsync(
