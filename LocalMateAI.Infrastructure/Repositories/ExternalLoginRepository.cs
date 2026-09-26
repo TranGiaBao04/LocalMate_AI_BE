@@ -8,10 +8,10 @@ namespace LocalMateAI.Infrastructure.Repositories;
 
 public sealed class ExternalLoginRepository(AppDbContext dbContext) : IExternalLoginRepository
 {
-    private const string ExternalIdentityConstraintName = "PK_USER_EXTERNAL_LOGINS";
+    private const string ExternalIdentityConstraintName = "PK_UserExternalLogins";
     private const string UserProviderConstraintName =
-        "UX_USER_EXTERNAL_LOGINS_UserId_Provider";
-    private const string UserEmailConstraintName = "UX_USERS_Email";
+        "UX_UserExternalLogins_UserId_Provider";
+    private const string UserEmailConstraintName = "UX_Users_Email";
 
     public Task<User?> GetUserByExternalLoginAsync(
         string provider,

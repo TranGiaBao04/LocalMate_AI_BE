@@ -3,6 +3,7 @@ using System;
 using LocalMateAI.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NetTopologySuite.Geometries;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace LocalMateAI.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260926120202_AddEmailOtp")]
+    partial class AddEmailOtp
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -23,8 +26,6 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "postgis");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
-
-            modelBuilder.HasSequence("PaymentOrderCodeSequence");
 
             modelBuilder.Entity("LocalMateAI.Domain.Entities.CuratedItinerary", b =>
                 {
@@ -266,67 +267,6 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Location"), "gist");
 
                     b.ToTable("MetroStations");
-                });
-
-            modelBuilder.Entity("LocalMateAI.Domain.Entities.PaymentOrder", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<decimal>("Amount")
-                        .HasColumnType("numeric(12,0)");
-
-                    b.Property<string>("CheckoutUrl")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("ExpiresAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("PaidAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("PlanCode")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<long>("ProviderOrderCode")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasDefaultValueSql("nextval('\"PaymentOrderCodeSequence\"')");
-
-                    b.Property<string>("QrCode")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<string>("Type")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ProviderOrderCode")
-                        .IsUnique()
-                        .HasDatabaseName("UX_PaymentOrders_ProviderOrderCode");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("PaymentOrders", (string)null);
                 });
 
             modelBuilder.Entity("LocalMateAI.Domain.Entities.PendingRegistration", b =>
@@ -621,39 +561,6 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
                     b.ToTable("TripTags", (string)null);
                 });
 
-            modelBuilder.Entity("LocalMateAI.Domain.Entities.UsageEvent", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("TripId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Type")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("TripId");
-
-                    b.HasIndex("UserId", "Type", "CreatedAt")
-                        .HasDatabaseName("IX_UsageEvents_UserId_Type_CreatedAt");
-
-                    b.ToTable("UsageEvents", (string)null);
-                });
-
             modelBuilder.Entity("LocalMateAI.Domain.Entities.User", b =>
                 {
                     b.Property<Guid>("Id")
@@ -741,41 +648,6 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
                     b.ToTable("UserPreferenceTags", (string)null);
                 });
 
-            modelBuilder.Entity("LocalMateAI.Domain.Entities.UserSubscription", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("EndsAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("PlanCode")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<DateTime>("StartsAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId", "PlanCode")
-                        .IsUnique()
-                        .HasDatabaseName("UX_UserSubscriptions_UserId_PlanCode");
-
-                    b.ToTable("UserSubscriptions", (string)null);
-                });
-
             modelBuilder.Entity("LocalMateAI.Domain.Entities.CuratedItineraryItem", b =>
                 {
                     b.HasOne("LocalMateAI.Domain.Entities.CuratedItinerary", "CuratedItinerary")
@@ -829,15 +701,6 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
                     b.Navigation("Place");
 
                     b.Navigation("Trip");
-                });
-
-            modelBuilder.Entity("LocalMateAI.Domain.Entities.PaymentOrder", b =>
-                {
-                    b.HasOne("LocalMateAI.Domain.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
                 });
 
             modelBuilder.Entity("LocalMateAI.Domain.Entities.PlaceReview", b =>
@@ -913,21 +776,6 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
                     b.Navigation("Tag");
                 });
 
-            modelBuilder.Entity("LocalMateAI.Domain.Entities.UsageEvent", b =>
-                {
-                    b.HasOne("LocalMateAI.Domain.Entities.Trip", null)
-                        .WithMany()
-                        .HasForeignKey("TripId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("LocalMateAI.Domain.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("LocalMateAI.Domain.Entities.UserExternalLogin", b =>
                 {
                     b.HasOne("LocalMateAI.Domain.Entities.User", null)
@@ -955,15 +803,6 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
                         .HasConstraintName("FK_UserPreferenceTags_Users_UserId");
 
                     b.Navigation("Tag");
-                });
-
-            modelBuilder.Entity("LocalMateAI.Domain.Entities.UserSubscription", b =>
-                {
-                    b.HasOne("LocalMateAI.Domain.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
                 });
 
             modelBuilder.Entity("LocalMateAI.Domain.Entities.CuratedItinerary", b =>
