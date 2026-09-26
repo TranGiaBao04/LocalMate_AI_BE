@@ -302,7 +302,7 @@ public sealed class TripItemReplacementServiceTests
             Guid tripId,
             Guid itemId,
             Guid userId,
-            Func<IReadOnlyList<TimelineItemSnapshot>, IReadOnlyList<TimelineItemUpdate>> recalculateTimeline,
+            Func<TimelineRecalculationInput, IReadOnlyList<TimelineItemUpdate>> recalculateTimeline,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
     }

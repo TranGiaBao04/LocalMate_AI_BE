@@ -1,77 +1,74 @@
 using LocalMateAI.Application.DTOs.Trips;
 using LocalMateAI.Application.Services;
+using LocalMateAI.Domain.Enums;
 
 namespace LocalMateAI.Tests;
 
 public sealed class ItineraryTimelineRecalculatorTests
 {
+    private static readonly TimeOnly Start = new(8, 0);
     private readonly ItineraryTimelineRecalculator _sut = new();
 
+    // Mọi item mặc định cùng một vị trí nên mỗi lần di chuyển tốn tối thiểu 1 phút.
+
     [Fact]
-    public void Recalculate_RemovedMiddleItem_ShiftsLaterItemsUp()
+    public void Recalculate_RemovedMiddleItem_ShiftsLaterItemsUpWithTravelTime()
     {
-        // Đã xoá item OrderIndex 1 (09:30) khỏi lịch 08:00 / 09:30 / 11:00 / 12:30
+        // Đã xoá item OrderIndex 1 khỏi lịch 08:00 / 09:30 / 11:00 / 12:30, mỗi chặng 60'
         var first = Snap(order: 0, hour: 8, minute: 0);
         var third = Snap(order: 2, hour: 11, minute: 0);
         var fourth = Snap(order: 3, hour: 12, minute: 30);
 
-        var updates = _sut.Recalculate([first, third, fourth]);
+        var updates = Recalculate([first, third, fourth]);
 
         Assert.Equal(
             new[]
             {
-                new TimelineItemUpdate(third.ItemId, 1, new TimeOnly(9, 30)),
-                new TimelineItemUpdate(fourth.ItemId, 2, new TimeOnly(11, 0))
+                new TimelineItemUpdate(third.ItemId, 1, new TimeOnly(9, 1)),
+                new TimelineItemUpdate(fourth.ItemId, 2, new TimeOnly(10, 2))
             },
             updates.ToArray());
     }
 
     [Fact]
-    public void Recalculate_RemovedFirstItem_KeepsNewFirstItemTime()
+    public void Recalculate_RemovedFirstItem_NewFirstItemInheritsTripStartTime()
     {
+        // Chặng đầu (08:00) bị xoá: chặng thứ hai lên đầu và nhận mốc 08:00
         var second = Snap(order: 1, hour: 9, minute: 30);
         var third = Snap(order: 2, hour: 11, minute: 0);
 
-        var updates = _sut.Recalculate([second, third]);
+        var updates = Recalculate([second, third], start: Start);
 
         Assert.Equal(
             new[]
             {
-                new TimelineItemUpdate(second.ItemId, 0, new TimeOnly(9, 30)),
-                new TimelineItemUpdate(third.ItemId, 1, new TimeOnly(11, 0))
+                new TimelineItemUpdate(second.ItemId, 0, new TimeOnly(8, 0)),
+                new TimelineItemUpdate(third.ItemId, 1, new TimeOnly(9, 1))
             },
             updates.ToArray());
     }
 
     [Fact]
-    public void Recalculate_RemovedLastItem_ReturnsNoUpdates()
+    public void Recalculate_RemovedLastItem_ReturnsNoUpdatesWhenScheduleAlreadyConsistent()
     {
         var first = Snap(order: 0, hour: 8, minute: 0);
-        var second = Snap(order: 1, hour: 9, minute: 30);
+        var second = Snap(order: 1, hour: 9, minute: 1);
 
-        Assert.Empty(_sut.Recalculate([first, second]));
+        Assert.Empty(Recalculate([first, second]));
     }
 
     [Fact]
-    public void Recalculate_GapBetweenItems_ClosesGap()
+    public void Recalculate_UsesDistanceAndTravelMode()
     {
-        // Item 0 kéo dài 60' (08:00-09:00), item 1 bắt đầu 09:30 → dồn sát về 09:00
-        var first = Snap(order: 0, hour: 8, minute: 0, duration: 60);
-        var second = Snap(order: 1, hour: 9, minute: 30);
+        // Hai chặng cách ~2,89 km đường bộ, mỗi chặng 30'
+        var first = Snap(order: 0, hour: 8, minute: 0, duration: 30, latitude: 10.770);
+        var second = Snap(order: 1, hour: 9, minute: 0, duration: 30, latitude: 10.790);
 
-        var update = Assert.Single(_sut.Recalculate([first, second]));
+        var auto = Assert.Single(Recalculate([first, second], mode: TravelMode.Auto));
+        var walking = Assert.Single(Recalculate([first, second], mode: TravelMode.Walking));
 
-        Assert.Equal(new TimelineItemUpdate(second.ItemId, 1, new TimeOnly(9, 0)), update);
-    }
-
-    [Fact]
-    public void Recalculate_OverlappingItems_NeverPushesLater()
-    {
-        // Item 0 kết thúc 10:00 nhưng item 1 bắt đầu 09:00 (chồng lấn) → giữ 09:00, không đẩy muộn
-        var first = Snap(order: 0, hour: 8, minute: 0, duration: 120);
-        var second = Snap(order: 1, hour: 9, minute: 0);
-
-        Assert.Empty(_sut.Recalculate([first, second]));
+        Assert.Equal(new TimeOnly(8, 38), auto.ScheduledTime);   // 30' + 8' xe máy
+        Assert.Equal(new TimeOnly(9, 7), walking.ScheduledTime); // 30' + 37' đi bộ
     }
 
     [Fact]
@@ -80,9 +77,9 @@ public sealed class ItineraryTimelineRecalculatorTests
         var first = Snap(order: 0, hour: 8, minute: 0);
         var third = Snap(order: 2, hour: 11, minute: 0);
 
-        var update = Assert.Single(_sut.Recalculate([third, first]));
+        var update = Assert.Single(Recalculate([third, first]));
 
-        Assert.Equal(new TimelineItemUpdate(third.ItemId, 1, new TimeOnly(9, 30)), update);
+        Assert.Equal(new TimelineItemUpdate(third.ItemId, 1, new TimeOnly(9, 1)), update);
     }
 
     [Fact]
@@ -90,7 +87,7 @@ public sealed class ItineraryTimelineRecalculatorTests
     {
         var only = Snap(order: 3, hour: 14, minute: 0);
 
-        var update = Assert.Single(_sut.Recalculate([only]));
+        var update = Assert.Single(Recalculate([only], start: new TimeOnly(14, 0)));
 
         Assert.Equal(new TimelineItemUpdate(only.ItemId, 0, new TimeOnly(14, 0)), update);
     }
@@ -98,9 +95,16 @@ public sealed class ItineraryTimelineRecalculatorTests
     [Fact]
     public void Recalculate_EmptyInput_ReturnsEmpty()
     {
-        Assert.Empty(_sut.Recalculate([]));
+        Assert.Empty(Recalculate([]));
     }
 
-    private static TimelineItemSnapshot Snap(int order, int hour, int minute, int duration = 90) =>
-        new(Guid.NewGuid(), order, new TimeOnly(hour, minute), duration);
+    private IReadOnlyList<TimelineItemUpdate> Recalculate(
+        IReadOnlyList<TimelineItemSnapshot> remaining,
+        TimeOnly? start = null,
+        TravelMode mode = TravelMode.Auto) =>
+        _sut.Recalculate(new TimelineRecalculationInput(remaining, start ?? Start, mode));
+
+    private static TimelineItemSnapshot Snap(
+        int order, int hour, int minute, int duration = 60, double latitude = 10.770) =>
+        new(Guid.NewGuid(), order, new TimeOnly(hour, minute), duration, latitude, 106.70);
 }

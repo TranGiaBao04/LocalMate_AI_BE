@@ -1,4 +1,5 @@
 using LocalMateAI.Domain.Entities;
+using LocalMateAI.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -12,6 +13,15 @@ public sealed class TripConfiguration : IEntityTypeConfiguration<Trip>
             .HasConversion<string>()
             .HasMaxLength(20)
             .IsRequired();
+
+        builder.Property(trip => trip.TravelMode)
+            .HasConversion<string>()
+            .HasMaxLength(20)
+            .IsRequired()
+            .HasDefaultValue(TravelMode.Auto);
+
+        builder.Property(trip => trip.PlannedStartAt)
+            .HasColumnType("timestamp without time zone");
 
         builder.Property(trip => trip.BudgetMin)
             .HasColumnType("numeric(12,0)");

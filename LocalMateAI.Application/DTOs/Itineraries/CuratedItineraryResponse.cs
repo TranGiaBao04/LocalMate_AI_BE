@@ -8,4 +8,5 @@ public sealed record CuratedItineraryResponse(
     int EstimatedDurationMinutes,
     decimal EstimatedCostMin,
     decimal EstimatedCostMax,
-    IReadOnlyList<CuratedItineraryItemResponse> Items);
+    IReadOnlyList<CuratedItineraryItemResponse> Items,
+    string? StationName = null);

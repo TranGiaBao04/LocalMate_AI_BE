@@ -15,4 +15,8 @@ public sealed record TripItemResponse(
     decimal EstimatedBudget,
     string? Reasoning,
     bool IsVisited,
-    DateTimeOffset? VisitedAt);
+    DateTimeOffset? VisitedAt,
+    int? TravelMinutesFromPrevious, // suy ra từ khoảng trống giờ của lịch; null ở chặng đầu
+    int? DistanceMetersFromPrevious,
+    int? WalkingMinutes,
+    int? MotorbikeMinutes);

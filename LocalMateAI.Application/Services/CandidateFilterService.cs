@@ -10,20 +10,19 @@ public sealed class CandidateFilterService : ICandidateFilterService
         IReadOnlyList<PlaceCandidateDto> candidates,
         NormalizedTripCriteria criteria)
     {
-        var budgetPerStop = criteria.BudgetPerStop;
         var excluded = new List<ExcludedCandidateDto>();
 
+        // Một địa điểm không được vượt tổng ngân sách; tổng cả lịch do ItineraryScheduler giữ trong ngân sách.
         var passed = candidates
             .Where(candidate =>
             {
-                var isFree = candidate.EstimatedCostMax <= 0;
-                var withinBudget = candidate.EstimatedCostMax <= budgetPerStop;
-                if (!isFree && !withinBudget)
+                var withinBudget = candidate.EstimatedCostMax <= criteria.BudgetMax;
+                if (!withinBudget)
                 {
                     excluded.Add(new ExcludedCandidateDto(
                         candidate.PlaceId, candidate.PlaceName, "budget"));
                 }
-                return isFree || withinBudget;
+                return withinBudget;
             })
             .ToList();
 

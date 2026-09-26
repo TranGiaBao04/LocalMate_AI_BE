@@ -11,13 +11,19 @@ public sealed class TripOriginResolverService(IGeoService geoService) : ITripOri
     // Đây là cổng lọc thô, không phải quãng đường thật; nếu sau này có API chỉ đường, đổi sang tính theo phút.
     private const double MaxServiceAreaDistanceMeters = 12000;
 
-    public async Task<TripOriginResolution?> ResolveAsync(
+    public Task<TripOriginResolution?> ResolveAsync(
         TripRequestDto request,
+        CancellationToken cancellationToken = default) =>
+        ResolveAsync(request.StartLatitude, request.StartLongitude, cancellationToken);
+
+    public async Task<TripOriginResolution?> ResolveAsync(
+        double latitude,
+        double longitude,
         CancellationToken cancellationToken = default)
     {
         var nearestStation = await geoService.FindNearestStationAsync(
-            request.StartLatitude,
-            request.StartLongitude,
+            latitude,
+            longitude,
             cancellationToken);
 
         if (nearestStation is null)

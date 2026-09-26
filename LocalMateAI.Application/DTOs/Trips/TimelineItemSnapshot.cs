@@ -4,4 +4,6 @@ public sealed record TimelineItemSnapshot(
     Guid ItemId,
     int OrderIndex,
     TimeOnly ScheduledTime,
-    int EstimatedDurationMinutes);
+    int EstimatedDurationMinutes,
+    double Latitude,
+    double Longitude);

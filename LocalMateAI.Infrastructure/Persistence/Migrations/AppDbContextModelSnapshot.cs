@@ -483,6 +483,9 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("FinalizedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTime?>("PlannedStartAt")
+                        .HasColumnType("timestamp without time zone");
+
                     b.Property<double>("StartLatitude")
                         .HasColumnType("double precision");
 
@@ -493,6 +496,13 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
+
+                    b.Property<string>("TravelMode")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Auto");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");

@@ -66,7 +66,8 @@ public sealed class CuratedItineraryRepository(AppDbContext dbContext) : ICurate
                 item.OrderIndex,
                 item.Place.Location.Y,
                 item.Place.Location.X,
-                item.Place.EstimatedCostMax))
+                item.Place.EstimatedCostMax,
+                item.Place.Category))
             .ToListAsync(cancellationToken);
 
         return new CuratedItineraryForApplyReadModel(

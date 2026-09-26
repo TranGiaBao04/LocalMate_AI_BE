@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using FluentValidation;
 using LocalMateAI.API;
 using LocalMateAI.API.Middlewares;
@@ -88,7 +89,8 @@ var payOSConfiguration = builder.Configuration.GetSection(PayOSGatewayOptions.Se
 var configuredPayOSOptions =
     payOSConfiguration.Get<PayOSGatewayOptions>() ?? new PayOSGatewayOptions();
 
-builder.Services.AddControllers();
+builder.Services.AddControllers().AddJsonOptions(options =>
+    options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -192,6 +194,7 @@ builder.Services.AddScoped<ITripItemDeletionService, TripItemDeletionService>();
 builder.Services.AddScoped<ITripDetailService, TripDetailService>();
 builder.Services.AddScoped<ITripDeletionService, TripDeletionService>();
 builder.Services.AddScoped<ICuratedTripService, CuratedTripService>();
+builder.Services.AddScoped<ITripGenerationService, TripGenerationService>();
 builder.Services.AddScoped<IFinalizeTripCommand, FinalizeTripCommand>();
 builder.Services.AddScoped<IForkTripCommand, ForkTripCommand>();
 builder.Services.AddScoped<IFeedbackService, FeedbackService>();

@@ -13,4 +13,5 @@ public sealed record MyTripResponse(
     DateTime UpdatedAt,
     string? StationName,
     decimal EstimatedBudget,
-    DateTime? FinalizedAt);
+    DateTime? FinalizedAt,
+    DateOnly? PlannedDate = null);

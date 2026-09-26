@@ -15,4 +15,5 @@ public sealed record MyTripReadModel(
     DateTime UpdatedAt,
     string? StationName,
     decimal EstimatedBudget,
-    DateTime? FinalizedAt);
+    DateTime? FinalizedAt,
+    DateTime? PlannedStartAt = null);

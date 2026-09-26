@@ -95,7 +95,7 @@ public sealed class ItineraryItemRepository(AppDbContext dbContext) : IItinerary
         Guid tripId,
         Guid itemId,
         Guid userId,
-        Func<IReadOnlyList<TimelineItemSnapshot>, IReadOnlyList<TimelineItemUpdate>> recalculateTimeline,
+        Func<TimelineRecalculationInput, IReadOnlyList<TimelineItemUpdate>> recalculateTimeline,
         CancellationToken cancellationToken = default)
     {
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
@@ -105,17 +105,17 @@ public sealed class ItineraryItemRepository(AppDbContext dbContext) : IItinerary
             $"""SELECT 1 FROM "Trips" WHERE "Id" = {tripId} FOR UPDATE""",
             cancellationToken);
 
-        var tripStatus = await dbContext.Trips
+        var trip = await dbContext.Trips
             .AsNoTracking()
-            .Where(trip => trip.Id == tripId && trip.UserId == userId && trip.DeletedAt == null)
-            .Select(trip => (TripStatus?)trip.Status)
+            .Where(candidate => candidate.Id == tripId && candidate.UserId == userId && candidate.DeletedAt == null)
+            .Select(candidate => new { candidate.Status, candidate.TravelMode })
             .SingleOrDefaultAsync(cancellationToken);
-        if (tripStatus is null)
+        if (trip is null)
         {
             return new DeleteItineraryItemPersistenceResult(DeleteItineraryItemPersistenceStatus.NotFound);
         }
 
-        if (tripStatus == TripStatus.Finalized)
+        if (trip.Status == TripStatus.Finalized)
         {
             return new DeleteItineraryItemPersistenceResult(DeleteItineraryItemPersistenceStatus.TripFinalized);
         }
@@ -128,7 +128,9 @@ public sealed class ItineraryItemRepository(AppDbContext dbContext) : IItinerary
                 item.Id,
                 item.OrderIndex,
                 item.ScheduledTime,
-                item.EstimatedDurationMinutes))
+                item.EstimatedDurationMinutes,
+                item.Place.Location.Y,
+                item.Place.Location.X))
             .ToListAsync(cancellationToken);
 
         if (items.All(item => item.ItemId != itemId))
@@ -145,7 +147,11 @@ public sealed class ItineraryItemRepository(AppDbContext dbContext) : IItinerary
             .Where(item => item.Id == itemId && item.TripId == tripId)
             .ExecuteDeleteAsync(cancellationToken);
 
-        var updates = recalculateTimeline(items.Where(item => item.ItemId != itemId).ToList());
+        // items[0] là chặng đầu trước khi xoá: nếu chính nó bị xoá, chặng đầu mới thừa hưởng giờ này.
+        var updates = recalculateTimeline(new TimelineRecalculationInput(
+            items.Where(item => item.ItemId != itemId).ToList(),
+            items[0].ScheduledTime,
+            trip.TravelMode));
 
         // Mọi item chỉ giảm OrderIndex nên cập nhật theo thứ tự tăng dần để không vi phạm unique (TripId, OrderIndex).
         var now = DateTime.UtcNow;

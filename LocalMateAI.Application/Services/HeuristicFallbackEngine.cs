@@ -43,7 +43,9 @@ public sealed class HeuristicFallbackEngine(
         }
 
         // matched.Candidates đã được xếp hạng (score desc, distance asc) & cắt đúng stopCount.
-        var stops = FallbackItineraryBuilder.BuildStops(matched.Candidates);
+        var stops = FallbackItineraryBuilder.BuildStops(
+            matched.Candidates, request.DurationHours, request.BudgetMax, request.TravelMode,
+            request.StartTime, new ScheduleOrigin(request.StartLatitude, request.StartLongitude));
 
         return new FallbackItineraryResult(
             FallbackItineraryStatus.Success,
