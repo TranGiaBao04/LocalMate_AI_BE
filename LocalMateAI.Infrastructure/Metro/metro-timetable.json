@@ -1,0 +1,85 @@
+{
+  "effectiveFrom": "2026-09-01",
+  "effectiveTo": null,
+  "source": "Tạm theo báo NLĐ/PLO (lịch 02/01–31/05/2026) và MRTDi; số phút giữa các ga là ước lượng, chưa đo thực tế.",
+  "precision": "Headway",
+  "notice": null,
+  "stationOffsets": [
+    { "stationOrder": 1,  "minutesTowardSuoiTien": 0,  "minutesTowardBenThanh": 30 },
+    { "stationOrder": 2,  "minutesTowardSuoiTien": 2,  "minutesTowardBenThanh": 28 },
+    { "stationOrder": 3,  "minutesTowardSuoiTien": 4,  "minutesTowardBenThanh": 26 },
+    { "stationOrder": 4,  "minutesTowardSuoiTien": 7,  "minutesTowardBenThanh": 23 },
+    { "stationOrder": 5,  "minutesTowardSuoiTien": 9,  "minutesTowardBenThanh": 21 },
+    { "stationOrder": 6,  "minutesTowardSuoiTien": 11, "minutesTowardBenThanh": 19 },
+    { "stationOrder": 7,  "minutesTowardSuoiTien": 13, "minutesTowardBenThanh": 17 },
+    { "stationOrder": 8,  "minutesTowardSuoiTien": 16, "minutesTowardBenThanh": 14 },
+    { "stationOrder": 9,  "minutesTowardSuoiTien": 18, "minutesTowardBenThanh": 12 },
+    { "stationOrder": 10, "minutesTowardSuoiTien": 20, "minutesTowardBenThanh": 10 },
+    { "stationOrder": 11, "minutesTowardSuoiTien": 23, "minutesTowardBenThanh": 7 },
+    { "stationOrder": 12, "minutesTowardSuoiTien": 26, "minutesTowardBenThanh": 4 },
+    { "stationOrder": 13, "minutesTowardSuoiTien": 28, "minutesTowardBenThanh": 2 },
+    { "stationOrder": 14, "minutesTowardSuoiTien": 30, "minutesTowardBenThanh": 0 }
+  ],
+  "services": [
+    {
+      "days": ["Monday", "Tuesday", "Wednesday", "Thursday"],
+      "direction": "TowardSuoiTien",
+      "firstDeparture": "05:00",
+      "lastDeparture": "22:00",
+      "headways": [
+        { "from": "05:00", "to": "06:00", "minutes": 12 },
+        { "from": "06:00", "to": "08:00", "minutes": 8 },
+        { "from": "08:00", "to": "11:00", "minutes": 12 },
+        { "from": "11:00", "to": "12:00", "minutes": 8 },
+        { "from": "12:00", "to": "15:30", "minutes": 12 },
+        { "from": "15:30", "to": "18:00", "minutes": 8 },
+        { "from": "18:00", "to": "22:00", "minutes": 12 }
+      ]
+    },
+    {
+      "days": ["Monday", "Tuesday", "Wednesday", "Thursday"],
+      "direction": "TowardBenThanh",
+      "firstDeparture": "05:00",
+      "lastDeparture": "22:00",
+      "headways": [
+        { "from": "05:00", "to": "06:00", "minutes": 12 },
+        { "from": "06:00", "to": "08:00", "minutes": 8 },
+        { "from": "08:00", "to": "11:00", "minutes": 12 },
+        { "from": "11:00", "to": "12:00", "minutes": 8 },
+        { "from": "12:00", "to": "15:30", "minutes": 12 },
+        { "from": "15:30", "to": "18:00", "minutes": 8 },
+        { "from": "18:00", "to": "22:00", "minutes": 12 }
+      ]
+    },
+    {
+      "days": ["Friday", "Saturday", "Sunday"],
+      "direction": "TowardSuoiTien",
+      "firstDeparture": "05:00",
+      "lastDeparture": "23:00",
+      "headways": [
+        { "from": "05:00", "to": "06:00", "minutes": 12 },
+        { "from": "06:00", "to": "08:00", "minutes": 8 },
+        { "from": "08:00", "to": "11:00", "minutes": 12 },
+        { "from": "11:00", "to": "12:00", "minutes": 8 },
+        { "from": "12:00", "to": "15:30", "minutes": 12 },
+        { "from": "15:30", "to": "18:00", "minutes": 8 },
+        { "from": "18:00", "to": "23:00", "minutes": 12 }
+      ]
+    },
+    {
+      "days": ["Friday", "Saturday", "Sunday"],
+      "direction": "TowardBenThanh",
+      "firstDeparture": "05:00",
+      "lastDeparture": "23:00",
+      "headways": [
+        { "from": "05:00", "to": "06:00", "minutes": 12 },
+        { "from": "06:00", "to": "08:00", "minutes": 8 },
+        { "from": "08:00", "to": "11:00", "minutes": 12 },
+        { "from": "11:00", "to": "12:00", "minutes": 8 },
+        { "from": "12:00", "to": "15:30", "minutes": 12 },
+        { "from": "15:30", "to": "18:00", "minutes": 8 },
+        { "from": "18:00", "to": "23:00", "minutes": 12 }
+      ]
+    }
+  ]
+}
