@@ -11,6 +11,7 @@ using LocalMateAI.Application.Services;
 using LocalMateAI.Application.Validators.Trips;
 using LocalMateAI.Domain.Enums;
 using LocalMateAI.Infrastructure.Email;
+using LocalMateAI.Infrastructure.Metro;
 using LocalMateAI.Infrastructure.Persistence;
 using LocalMateAI.Infrastructure.Payments;
 using LocalMateAI.Infrastructure.Repositories;
@@ -187,6 +188,9 @@ builder.Services.AddScoped<IPlaceQueryService, PlaceQueryService>();
 builder.Services.AddScoped<IAdminPlaceService, AdminPlaceService>();
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<IMasterDataService, MasterDataService>();
+// Đọc + kiểm tra metro-timetable.json ngay lúc khởi động: file sai thì app không chạy.
+builder.Services.AddSingleton<IMetroTimetableSource>(EmbeddedMetroTimetableSource.Load());
+builder.Services.AddScoped<IMetroTimetableService, MetroTimetableService>();
 builder.Services.AddScoped<ICuratedItineraryRepository, CuratedItineraryRepository>();
 builder.Services.AddScoped<ICuratedItineraryService, CuratedItineraryService>();
 builder.Services.AddValidatorsFromAssemblyContaining<TripRequestValidator>();

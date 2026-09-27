@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Email\Templates\*.liquid" LogicalName="EmailTemplates.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Metro\metro-timetable.json" LogicalName="MetroTimetable.metro-timetable.json" />
   </ItemGroup>
 
   <ItemGroup>
