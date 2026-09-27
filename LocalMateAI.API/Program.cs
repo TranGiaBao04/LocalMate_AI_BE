@@ -4,6 +4,7 @@ using FluentValidation;
 using LocalMateAI.API;
 using LocalMateAI.API.Middlewares;
 using LocalMateAI.Application.Commands;
+using LocalMateAI.Application.Interfaces.Payments;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Interfaces.Services;
 using LocalMateAI.Application.Services;
@@ -11,6 +12,7 @@ using LocalMateAI.Application.Validators.Trips;
 using LocalMateAI.Domain.Enums;
 using LocalMateAI.Infrastructure.Email;
 using LocalMateAI.Infrastructure.Persistence;
+using LocalMateAI.Infrastructure.Payments;
 using LocalMateAI.Infrastructure.Repositories;
 using LocalMateAI.Infrastructure.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -19,6 +21,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
+using PayOS;
 using Serilog;
 
 try
@@ -83,6 +86,10 @@ if (googleAuthValidationResult.Failed)
         googleAuthValidationResult.Failures);
 }
 
+var payOSConfiguration = builder.Configuration.GetSection(PayOSGatewayOptions.SectionName);
+var configuredPayOSOptions =
+    payOSConfiguration.Get<PayOSGatewayOptions>() ?? new PayOSGatewayOptions();
+
 builder.Services.AddControllers().AddJsonOptions(options =>
     options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddEndpointsApiExplorer();
@@ -115,6 +122,7 @@ builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.Configure<JwtOptions>(jwtConfiguration);
 builder.Services.Configure<GoogleAuthOptions>(googleAuthConfiguration);
+builder.Services.Configure<PayOSGatewayOptions>(payOSConfiguration);
 // Cấu hình OTP/SMTP được kiểm tra lúc dùng (không chặn khởi động) để ai chưa có App Password vẫn chạy được API.
 builder.Services.Configure<OtpOptions>(builder.Configuration.GetSection(OtpOptions.SectionName));
 builder.Services.AddSingleton<IValidateOptions<OtpOptions>, OtpOptionsValidator>();
@@ -143,6 +151,34 @@ builder.Services.AddScoped<IEmailOtpService, EmailOtpService>();
 builder.Services.AddScoped<IMetroStationRepository, MetroStationRepository>();
 builder.Services.AddScoped<IPlaceRepository, PlaceRepository>();
 builder.Services.AddScoped<ITripRepository, TripRepository>();
+builder.Services.AddScoped<ISubscriptionRepository, SubscriptionRepository>();
+builder.Services.AddScoped<IUsageEventRepository, UsageEventRepository>();
+builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
+builder.Services.AddScoped<IPaymentOrderRepository, PaymentOrderRepository>();
+builder.Services.AddScoped<IPaymentOperationExecutor, PaymentOperationExecutor>();
+builder.Services.AddScoped<IPaymentSettlementExecutor, PaymentSettlementExecutor>();
+builder.Services.AddScoped<ITripFinalizeQuotaExecutor, TripFinalizeQuotaExecutor>();
+builder.Services.AddScoped<ITripGenerationQuotaExecutor, TripGenerationQuotaExecutor>();
+builder.Services.AddScoped<IPaymentService, PaymentService>();
+builder.Services.AddScoped<IPaymentSettlementService, PaymentSettlementService>();
+builder.Services.AddScoped<IPaymentWebhookService, PaymentWebhookService>();
+if (configuredPayOSOptions.IsComplete())
+{
+    builder.Services.AddSingleton(configuredPayOSOptions);
+    builder.Services.AddSingleton(new PayOSClient(new PayOSOptions
+    {
+        ClientId = configuredPayOSOptions.ClientId,
+        ApiKey = configuredPayOSOptions.ApiKey,
+        ChecksumKey = configuredPayOSOptions.ChecksumKey,
+        LogLevel = LogLevel.None
+    }));
+    builder.Services.AddScoped<IPaymentGateway, PayOSPaymentGateway>();
+}
+else
+{
+    builder.Services.AddScoped<IPaymentGateway, UnavailablePaymentGateway>();
+}
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<IItineraryItemRepository, ItineraryItemRepository>();
 builder.Services.AddScoped<IFeedbackRepository, FeedbackRepository>();
 builder.Services.AddScoped<IPlaceReviewRepository, PlaceReviewRepository>();
@@ -150,7 +186,6 @@ builder.Services.AddScoped<IGeoService, GeoService>();
 builder.Services.AddScoped<IPlaceQueryService, PlaceQueryService>();
 builder.Services.AddScoped<IAdminPlaceService, AdminPlaceService>();
 builder.Services.AddMemoryCache();
-builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<IMasterDataService, MasterDataService>();
 builder.Services.AddScoped<ICuratedItineraryRepository, CuratedItineraryRepository>();
 builder.Services.AddScoped<ICuratedItineraryService, CuratedItineraryService>();

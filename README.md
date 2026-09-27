@@ -247,6 +247,16 @@ cd LocalMateAI.API
 dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Host=localhost;Port=5433;Database=localmateai;Username=localmate;Password=<mật_khẩu_.env>"
 ```
 
+#### Cấu hình PayOS
+
+Payment gateway chỉ được kích hoạt khi đủ `PayOS:ClientId`, `PayOS:ApiKey`,
+`PayOS:ChecksumKey`, `PayOS:ReturnUrl` và `PayOS:CancelUrl`. Có thể cấu hình bằng
+User Secrets hoặc biến môi trường tương ứng `PayOS__*` trong `.env`; không commit
+giá trị thật. Nếu cấu hình thiếu, API vẫn khởi động và checkout trả
+`payment_gateway_unavailable`. `ReturnUrl`/`CancelUrl` chỉ dùng để điều hướng trình
+duyệt; chỉ webhook PayOS đã xác minh hoặc reconciliation với provider mới được
+phép cập nhật quyền subscription.
+
 ### 5.6. Chạy migration để tạo database
 
 ```bash

@@ -57,6 +57,9 @@ public sealed class ForkTripCommandTests
 
     private sealed class FakeTripRepository(Trip? trip) : ITripRepository
     {
+        public Task<int> CountFinalizedByUserAsync(Guid userId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         public Task<Trip?> ForkTripAsync(
             Guid sourceTripId,
             Guid userId,

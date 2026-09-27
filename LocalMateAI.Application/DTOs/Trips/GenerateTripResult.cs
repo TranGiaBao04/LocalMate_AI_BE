@@ -6,14 +6,18 @@ public enum GenerateTripResultStatus
     ValidationFailed,
     InvalidTags,
     UserNotFound,
-    NoPlaces
+    NoPlaces,
+    QuotaExceeded
 }
 
 public sealed record GenerateTripResult(
     GenerateTripResultStatus Status,
     TripDetailResponse? Response = null,
     IReadOnlyDictionary<string, string[]>? ValidationErrors = null,
-    string? Reason = null) // NoPlaces: "OutOfServiceArea" | "InsufficientCandidates"
+    string? Reason = null, // NoPlaces: "OutOfServiceArea" | "InsufficientCandidates"
+    int? Used = null,
+    int? Limit = null,
+    DateTime? ResetAt = null)
 {
     public static GenerateTripResult Succeeded(TripDetailResponse response) =>
         new(GenerateTripResultStatus.Success, response);
@@ -27,4 +31,11 @@ public sealed record GenerateTripResult(
 
     public static GenerateTripResult NoSuitablePlaces(string reason) =>
         new(GenerateTripResultStatus.NoPlaces, Reason: reason);
+
+    public static GenerateTripResult QuotaExceeded(int used, int limit, DateTime resetAt) =>
+        new(
+            GenerateTripResultStatus.QuotaExceeded,
+            Used: used,
+            Limit: limit,
+            ResetAt: resetAt);
 }

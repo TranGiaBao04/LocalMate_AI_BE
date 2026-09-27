@@ -3,6 +3,8 @@ using LocalMateAI.Application.DTOs.Matching;
 using LocalMateAI.Application.DTOs.Trips;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Interfaces.Services;
+using LocalMateAI.Domain.Entities;
+using LocalMateAI.Domain.Enums;
 
 namespace LocalMateAI.Application.Services;
 
@@ -12,6 +14,9 @@ public sealed class TripGenerationService(
     ITagRepository tagRepository,
     IHeuristicFallbackEngine heuristicFallbackEngine,
     ITripRepository tripRepository,
+    ISubscriptionRepository subscriptionRepository,
+    IUsageEventRepository usageEventRepository,
+    ITripGenerationQuotaExecutor quotaExecutor,
     ITripDetailService tripDetailService,
     TimeProvider timeProvider) : ITripGenerationService
 {
@@ -65,7 +70,65 @@ public sealed class TripGenerationService(
         var plannedStartAt = TripTimingRules.ResolveStart(
             request.PlannedDate, request.StartTime, VietnamTime.Now(timeProvider));
         var trip = GeneratedTripBuilder.Build(userId, request, payload.Stops, tagIds, plannedStartAt);
-        await tripRepository.AddAsync(trip, cancellationToken);
+
+        var execution = await quotaExecutor.ExecuteForUserAsync(
+            userId,
+            async transactionCancellationToken =>
+            {
+                var nowUtc = timeProvider.GetUtcNow().UtcDateTime;
+                var subscriptions = await subscriptionRepository.GetByUserIdAsync(
+                    userId,
+                    transactionCancellationToken);
+                var effective = SubscriptionCatalog.ResolveEffectivePaid(subscriptions, nowUtc);
+                var plan = SubscriptionCatalog.Get(effective?.PlanCode ?? PlanCode.Free);
+
+                if (plan.GenerateLimit is { } limit)
+                {
+                    var month = VietnamMonthWindow.For(nowUtc);
+                    var used = await usageEventRepository.CountAsync(
+                        userId,
+                        UsageEventType.Generate,
+                        month.StartUtc,
+                        month.NextStartUtc,
+                        transactionCancellationToken);
+                    if (used >= limit)
+                    {
+                        return GeneratePersistenceResult.QuotaExceeded(used, limit, month.NextStartUtc);
+                    }
+                }
+
+                await tripRepository.AddAsync(trip, transactionCancellationToken);
+
+                if (plan.Code == PlanCode.Free)
+                {
+                    await usageEventRepository.AddAsync(
+                        new UsageEvent
+                        {
+                            UserId = userId,
+                            Type = UsageEventType.Generate,
+                            TripId = trip.Id,
+                            CreatedAt = nowUtc,
+                            UpdatedAt = nowUtc
+                        },
+                        transactionCancellationToken);
+                }
+
+                return GeneratePersistenceResult.Persisted();
+            },
+            cancellationToken);
+
+        if (!execution.PersistedUserExists || execution.Result is null)
+        {
+            return GenerateTripResult.MissingUser();
+        }
+
+        if (!execution.Result.IsPersisted)
+        {
+            return GenerateTripResult.QuotaExceeded(
+                execution.Result.Used!.Value,
+                execution.Result.Limit!.Value,
+                execution.Result.ResetAt!.Value);
+        }
 
         var detail = await tripDetailService.GetAsync(userId, trip.Id, cancellationToken);
         return detail.Status == GetTripDetailResultStatus.Success
@@ -78,4 +141,16 @@ public sealed class TripGenerationService(
         validationResult.Errors
             .GroupBy(error => error.PropertyName)
             .ToDictionary(group => group.Key, group => group.Select(error => error.ErrorMessage).ToArray());
+
+    private sealed record GeneratePersistenceResult(
+        bool IsPersisted,
+        int? Used = null,
+        int? Limit = null,
+        DateTime? ResetAt = null)
+    {
+        public static GeneratePersistenceResult Persisted() => new(true);
+
+        public static GeneratePersistenceResult QuotaExceeded(int used, int limit, DateTime resetAt) =>
+            new(false, used, limit, resetAt);
+    }
 }

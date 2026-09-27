@@ -66,6 +66,9 @@ public sealed class TripServiceFinalizeTests
 
     private sealed class NotSupportedTripRepository : ITripRepository
     {
+        public Task<int> CountFinalizedByUserAsync(Guid userId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         public Task<IReadOnlyList<MyTripReadModel>> GetByUserIdAsync(
             Guid userId,
             CancellationToken cancellationToken = default) =>

@@ -286,6 +286,9 @@ public sealed class CuratedTripServiceTests
 
     private sealed class FakeTripRepository : ITripRepository
     {
+        public Task<int> CountFinalizedByUserAsync(Guid userId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         public List<Trip> Added { get; } = [];
 
         public Task AddAsync(Trip trip, CancellationToken cancellationToken = default)

@@ -62,6 +62,9 @@ public sealed class TripDeletionServiceTests
 
     private sealed class FakeTripRepository(bool deleted) : ITripRepository
     {
+        public Task<int> CountFinalizedByUserAsync(Guid userId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         public int DeleteCalls { get; private set; }
         public Guid? LastTripId { get; private set; }
         public Guid? LastUserId { get; private set; }
