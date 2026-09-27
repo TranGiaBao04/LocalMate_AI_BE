@@ -336,7 +336,7 @@ public sealed class SubscriptionHttpContractTests
         public IReadOnlyList<SubscriptionPlanResponse> GetPlans() =>
         [
             new("Free", 0m, null, 1, 1),
-            new("TripPass", 49000m, 7, null, 3),
+            new("TripPass", 19000m, 7, null, 3),
             new("Membership", 59000m, 30, null, null)
         ];
 

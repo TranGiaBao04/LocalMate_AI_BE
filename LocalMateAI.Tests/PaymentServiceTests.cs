@@ -32,7 +32,7 @@ public sealed class PaymentServiceTests
     }
 
     [Theory]
-    [InlineData("TripPass", 49000)]
+    [InlineData("TripPass", 19000)]
     [InlineData("Membership", 59000)]
     public async Task Checkout_FreeUser_CreatesPurchaseUsingCatalogAmount(
         string planCode,
@@ -191,7 +191,7 @@ public sealed class PaymentServiceTests
     }
 
     [Theory]
-    [InlineData(PlanCode.TripPass, 49000)]
+    [InlineData(PlanCode.TripPass, 19000)]
     [InlineData(PlanCode.Membership, 59000)]
     public async Task Renew_UsesEffectivePaidPlan(PlanCode activePlan, decimal amount)
     {

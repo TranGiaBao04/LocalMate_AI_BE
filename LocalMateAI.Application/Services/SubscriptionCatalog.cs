@@ -15,7 +15,7 @@ public static class SubscriptionCatalog
     private static readonly IReadOnlyList<SubscriptionPlanDefinition> Plans = Array.AsReadOnly<SubscriptionPlanDefinition>(
     [
         new(PlanCode.Free, 0, null, 1, 1),
-        new(PlanCode.TripPass, 49_000, 7, null, 3),
+        new(PlanCode.TripPass, 19_000, 7, null, 3),
         new(PlanCode.Membership, 59_000, 30, null, null)
     ]);
 

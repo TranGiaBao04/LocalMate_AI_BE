@@ -13,7 +13,7 @@ public sealed class PaymentSettlementServiceTests
     private static readonly DateTime Now = new(2026, 10, 5, 4, 0, 0, DateTimeKind.Utc);
 
     [Theory]
-    [InlineData(PlanCode.TripPass, 7, 49000)]
+    [InlineData(PlanCode.TripPass, 7, 19000)]
     [InlineData(PlanCode.Membership, 30, 59000)]
     public async Task CorrectPayment_CreatesSubscriptionAndMarksOrderPaid(
         PlanCode planCode,
@@ -75,10 +75,10 @@ public sealed class PaymentSettlementServiceTests
     [Fact]
     public async Task AmountMismatch_FailsOrderWithoutEntitlement()
     {
-        var fixture = new Fixture(Order(PlanCode.TripPass, 49000));
+        var fixture = new Fixture(Order(PlanCode.TripPass, 19000));
 
         var result = await fixture.Service.ApplyVerifiedPaymentAsync(
-            new VerifiedPaymentNotification(fixture.Order.ProviderOrderCode, 48000, true));
+            new VerifiedPaymentNotification(fixture.Order.ProviderOrderCode, 18000, true));
 
         Assert.Equal(PaymentSettlementStatus.AmountMismatch, result.Status);
         Assert.Equal(PaymentOrderStatus.Failed, fixture.Order.Status);
@@ -89,10 +89,10 @@ public sealed class PaymentSettlementServiceTests
     [Fact]
     public async Task VerifiedNonSuccess_FailsOrderWithoutEntitlement()
     {
-        var fixture = new Fixture(Order(PlanCode.TripPass, 49000));
+        var fixture = new Fixture(Order(PlanCode.TripPass, 19000));
 
         var result = await fixture.Service.ApplyVerifiedPaymentAsync(
-            new VerifiedPaymentNotification(fixture.Order.ProviderOrderCode, 49000, false));
+            new VerifiedPaymentNotification(fixture.Order.ProviderOrderCode, 19000, false));
 
         Assert.Equal(PaymentSettlementStatus.NonSuccessful, result.Status);
         Assert.Equal(PaymentOrderStatus.Failed, fixture.Order.Status);
@@ -104,12 +104,12 @@ public sealed class PaymentSettlementServiceTests
     [InlineData(PaymentOrderStatus.Failed)]
     public async Task LateCorrectPayment_SettlesNonPaidOrder(PaymentOrderStatus initialStatus)
     {
-        var order = Order(PlanCode.TripPass, 49000);
+        var order = Order(PlanCode.TripPass, 19000);
         order.Status = initialStatus;
         var fixture = new Fixture(order);
 
         var result = await fixture.Service.ApplyVerifiedPaymentAsync(
-            new VerifiedPaymentNotification(order.ProviderOrderCode, 49000, true));
+            new VerifiedPaymentNotification(order.ProviderOrderCode, 19000, true));
 
         Assert.Equal(PaymentSettlementStatus.Settled, result.Status);
         Assert.Equal(PaymentOrderStatus.Paid, order.Status);
@@ -121,12 +121,12 @@ public sealed class PaymentSettlementServiceTests
     [InlineData(PaymentOrderType.Renewal)]
     public async Task OrderType_DoesNotChangeSettlementFormula(PaymentOrderType type)
     {
-        var order = Order(PlanCode.TripPass, 49000);
+        var order = Order(PlanCode.TripPass, 19000);
         order.Type = type;
         var fixture = new Fixture(order);
 
         await fixture.Service.ApplyVerifiedPaymentAsync(
-            new VerifiedPaymentNotification(order.ProviderOrderCode, 49000, true));
+            new VerifiedPaymentNotification(order.ProviderOrderCode, 19000, true));
 
         Assert.Equal(Now.AddDays(7), Assert.Single(fixture.Subscriptions.Items).EndsAt);
     }
@@ -157,10 +157,10 @@ public sealed class PaymentSettlementServiceTests
     [Fact]
     public async Task UnknownOrder_ReturnsSafeNoOp()
     {
-        var fixture = new Fixture(Order(PlanCode.TripPass, 49000));
+        var fixture = new Fixture(Order(PlanCode.TripPass, 19000));
 
         var result = await fixture.Service.ApplyVerifiedPaymentAsync(
-            new VerifiedPaymentNotification(999999, 49000, true));
+            new VerifiedPaymentNotification(999999, 19000, true));
 
         Assert.Equal(PaymentSettlementStatus.UnknownOrder, result.Status);
         Assert.Empty(fixture.Subscriptions.Items);

@@ -20,7 +20,7 @@ public sealed class SubscriptionServiceTests
 
         Assert.Equal(["Free", "TripPass", "Membership"], plans.Select(plan => plan.Code));
         Assert.Equal(0, plans[0].Price);
-        Assert.Equal(49_000, plans[1].Price);
+        Assert.Equal(19_000, plans[1].Price);
         Assert.Equal(59_000, plans[2].Price);
     }
 

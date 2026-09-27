@@ -11,7 +11,7 @@ public sealed class SubscriptionCatalogTests
     {
         Assert.Equal(3, SubscriptionCatalog.All.Count);
         Assert.Equal(new(PlanCode.Free, 0, null, 1, 1), SubscriptionCatalog.Get(PlanCode.Free));
-        Assert.Equal(new(PlanCode.TripPass, 49_000, 7, null, 3), SubscriptionCatalog.Get(PlanCode.TripPass));
+        Assert.Equal(new(PlanCode.TripPass, 19_000, 7, null, 3), SubscriptionCatalog.Get(PlanCode.TripPass));
         Assert.Equal(new(PlanCode.Membership, 59_000, 30, null, null), SubscriptionCatalog.Get(PlanCode.Membership));
         Assert.Throws<NotSupportedException>(() =>
             ((IList<SubscriptionPlanDefinition>)SubscriptionCatalog.All)[0] =
