@@ -10,6 +10,8 @@ namespace LocalMateAI.Application.Services;
 public sealed class PaymentSettlementService(
     IPaymentSettlementExecutor settlementExecutor,
     ISubscriptionRepository subscriptionRepository,
+    IUserRepository userRepository,
+    IEmailOutboxRepository emailOutboxRepository,
     TimeProvider timeProvider,
     ILogger<PaymentSettlementService> logger) : IPaymentSettlementService
 {
@@ -97,6 +99,28 @@ public sealed class PaymentSettlementService(
 
         order.Status = PaymentOrderStatus.Paid;
         order.PaidAt = nowUtc;
+        await EnqueueReceiptAsync(order, subscription, plan, nowUtc, cancellationToken);
         return new PaymentSettlementResult(PaymentSettlementStatus.Settled);
+    }
+
+    // Xếp biên nhận vào outbox trong CÙNG transaction thanh toán: commit thì chắc chắn có mail chờ gửi.
+    private async Task EnqueueReceiptAsync(
+        PaymentOrder order,
+        UserSubscription subscription,
+        SubscriptionPlanDefinition plan,
+        DateTime nowUtc,
+        CancellationToken cancellationToken)
+    {
+        var user = await userRepository.GetByIdAsync(order.UserId, cancellationToken);
+        if (user is null)
+        {
+            logger.LogWarning(
+                "Receipt email skipped for provider order {ProviderOrderCode}: user not found",
+                order.ProviderOrderCode);
+            return;
+        }
+
+        var entry = PaymentReceiptEmailBuilder.Build(user, order, subscription, plan, nowUtc);
+        await emailOutboxRepository.EnqueueAsync(entry, nowUtc, cancellationToken);
     }
 }

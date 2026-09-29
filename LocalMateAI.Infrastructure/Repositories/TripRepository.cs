@@ -280,6 +280,7 @@ public sealed class TripRepository(AppDbContext dbContext) : ITripRepository
                 item.Id,
                 item.PlaceId,
                 PlaceName = item.Place.Name,
+                item.Place.Address,
                 item.Place.Category,
                 item.Place.ImageUrl,
                 Latitude = item.Place.Location.Y,
@@ -348,7 +349,8 @@ public sealed class TripRepository(AppDbContext dbContext) : ITripRepository
                     item.EstimatedBudget,
                     item.Reasoning,
                     item.IsVisited,
-                    item.VisitedAt))
+                    item.VisitedAt,
+                    item.Address))
                 .ToList(),
             trip.CreatedAt,
             trip.UpdatedAt,
