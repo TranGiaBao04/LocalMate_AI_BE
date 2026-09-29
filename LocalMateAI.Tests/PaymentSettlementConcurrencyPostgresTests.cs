@@ -51,6 +51,10 @@ public sealed class PaymentSettlementConcurrencyPostgresTests
             Assert.Equal(PaymentOrderStatus.Paid, storedOrder.Status);
             Assert.Equal(Now, storedOrder.PaidAt);
             Assert.Equal(Now.AddDays(30), subscription.EndsAt);
+            var receipt = await verify.EmailOutboxMessages.AsNoTracking()
+                .SingleAsync(candidate => candidate.DeduplicationKey == $"payment-receipt:{order[0].Id}");
+            Assert.Equal(EmailOutboxStatus.Pending, receipt.Status);
+            Assert.Equal($"settlement-concurrency-{userId:N}@localmate.test", receipt.ToEmail);
         }
         finally
         {
@@ -101,6 +105,8 @@ public sealed class PaymentSettlementConcurrencyPostgresTests
             Assert.Equal(2, statuses.Count);
             Assert.All(statuses, status => Assert.Equal(PaymentOrderStatus.Paid, status));
             Assert.Equal(Now.AddDays(60), subscription.EndsAt);
+            Assert.Equal(2, await verify.EmailOutboxMessages.AsNoTracking()
+                .CountAsync(candidate => candidate.ToEmail == $"settlement-concurrency-{userId:N}@localmate.test"));
         }
         finally
         {
@@ -138,6 +144,9 @@ public sealed class PaymentSettlementConcurrencyPostgresTests
     private static async Task CleanupAsync(string connectionString, Guid userId)
     {
         await using var context = CreateContext(connectionString);
+        await context.EmailOutboxMessages
+            .Where(message => message.ToEmail == $"settlement-concurrency-{userId:N}@localmate.test")
+            .ExecuteDeleteAsync();
         await context.UserSubscriptions
             .Where(subscription => subscription.UserId == userId)
             .ExecuteDeleteAsync();
@@ -155,6 +164,8 @@ public sealed class PaymentSettlementConcurrencyPostgresTests
         var service = new PaymentSettlementService(
             new PaymentSettlementExecutor(context),
             new SubscriptionRepository(context),
+            new UserRepository(context),
+            new EmailOutboxRepository(context),
             new FixedTimeProvider(Now),
             NullLogger<PaymentSettlementService>.Instance);
         return new SettlementScope(context, service);

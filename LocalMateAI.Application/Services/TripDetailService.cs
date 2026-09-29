@@ -30,6 +30,12 @@ public sealed class TripDetailService(
             return GetTripDetailResult.MissingTrip();
         }
 
+        return GetTripDetailResult.Succeeded(ToResponse(trip));
+    }
+
+    // Dựng response từ read model (logic thuần). FinalizeTripCommand dùng lại để mail lịch trình khớp đúng số liệu API.
+    public static TripDetailResponse ToResponse(TripDetailReadModel trip)
+    {
         var stops = trip.Items
             .Select(item => new TripStopSnapshot(item.ScheduledTime, item.EstimatedDurationMinutes, item.EstimatedBudget))
             .ToList();
@@ -90,7 +96,7 @@ public sealed class TripDetailService(
 
         var travelMinutes = totals.TotalTravelMinutes + (originMinutes ?? 0);
 
-        return GetTripDetailResult.Succeeded(new TripDetailResponse(
+        return new TripDetailResponse(
             trip.Id,
             trip.Status.ToString(),
             trip.TravelMode.ToString(),
@@ -113,6 +119,6 @@ public sealed class TripDetailService(
             trip.FinalizedAt,
             trip.PlannedStartAt is { } date ? DateOnly.FromDateTime(date) : null,
             trip.PlannedStartAt is { } time ? TimeOnly.FromDateTime(time) : null,
-            originMinutes));
+            originMinutes);
     }
 }

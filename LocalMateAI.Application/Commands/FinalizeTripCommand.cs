@@ -14,6 +14,8 @@ public sealed class FinalizeTripCommand(
     ITripRepository tripRepository,
     ISubscriptionRepository subscriptionRepository,
     ITripFinalizeQuotaExecutor quotaExecutor,
+    IUserRepository userRepository,
+    IEmailOutboxRepository emailOutboxRepository,
     TimeProvider timeProvider) : IFinalizeTripCommand
 {
     public async Task<FinalizeTripResult> ExecuteAsync(
@@ -63,16 +65,38 @@ public sealed class FinalizeTripCommand(
                     tripId,
                     userId,
                     transactionCancellationToken);
+                if (!finalized)
+                {
+                    return FinalizeTripResult.MissingTrip();
+                }
 
-                return finalized
-                    ? FinalizeTripResult.Succeeded(
-                        new FinalizeTripResponse(tripId, TripStatus.Finalized.ToString()))
-                    : FinalizeTripResult.MissingTrip();
+                await EnqueueItineraryEmailAsync(userId, tripId, nowUtc, transactionCancellationToken);
+                return FinalizeTripResult.Succeeded(
+                    new FinalizeTripResponse(tripId, TripStatus.Finalized.ToString()));
             },
             cancellationToken);
 
         return execution.PersistedUserExists && execution.Result is not null
             ? execution.Result
             : FinalizeTripResult.MissingTrip();
+    }
+
+    // Xếp mail lịch trình vào outbox trong CÙNG transaction chốt trip: chốt thành công thì chắc chắn có mail chờ gửi.
+    private async Task EnqueueItineraryEmailAsync(
+        Guid userId,
+        Guid tripId,
+        DateTime nowUtc,
+        CancellationToken cancellationToken)
+    {
+        var user = await userRepository.GetByIdAsync(userId, cancellationToken);
+        var trip = await tripRepository.GetOwnedDetailAsync(tripId, userId, cancellationToken);
+        // Không xảy ra thực tế: user đang bị khoá và trip vừa được chốt trong cùng transaction.
+        if (user is null || trip is null)
+        {
+            return;
+        }
+
+        var entry = TripItineraryEmailBuilder.Build(user, trip, TripDetailService.ToResponse(trip));
+        await emailOutboxRepository.EnqueueAsync(entry, nowUtc, cancellationToken);
     }
 }
