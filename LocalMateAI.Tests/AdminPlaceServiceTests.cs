@@ -414,6 +414,28 @@ public sealed class AdminPlaceServiceTests
             EstimatedCostMax = 100
         };
 
+    [Fact]
+    public async Task Update_ConcurrencyConflict_ReturnsConflictResult()
+    {
+        var place = ExistingPlace(PlaceStatus.Active);
+        var repository = new FakePlaceRepository(place) { ThrowConcurrencyOnSave = true };
+        var service = new AdminPlaceService(repository, new CoordinatesValidationService());
+        var request = new UpdateAdminPlaceRequest(
+            "Updated",
+            "Description",
+            "Updated address",
+            10.78,
+            106.70,
+            PlaceCategory.Food,
+            0,
+            100,
+            null);
+
+        var result = await service.UpdateAsync(place.Id, request);
+
+        Assert.Equal(AdminPlaceOperationResultStatus.ConcurrencyConflict, result.Status);
+    }
+
     private sealed class FakePlaceRepository(
         Place? place = null,
         DeletePlacePersistenceResult deleteResult = DeletePlacePersistenceResult.Deleted) : IPlaceRepository
@@ -444,8 +466,15 @@ public sealed class AdminPlaceServiceTests
             return Task.CompletedTask;
         }
 
+        public bool ThrowConcurrencyOnSave { get; set; }
+
         public Task SaveChangesAsync(CancellationToken cancellationToken = default)
         {
+            if (ThrowConcurrencyOnSave)
+            {
+                throw new Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException("Concurrency error");
+            }
+
             SaveChangesCalls++;
             var now = DateTime.UtcNow;
             if (AddedPlace is not null)

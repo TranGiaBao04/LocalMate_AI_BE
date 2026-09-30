@@ -6,7 +6,8 @@ public enum AdminPlaceModerationResultStatus
     InvalidStatus,
     NotFound,
     InvalidStatusTransition,
-    VerificationRequiresActive
+    VerificationRequiresActive,
+    ConcurrencyConflict
 }
 
 public sealed record AdminPlaceModerationResult(
@@ -27,4 +28,7 @@ public sealed record AdminPlaceModerationResult(
 
     public static AdminPlaceModerationResult RequiresActive() =>
         new(AdminPlaceModerationResultStatus.VerificationRequiresActive);
+
+    public static AdminPlaceModerationResult Conflict() =>
+        new(AdminPlaceModerationResultStatus.ConcurrencyConflict);
 }

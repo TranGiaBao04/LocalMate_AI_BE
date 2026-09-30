@@ -68,6 +68,7 @@ public sealed class AdminPlacesController(IAdminPlaceService adminPlaceService) 
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<AdminPlaceResponse>> UpdateAsync(
         Guid id,
         [FromBody] UpdateAdminPlaceRequest request,
@@ -82,6 +83,11 @@ public sealed class AdminPlacesController(IAdminPlaceService adminPlaceService) 
                 BadRequest(CreateInvalidPlaceProblem(result.ValidationErrors!)),
             AdminPlaceOperationResultStatus.NotFound =>
                 NotFound(CreatePlaceNotFoundProblem()),
+            AdminPlaceOperationResultStatus.ConcurrencyConflict =>
+                Conflict(CreateProblem(
+                    StatusCodes.Status409Conflict,
+                    "Place data was modified by another request. Please refresh and try again.",
+                    "concurrency_conflict")),
             _ => throw new InvalidOperationException("Unknown Admin Place update result.")
         };
     }
@@ -115,6 +121,11 @@ public sealed class AdminPlacesController(IAdminPlaceService adminPlaceService) 
                     StatusCodes.Status409Conflict,
                     "Place status transition is not allowed.",
                     "invalid_place_status_transition")),
+            AdminPlaceModerationResultStatus.ConcurrencyConflict =>
+                Conflict(CreateProblem(
+                    StatusCodes.Status409Conflict,
+                    "Place data was modified by another request. Please refresh and try again.",
+                    "concurrency_conflict")),
             _ => throw new InvalidOperationException("Unknown Admin Place status result.")
         };
     }
@@ -142,6 +153,11 @@ public sealed class AdminPlacesController(IAdminPlaceService adminPlaceService) 
                     StatusCodes.Status409Conflict,
                     "Place must be Active before verification can be enabled.",
                     "verification_requires_active")),
+            AdminPlaceModerationResultStatus.ConcurrencyConflict =>
+                Conflict(CreateProblem(
+                    StatusCodes.Status409Conflict,
+                    "Place data was modified by another request. Please refresh and try again.",
+                    "concurrency_conflict")),
             _ => throw new InvalidOperationException("Unknown Admin Place verification result.")
         };
     }
