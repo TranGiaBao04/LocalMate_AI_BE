@@ -17,16 +17,13 @@ public sealed class ExternalLoginRepository(AppDbContext dbContext) : IExternalL
         string provider,
         string providerSubject,
         CancellationToken cancellationToken = default) =>
-        dbContext.UserExternalLogins
+        dbContext.Users
             .AsNoTracking()
-            .Where(externalLogin =>
-                externalLogin.Provider == provider
-                && externalLogin.ProviderSubject == providerSubject)
-            .Join(
-                dbContext.Users.AsNoTracking(),
-                externalLogin => externalLogin.UserId,
-                user => user.Id,
-                (_, user) => user)
+            .Include(user => user.Role)
+            .Where(user => dbContext.UserExternalLogins.Any(externalLogin =>
+                externalLogin.UserId == user.Id
+                && externalLogin.Provider == provider
+                && externalLogin.ProviderSubject == providerSubject))
             .SingleOrDefaultAsync(cancellationToken);
 
     public async Task<bool> TryCreateUserWithExternalLoginAsync(

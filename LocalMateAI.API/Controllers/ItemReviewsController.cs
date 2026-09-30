@@ -1,3 +1,4 @@
+using LocalMateAI.API.Authorization;
 using LocalMateAI.Application.DTOs.PlaceReviews;
 using LocalMateAI.Application.Interfaces.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -7,7 +8,7 @@ namespace LocalMateAI.API.Controllers;
 
 [ApiController]
 [Route("api/trips/items/{itemId:guid}/review")]
-[Authorize(Roles = "User,Admin")]
+[Authorize(Policy = AppPolicies.RegisteredUser)]
 public sealed class ItemReviewsController(IPlaceReviewService placeReviewService) : ControllerBase
 {
     [HttpPost]

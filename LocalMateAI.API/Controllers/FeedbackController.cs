@@ -1,3 +1,4 @@
+using LocalMateAI.API.Authorization;
 using LocalMateAI.Application.DTOs.Feedback;
 using LocalMateAI.Application.Interfaces.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -10,7 +11,7 @@ namespace LocalMateAI.API.Controllers;
 public sealed class FeedbackController(IFeedbackService feedbackService) : ControllerBase
 {
     [HttpPost("trip")]
-    [Authorize(Roles = "User,Admin")]
+    [Authorize(Policy = AppPolicies.RegisteredUser)]
     [ProducesResponseType<FeedbackResponse>(StatusCodes.Status201Created)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]

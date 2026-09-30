@@ -6,4 +6,6 @@ public sealed record UserProfileResponse(
     string Email,
     string Role,
     DateTime CreatedAt,
-    UserPreferencesResponse Preferences);
+    UserPreferencesResponse Preferences,
+    // BE-82: quyền thực tế (Admin = mọi quyền), để FE ẩn/hiện menu admin.
+    IReadOnlyList<string> Permissions);

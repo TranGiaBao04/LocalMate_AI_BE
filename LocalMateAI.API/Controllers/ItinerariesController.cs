@@ -1,3 +1,4 @@
+using LocalMateAI.API.Authorization;
 using LocalMateAI.Application.DTOs.Itineraries;
 using LocalMateAI.Application.DTOs.Trips;
 using LocalMateAI.Application.Interfaces.Services;
@@ -23,7 +24,7 @@ public sealed class ItinerariesController(
     }
 
     [HttpPost("curated/{curatedId:guid}/apply")]
-    [Authorize(Roles = "User,Admin")]
+    [Authorize(Policy = AppPolicies.RegisteredUser)]
     [ProducesResponseType<TripDetailResponse>(StatusCodes.Status201Created)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]

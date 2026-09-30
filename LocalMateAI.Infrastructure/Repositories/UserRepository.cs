@@ -14,11 +14,15 @@ public sealed class UserRepository(AppDbContext dbContext) : IUserRepository
         dbContext.Users.AsNoTracking().AnyAsync(user => user.Email == email, cancellationToken);
 
     public Task<User?> GetByEmailAsync(string email, CancellationToken cancellationToken = default) =>
-        dbContext.Users.SingleOrDefaultAsync(user => user.Email == email, cancellationToken);
+        dbContext.Users
+            .Include(user => user.Role)
+            .SingleOrDefaultAsync(user => user.Email == email, cancellationToken);
 
     public Task<User?> GetByIdAsync(Guid userId, CancellationToken cancellationToken = default) =>
         dbContext.Users
             .AsNoTracking()
+            .Include(user => user.Role)
+            .ThenInclude(role => role!.Permissions)
             .Include(user => user.PreferenceTags)
             .ThenInclude(preferenceTag => preferenceTag.Tag)
             .SingleOrDefaultAsync(user => user.Id == userId, cancellationToken);
@@ -27,6 +31,8 @@ public sealed class UserRepository(AppDbContext dbContext) : IUserRepository
         Guid userId,
         CancellationToken cancellationToken = default) =>
         dbContext.Users
+            .Include(user => user.Role)
+            .ThenInclude(role => role!.Permissions)
             .Include(user => user.PreferenceTags)
             .ThenInclude(preferenceTag => preferenceTag.Tag)
             .SingleOrDefaultAsync(user => user.Id == userId, cancellationToken);

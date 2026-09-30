@@ -1,3 +1,4 @@
+using LocalMateAI.API.Authorization;
 using LocalMateAI.Application.DTOs.Users;
 using LocalMateAI.Application.Interfaces.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -10,7 +11,7 @@ namespace LocalMateAI.API.Controllers;
 public sealed class UsersController(IUserService userService) : ControllerBase
 {
     [HttpGet("me")]
-    [Authorize(Roles = "User,Admin")]
+    [Authorize(Policy = AppPolicies.RegisteredUser)]
     [ProducesResponseType<UserProfileResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -34,7 +35,7 @@ public sealed class UsersController(IUserService userService) : ControllerBase
     }
 
     [HttpPatch("me")]
-    [Authorize(Roles = "User,Admin")]
+    [Authorize(Policy = AppPolicies.RegisteredUser)]
     [ProducesResponseType<UserProfileResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
