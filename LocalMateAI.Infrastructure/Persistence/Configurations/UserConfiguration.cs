@@ -11,8 +11,8 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
     {
         builder.ToTable("Users", tableBuilder =>
             tableBuilder.HasCheckConstraint(
-                "CK_Users_Role",
-                "\"Role\" IN ('User', 'Admin')"));
+                "CK_Users_Status",
+                "\"Status\" IN ('Active', 'Locked')"));
 
         builder.HasKey(user => user.Id);
 
@@ -38,12 +38,28 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
             .HasColumnType("text")
             .IsRequired(false);
 
-        builder.Property(user => user.Role)
-            .HasConversion<string>()
-            .HasColumnType("character varying(10)")
-            .HasMaxLength(10)
-            .HasDefaultValue(UserRole.User)
+        builder.Property(user => user.RoleId)
             .IsRequired();
+
+        builder.HasOne(user => user.Role)
+            .WithMany()
+            .HasForeignKey(user => user.RoleId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.Property(user => user.Status)
+            .HasConversion<string>()
+            .HasColumnType("character varying(20)")
+            .HasMaxLength(20)
+            .HasDefaultValue(UserStatus.Active)
+            .IsRequired();
+
+        builder.Property(user => user.LockedAt)
+            .HasColumnType("timestamp with time zone")
+            .IsRequired(false);
+
+        builder.Property(user => user.LockReason)
+            .HasMaxLength(500)
+            .IsRequired(false);
 
         builder.Property(user => user.CreatedAt)
             .HasColumnType("timestamp with time zone")

@@ -194,20 +194,58 @@ public sealed class AuthServicePasswordResetTests
         Assert.Equal(FakePasswordHasher.HashOf(NewPassword), update.PasswordHash);
     }
 
+    // BE-83: đăng nhập bằng tài khoản bị khoá (dùng lại fixture có sẵn vì đã có user + mật khẩu giả).
+    [Fact]
+    public async Task Login_LockedAccountWithCorrectPassword_ReturnsAccountLocked()
+    {
+        var fixture = new Fixture();
+        fixture.Users.Existing = PasswordUser();
+        fixture.Users.Existing.Status = UserStatus.Locked;
+
+        var result = await fixture.Service.LoginAsync(new LoginRequest(Email, OldPassword));
+
+        Assert.Equal(LoginResultStatus.AccountLocked, result.Status);
+        Assert.Null(result.Response);
+    }
+
+    [Fact]
+    public async Task Login_LockedAccountWithWrongPassword_ReturnsInvalidCredentials()
+    {
+        var fixture = new Fixture();
+        fixture.Users.Existing = PasswordUser();
+        fixture.Users.Existing.Status = UserStatus.Locked;
+
+        var result = await fixture.Service.LoginAsync(new LoginRequest(Email, "WrongSecret999"));
+
+        // Sai mật khẩu thì không lộ việc tài khoản đang bị khoá.
+        Assert.Equal(LoginResultStatus.InvalidCredentials, result.Status);
+    }
+
+    [Fact]
+    public async Task Login_ActiveAccountWithCorrectPassword_Succeeds()
+    {
+        var fixture = new Fixture();
+        fixture.Users.Existing = PasswordUser();
+        fixture.Users.Existing.Role = new Role { Name = "User" };
+
+        var result = await fixture.Service.LoginAsync(new LoginRequest(Email, OldPassword));
+
+        Assert.Equal(LoginResultStatus.Success, result.Status);
+        Assert.NotNull(result.Response);
+    }
+
     private static User PasswordUser() => new()
     {
         FullName = "Nguyen Van A",
         Email = Email,
-        PasswordHash = FakePasswordHasher.HashOf(OldPassword),
-        Role = UserRole.User
+        PasswordHash = FakePasswordHasher.HashOf(OldPassword)
     };
 
     private static User GoogleOnlyUser() => new()
     {
         FullName = "Nguyen Van A",
         Email = Email,
-        PasswordHash = null,
-        Role = UserRole.User
+        PasswordHash = null
     };
 
     private static ConfirmPasswordResetRequest ConfirmRequest(
@@ -232,6 +270,7 @@ public sealed class AuthServicePasswordResetTests
                 new FakePasswordHasher(),
                 new FakeAccessTokenService(),
                 new FakeGoogleValidator(),
+                new FakeSystemRoleProvider(),
                 new FixedTimeProvider(new DateTimeOffset(Now)));
         }
 
@@ -361,7 +400,7 @@ public sealed class AuthServicePasswordResetTests
 
     private sealed class FakeAccessTokenService : IAccessTokenService
     {
-        public AccessTokenResult CreateAccessToken(User user) =>
+        public AccessTokenResult CreateAccessToken(User user, string roleName) =>
             new("token", new DateTimeOffset(Now).AddHours(1));
 
         public AccessTokenResult CreateDemoAccessToken(Guid sessionId) =>

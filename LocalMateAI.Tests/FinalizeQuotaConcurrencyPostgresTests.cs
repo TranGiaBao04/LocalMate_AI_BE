@@ -178,12 +178,13 @@ public sealed class FinalizeQuotaConcurrencyPostgresTests
         bool softDeleteFinalized = false)
     {
         await using var context = CreateContext(connectionString);
+        var userRoleId = await TestRoles.GetUserRoleIdAsync(context);
         context.Users.Add(new User
         {
             Id = userId,
             FullName = "Finalize quota concurrency test",
             Email = $"finalize-quota-{userId:N}@localmate.test",
-            Role = UserRole.User
+            RoleId = userRoleId
         });
 
         if (planCode != PlanCode.Free)

@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using FluentValidation;
 using LocalMateAI.API;
+using LocalMateAI.API.Authorization;
 using LocalMateAI.API.BackgroundJobs;
 using LocalMateAI.API.Middlewares;
 using LocalMateAI.Application.Commands;
@@ -136,6 +137,13 @@ builder.Services.Configure<PasswordHasherOptions>(options =>
     options.IterationCount = 220_000;
 });
 builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<IRoleRepository, RoleRepository>();
+builder.Services.AddScoped<ISystemRoleProvider, SystemRoleProvider>();
+builder.Services.AddScoped<IUserAccessRepository, UserAccessRepository>();
+builder.Services.AddScoped<IUserAccessService, UserAccessService>();
+builder.Services.AddScoped<IAdminOperationExecutor, AdminOperationExecutor>();
+builder.Services.AddScoped<IAdminRoleRepository, AdminRoleRepository>();
+builder.Services.AddScoped<IAdminRoleService, AdminRoleService>();
 builder.Services.AddScoped<IExternalLoginRepository, ExternalLoginRepository>();
 builder.Services.AddScoped<IPendingRegistrationRepository, PendingRegistrationRepository>();
 builder.Services.AddScoped<ITagRepository, TagRepository>();
@@ -253,7 +261,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             RoleClaimType = "role"
         };
     });
-builder.Services.AddAuthorization();
+builder.Services.AddLocalMateAuthorization();
 builder.Services.AddRateLimiter(options =>
 {
     options.AddPolicy(OtpRateLimitPolicy.Name, OtpRateLimitPolicy.Partition);
@@ -273,9 +281,16 @@ using (var seedScope = app.Services.CreateScope())
     await seedDbContext.Database.MigrateAsync();
     await DataSeeder.SeedAsync(seedDbContext);
 
+    // BE-81: admin đầu tiên từ biến môi trường, chạy ở mọi môi trường (bỏ trống biến = không tạo).
+    var passwordHashService = seedScope.ServiceProvider.GetRequiredService<IPasswordHashService>();
+    await AdminAccountSeeder.SeedAsync(
+        seedDbContext,
+        passwordHashService,
+        app.Configuration.GetSection(AdminSeedOptions.SectionName).Get<AdminSeedOptions>() ?? new AdminSeedOptions(),
+        seedScope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("AdminSeed"));
+
     if (app.Environment.IsDevelopment())
     {
-        var passwordHashService = seedScope.ServiceProvider.GetRequiredService<IPasswordHashService>();
         await DataSeeder.SeedDevelopmentUsersAsync(seedDbContext, passwordHashService);
     }
 }
@@ -292,6 +307,7 @@ app.UseHttpsRedirection();
 app.UseCors(frontendClientPolicy);
 app.UseRateLimiter();
 app.UseAuthentication();
+app.UseMiddleware<AccountAccessMiddleware>();
 app.UseAuthorization();
 app.UseMiddleware<TripActionGuardMiddleware>();
 app.MapControllers();

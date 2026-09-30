@@ -1,5 +1,6 @@
 using System.Text.Json;
 using LocalMateAI.Application.Interfaces.Services;
+using LocalMateAI.Domain.Common;
 using LocalMateAI.Domain.Entities;
 using LocalMateAI.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -12,10 +13,10 @@ public static class DataSeeder
 {
     public static readonly IReadOnlyList<DevelopmentUserSeedDefinition> DevelopmentUsers =
     [
-        new("admin@localmate.dev", "LocalMate Admin", UserRole.Admin),
-        new("user1@localmate.dev", "LocalMate User 1", UserRole.User),
-        new("user2@localmate.dev", "LocalMate User 2", UserRole.User),
-        new("user3@localmate.dev", "LocalMate User 3", UserRole.User)
+        new("admin@localmate.dev", "LocalMate Admin", SystemRoles.AdminName),
+        new("user1@localmate.dev", "LocalMate User 1", SystemRoles.UserName),
+        new("user2@localmate.dev", "LocalMate User 2", SystemRoles.UserName),
+        new("user3@localmate.dev", "LocalMate User 3", SystemRoles.UserName)
     ];
 
     public const string DevelopmentDefaultPassword = "LocalMate@123";
@@ -60,6 +61,12 @@ public static class DataSeeder
 
         var existingEmailSet = new HashSet<string>(existingEmails, StringComparer.OrdinalIgnoreCase);
 
+        // Role hệ thống do migration AddRbacAndUserStatus chèn, Id do DB sinh ⇒ tra theo tên.
+        var systemRoleIds = await context.Roles
+            .AsNoTracking()
+            .Where(role => role.IsSystem)
+            .ToDictionaryAsync(role => role.NormalizedName, role => role.Id, cancellationToken);
+
         var usersToAdd = new List<User>();
 
         foreach (var seed in DevelopmentUsers)
@@ -69,12 +76,18 @@ public static class DataSeeder
                 continue;
             }
 
+            if (!systemRoleIds.TryGetValue(SystemRoles.Normalize(seed.RoleName), out var roleId))
+            {
+                throw new InvalidOperationException(
+                    $"Không tìm thấy role hệ thống '{seed.RoleName}' để seed tài khoản dev.");
+            }
+
             var user = new User
             {
                 Id = Guid.NewGuid(),
                 FullName = seed.FullName,
                 Email = seed.Email.Trim().ToLowerInvariant(),
-                Role = seed.Role,
+                RoleId = roleId,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };
@@ -266,5 +279,5 @@ public static class DataSeeder
         decimal EstimatedCostMax,
         IReadOnlyList<string> PlaceNames);
 
-    public sealed record DevelopmentUserSeedDefinition(string Email, string FullName, UserRole Role);
+    public sealed record DevelopmentUserSeedDefinition(string Email, string FullName, string RoleName);
 }

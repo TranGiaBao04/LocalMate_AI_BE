@@ -6,7 +6,8 @@ public enum GoogleSignInResultStatus
     ValidationFailed,
     InvalidGoogleToken,
     AccountLinkRequired,
-    AccountConflict
+    AccountConflict,
+    AccountLocked
 }
 
 public sealed record GoogleSignInResult
@@ -42,4 +43,7 @@ public sealed record GoogleSignInResult
 
     public static GoogleSignInResult AccountConflict() =>
         new(GoogleSignInResultStatus.AccountConflict);
+
+    public static GoogleSignInResult AccountLocked() =>
+        new(GoogleSignInResultStatus.AccountLocked);
 }
