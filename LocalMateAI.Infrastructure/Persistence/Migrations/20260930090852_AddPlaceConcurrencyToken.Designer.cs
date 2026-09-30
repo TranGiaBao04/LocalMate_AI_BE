@@ -3,6 +3,7 @@ using System;
 using LocalMateAI.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NetTopologySuite.Geometries;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace LocalMateAI.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260930090852_AddPlaceConcurrencyToken")]
+    partial class AddPlaceConcurrencyToken
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -143,69 +146,6 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("IX_EmailOtpCodes_Email_Purpose_CreatedAt");
 
                     b.ToTable("EmailOtpCodes", (string)null);
-                });
-
-            modelBuilder.Entity("LocalMateAI.Domain.Entities.EmailOutboxMessage", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("AttemptCount")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("DeduplicationKey")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("Model")
-                        .IsRequired()
-                        .HasColumnType("jsonb");
-
-                    b.Property<DateTime>("NextAttemptAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("SentAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<string>("Subject")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("TemplateName")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<string>("ToEmail")
-                        .IsRequired()
-                        .HasMaxLength(254)
-                        .HasColumnType("character varying(254)");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("DeduplicationKey")
-                        .IsUnique()
-                        .HasDatabaseName("UX_EmailOutboxMessages_DeduplicationKey");
-
-                    b.HasIndex("NextAttemptAt")
-                        .HasDatabaseName("IX_EmailOutboxMessages_NextAttemptAt_Pending")
-                        .HasFilter("\"Status\" = 'Pending'");
-
-                    b.ToTable("EmailOutboxMessages", (string)null);
                 });
 
             modelBuilder.Entity("LocalMateAI.Domain.Entities.Feedback", b =>
@@ -573,57 +513,6 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
                     b.ToTable("PlaceTags", (string)null);
                 });
 
-            modelBuilder.Entity("LocalMateAI.Domain.Entities.Role", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Description")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<bool>("IsSystem")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<string>("NormalizedName")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("NormalizedName")
-                        .IsUnique()
-                        .HasDatabaseName("UX_Roles_NormalizedName");
-
-                    b.ToTable("Roles", (string)null);
-                });
-
-            modelBuilder.Entity("LocalMateAI.Domain.Entities.RolePermission", b =>
-                {
-                    b.Property<Guid>("RoleId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Permission")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.HasKey("RoleId", "Permission");
-
-                    b.ToTable("RolePermissions", (string)null);
-                });
-
             modelBuilder.Entity("LocalMateAI.Domain.Entities.Tag", b =>
                 {
                     b.Property<Guid>("Id")
@@ -794,25 +683,15 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
-                    b.Property<string>("LockReason")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<DateTime?>("LockedAt")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<string>("PasswordHash")
                         .HasColumnType("text");
 
-                    b.Property<Guid>("RoleId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Status")
+                    b.Property<string>("Role")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasDefaultValue("Active");
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasDefaultValue("User");
 
                     b.Property<DateTime>("UpdatedAt")
                         .ValueGeneratedOnAdd()
@@ -825,11 +704,9 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("UX_Users_Email");
 
-                    b.HasIndex("RoleId");
-
                     b.ToTable("Users", null, t =>
                         {
-                            t.HasCheckConstraint("CK_Users_Status", "\"Status\" IN ('Active', 'Locked')");
+                            t.HasCheckConstraint("CK_Users_Role", "\"Role\" IN ('User', 'Admin')");
                         });
                 });
 
@@ -1017,15 +894,6 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
                     b.Navigation("Tag");
                 });
 
-            modelBuilder.Entity("LocalMateAI.Domain.Entities.RolePermission", b =>
-                {
-                    b.HasOne("LocalMateAI.Domain.Entities.Role", null)
-                        .WithMany("Permissions")
-                        .HasForeignKey("RoleId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                });
-
             modelBuilder.Entity("LocalMateAI.Domain.Entities.Trip", b =>
                 {
                     b.HasOne("LocalMateAI.Domain.Entities.User", null)
@@ -1067,17 +935,6 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-                });
-
-            modelBuilder.Entity("LocalMateAI.Domain.Entities.User", b =>
-                {
-                    b.HasOne("LocalMateAI.Domain.Entities.Role", "Role")
-                        .WithMany()
-                        .HasForeignKey("RoleId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Role");
                 });
 
             modelBuilder.Entity("LocalMateAI.Domain.Entities.UserExternalLogin", b =>
@@ -1126,11 +983,6 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("LocalMateAI.Domain.Entities.Place", b =>
                 {
                     b.Navigation("Tags");
-                });
-
-            modelBuilder.Entity("LocalMateAI.Domain.Entities.Role", b =>
-                {
-                    b.Navigation("Permissions");
                 });
 
             modelBuilder.Entity("LocalMateAI.Domain.Entities.Trip", b =>

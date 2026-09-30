@@ -40,5 +40,10 @@ public sealed class PlaceConfiguration : IEntityTypeConfiguration<Place>
 
         builder.HasIndex(x => x.Location)
             .HasMethod("gist");
+
+        builder.Property<uint>("xmin")
+            .HasColumnType("xid")
+            .ValueGeneratedOnAddOrUpdate()
+            .IsRowVersion();
     }
 }
