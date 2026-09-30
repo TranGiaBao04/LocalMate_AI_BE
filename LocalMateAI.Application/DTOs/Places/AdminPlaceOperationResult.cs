@@ -4,7 +4,8 @@ public enum AdminPlaceOperationResultStatus
 {
     Success,
     ValidationFailed,
-    NotFound
+    NotFound,
+    ConcurrencyConflict
 }
 
 public sealed record AdminPlaceOperationResult(
@@ -21,4 +22,7 @@ public sealed record AdminPlaceOperationResult(
 
     public static AdminPlaceOperationResult Missing() =>
         new(AdminPlaceOperationResultStatus.NotFound);
+
+    public static AdminPlaceOperationResult Conflict() =>
+        new(AdminPlaceOperationResultStatus.ConcurrencyConflict);
 }
