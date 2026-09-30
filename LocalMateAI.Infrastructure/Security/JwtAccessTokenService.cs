@@ -1,8 +1,9 @@
 using System.Security.Claims;
 using LocalMateAI.Application.DTOs.Auth;
 using LocalMateAI.Application.Interfaces.Services;
+using LocalMateAI.Application.Security;
+using LocalMateAI.Domain.Common;
 using LocalMateAI.Domain.Entities;
-using LocalMateAI.Domain.Enums;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
@@ -14,20 +15,20 @@ public sealed class JwtAccessTokenService(IOptions<JwtOptions> options) : IAcces
     private readonly JsonWebTokenHandler tokenHandler = new();
     private readonly JwtOptions jwtOptions = options.Value;
 
-    public AccessTokenResult CreateAccessToken(User user) =>
+    public AccessTokenResult CreateAccessToken(User user, string roleName) =>
         CreateToken(
             user.Id,
             [
                 new Claim(JwtRegisteredClaimNames.Email, user.Email),
-                new Claim("role", user.Role.ToString())
+                new Claim("role", roleName)
             ]);
 
     public AccessTokenResult CreateDemoAccessToken(Guid sessionId) =>
             CreateToken(
                 sessionId,
                 [
-                    new Claim("session_type", "demo"),
-                    new Claim("role", UserRole.User.ToString())
+                    new Claim(AuthClaimNames.SessionType, AuthClaimNames.DemoSession),
+                    new Claim("role", SystemRoles.UserName)
                 ]);
 
     private AccessTokenResult CreateToken(Guid subjectId, IEnumerable<Claim> additionalClaims)

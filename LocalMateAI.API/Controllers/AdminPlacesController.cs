@@ -1,13 +1,14 @@
+using LocalMateAI.API.Authorization;
 using LocalMateAI.Application.DTOs.Places;
 using LocalMateAI.Application.Interfaces.Services;
-using Microsoft.AspNetCore.Authorization;
+using LocalMateAI.Application.Security;
 using Microsoft.AspNetCore.Mvc;
 
 namespace LocalMateAI.API.Controllers;
 
 [ApiController]
 [Route("api/admin/places")]
-[Authorize(Roles = "Admin")]
+[HasPermission(Permissions.ManagePlaces)]
 public sealed class AdminPlacesController(IAdminPlaceService adminPlaceService) : ControllerBase
 {
     private const string GetByIdRouteName = "GetAdminPlaceById";

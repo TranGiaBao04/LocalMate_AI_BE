@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using LocalMateAI.Application.DTOs.Auth;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Interfaces.Services;
+using LocalMateAI.Application.Security;
 using LocalMateAI.Domain.Entities;
 using LocalMateAI.Domain.Enums;
 
@@ -15,6 +16,7 @@ public sealed class AuthService(
     IPasswordHashService passwordHashService,
     IAccessTokenService accessTokenService,
     IGoogleIdentityTokenValidator googleIdentityTokenValidator,
+    ISystemRoleProvider systemRoleProvider,
     TimeProvider timeProvider) : IAuthService
 {
     private const string GoogleProvider = "Google";
@@ -22,8 +24,6 @@ public sealed class AuthService(
     private const int MaximumEmailLength = 254;
     private const int MaximumProviderSubjectLength = 255;
     private const int MaximumGoogleIdTokenLength = 16_384;
-    private const int MinimumPasswordLength = 8;
-    private const int MaximumPasswordLength = 128;
     private const int OtpCodeLength = 6;
 
     // Bản đăng ký chưa nhập OTP được giữ 24 giờ; quá hạn phải đăng ký lại.
@@ -117,12 +117,13 @@ public sealed class AuthService(
                 return VerifyRegistrationResult.OtpAttemptsExceeded();
         }
 
+        var userRole = await systemRoleProvider.GetUserRoleAsync(cancellationToken);
         var user = new User
         {
             FullName = pending.FullName,
             Email = pending.Email,
             PasswordHash = pending.PasswordHash,
-            Role = UserRole.User
+            RoleId = userRole.Id
         };
 
         var created = await pendingRegistrationRepository.TryCompleteRegistrationAsync(user, cancellationToken);
@@ -136,7 +137,7 @@ public sealed class AuthService(
             user.Id,
             user.FullName,
             user.Email,
-            user.Role.ToString(),
+            userRole.Name,
             user.CreatedAt);
 
         return VerifyRegistrationResult.Succeeded(response);
@@ -297,6 +298,12 @@ public sealed class AuthService(
             return LoginResult.InvalidCredentials();
         }
 
+        // Chỉ báo khoá khi mật khẩu đúng, để người không biết mật khẩu không dò được tài khoản nào đang bị khoá.
+        if (user.Status == UserStatus.Locked)
+        {
+            return LoginResult.AccountLocked();
+        }
+
         if (verificationResult == PasswordHashVerificationResult.SuccessRehashNeeded)
         {
             var updatedPasswordHash = passwordHashService.HashPassword(user, password);
@@ -345,7 +352,7 @@ public sealed class AuthService(
 
         if (linkedUser is not null)
         {
-            return GoogleSignInResult.Succeeded(CreateLoginResponse(linkedUser));
+            return SignInLinkedUser(linkedUser);
         }
 
         var email = identity.Email.Trim().ToLowerInvariant();
@@ -363,12 +370,13 @@ public sealed class AuthService(
             return GoogleSignInResult.AccountLinkRequired();
         }
 
+        var userRole = await systemRoleProvider.GetUserRoleAsync(cancellationToken);
         var user = new User
         {
             FullName = fullName,
             Email = email,
             PasswordHash = null,
-            Role = UserRole.User
+            RoleId = userRole.Id
         };
 
         var externalLogin = new UserExternalLogin
@@ -387,7 +395,7 @@ public sealed class AuthService(
         {
             // Email đã được Google xác nhận: bản đăng ký bằng mật khẩu đang chờ OTP (nếu có) không còn cần nữa.
             await pendingRegistrationRepository.DeleteByEmailAsync(email, cancellationToken);
-            return GoogleSignInResult.Succeeded(CreateLoginResponse(user));
+            return GoogleSignInResult.Succeeded(CreateLoginResponse(user, userRole.Name));
         }
 
         linkedUser = await externalLoginRepository.GetUserByExternalLoginAsync(
@@ -397,7 +405,7 @@ public sealed class AuthService(
 
         if (linkedUser is not null)
         {
-            return GoogleSignInResult.Succeeded(CreateLoginResponse(linkedUser));
+            return SignInLinkedUser(linkedUser);
         }
 
         var emailWasClaimed = await userRepository.EmailExistsAsync(email, cancellationToken);
@@ -498,27 +506,7 @@ public sealed class AuthService(
         return errors;
     }
 
-    private static string? GetPasswordError(string password)
-    {
-        if (string.IsNullOrEmpty(password))
-        {
-            return "Password is required.";
-        }
-
-        if (password.Length < MinimumPasswordLength)
-        {
-            return $"Password must contain at least {MinimumPasswordLength} characters.";
-        }
-
-        if (password.Length > MaximumPasswordLength)
-        {
-            return $"Password must not exceed {MaximumPasswordLength} characters.";
-        }
-
-        return string.IsNullOrWhiteSpace(password)
-            ? "Password must contain at least one non-whitespace character."
-            : null;
-    }
+    private static string? GetPasswordError(string password) => PasswordRules.GetError(password);
 
     private static Dictionary<string, string[]> ValidateEmailOnly(string email)
     {
@@ -567,9 +555,16 @@ public sealed class AuthService(
         && email.Length <= MaximumEmailLength
         && EmailValidator.IsValid(email);
 
-    private LoginResponse CreateLoginResponse(User user)
+    // User đã liên kết Google có thể đang bị khoá (BE-83); user vừa tạo thì không.
+    private GoogleSignInResult SignInLinkedUser(User linkedUser) =>
+        linkedUser.Status == UserStatus.Locked
+            ? GoogleSignInResult.AccountLocked()
+            : GoogleSignInResult.Succeeded(CreateLoginResponse(linkedUser));
+
+    // User đọc từ DB đã có Role; user vừa tạo thì truyền roleName vào.
+    private LoginResponse CreateLoginResponse(User user, string? roleName = null)
     {
-        var accessToken = accessTokenService.CreateAccessToken(user);
+        var accessToken = accessTokenService.CreateAccessToken(user, roleName ?? user.RoleName);
         return new LoginResponse(
             accessToken.AccessToken,
             "Bearer",

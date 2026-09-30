@@ -17,4 +17,5 @@ public sealed record TripItemReadModel(
     decimal EstimatedBudget,
     string? Reasoning,
     bool IsVisited,
-    DateTimeOffset? VisitedAt);
+    DateTimeOffset? VisitedAt,
+    string? Address = null); // chỉ dùng nội bộ (mail lịch trình), không có trong TripItemResponse

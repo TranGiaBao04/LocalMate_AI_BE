@@ -106,12 +106,13 @@ public sealed class PaymentConcurrencyPostgresTests
     private static async Task SeedUsersAsync(string connectionString, IReadOnlyList<Guid> userIds)
     {
         await using var context = CreateContext(connectionString);
+        var userRoleId = await TestRoles.GetUserRoleIdAsync(context);
         context.Users.AddRange(userIds.Select(userId => new User
         {
             Id = userId,
             FullName = "Payment concurrency test",
             Email = $"payment-concurrency-{userId:N}@localmate.test",
-            Role = UserRole.User
+            RoleId = userRoleId
         }));
         await context.SaveChangesAsync();
     }
@@ -119,6 +120,8 @@ public sealed class PaymentConcurrencyPostgresTests
     private static async Task CleanupAsync(string connectionString, IReadOnlyList<Guid> userIds)
     {
         await using var context = CreateContext(connectionString);
+        var emails = userIds.Select(userId => $"payment-concurrency-{userId:N}@localmate.test").ToArray();
+        await context.EmailOutboxMessages.Where(message => emails.Contains(message.ToEmail)).ExecuteDeleteAsync();
         await context.PaymentOrders.Where(order => userIds.Contains(order.UserId)).ExecuteDeleteAsync();
         await context.Users.Where(user => userIds.Contains(user.Id)).ExecuteDeleteAsync();
     }
@@ -132,6 +135,8 @@ public sealed class PaymentConcurrencyPostgresTests
         var settlementService = new PaymentSettlementService(
             new PaymentSettlementExecutor(context),
             subscriptionRepository,
+            new UserRepository(context),
+            new EmailOutboxRepository(context),
             TimeProvider.System,
             NullLogger<PaymentSettlementService>.Instance);
         var service = new PaymentService(

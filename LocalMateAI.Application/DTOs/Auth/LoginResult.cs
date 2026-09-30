@@ -4,7 +4,8 @@ public enum LoginResultStatus
 {
     Success,
     ValidationFailed,
-    InvalidCredentials
+    InvalidCredentials,
+    AccountLocked
 }
 
 public sealed record LoginResult
@@ -34,4 +35,7 @@ public sealed record LoginResult
 
     public static LoginResult InvalidCredentials() =>
         new(LoginResultStatus.InvalidCredentials);
+
+    public static LoginResult AccountLocked() =>
+        new(LoginResultStatus.AccountLocked);
 }

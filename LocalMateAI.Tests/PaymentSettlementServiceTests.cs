@@ -1,3 +1,4 @@
+using LocalMateAI.Application.DTOs.Email;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Payments;
 using LocalMateAI.Application.Services;
@@ -166,6 +167,75 @@ public sealed class PaymentSettlementServiceTests
         Assert.Empty(fixture.Subscriptions.Items);
     }
 
+    [Theory]
+    [InlineData(PlanCode.TripPass, "Trip Pass")]
+    [InlineData(PlanCode.Membership, "Membership")]
+    public async Task CorrectPayment_EnqueuesOneReceiptInSameSettlement(PlanCode planCode, string planName)
+    {
+        var amount = SubscriptionCatalog.Get(planCode).Price;
+        var fixture = new Fixture(Order(planCode, amount));
+
+        await fixture.Service.ApplyVerifiedPaymentAsync(
+            new VerifiedPaymentNotification(fixture.Order.ProviderOrderCode, amount, true));
+
+        var (entry, now) = Assert.Single(fixture.Outbox.Entries);
+        Assert.Equal(Now, now);
+        Assert.Equal("an@example.com", entry.ToEmail);
+        Assert.Equal($"Biên nhận thanh toán gói {planName} - LocalMate AI", entry.Subject);
+        Assert.Equal(EmailTemplateNames.PaymentReceipt, entry.TemplateName);
+        Assert.Equal($"payment-receipt:{fixture.Order.Id}", entry.DeduplicationKey);
+        var model = Assert.IsType<PaymentReceiptEmailModel>(
+            EmailOutboxModelRegistry.Default.Deserialize(entry.TemplateName, entry.ModelJson));
+        Assert.Equal(planName, model.PlanName);
+        Assert.Equal("12001", model.OrderCode);
+    }
+
+    [Fact]
+    public async Task EarlyRenewal_ReceiptShowsExtendedValidUntil()
+    {
+        var subscription = new UserSubscription
+        {
+            UserId = UserId,
+            PlanCode = PlanCode.Membership,
+            StartsAt = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc),
+            EndsAt = new DateTime(2026, 10, 20, 0, 0, 0, DateTimeKind.Utc)
+        };
+        var order = Order(PlanCode.Membership, 59000);
+        order.Type = PaymentOrderType.Renewal;
+        var fixture = new Fixture(order, [subscription]);
+
+        await fixture.Service.ApplyVerifiedPaymentAsync(
+            new VerifiedPaymentNotification(order.ProviderOrderCode, 59000, true));
+
+        var (entry, _) = Assert.Single(fixture.Outbox.Entries);
+        var model = Assert.IsType<PaymentReceiptEmailModel>(
+            EmailOutboxModelRegistry.Default.Deserialize(entry.TemplateName, entry.ModelJson));
+        Assert.Equal("Gia hạn", model.TypeLabel);
+        Assert.Equal("30 ngày", model.AddedDays);
+        Assert.Equal("19/11/2026 07:00", model.ValidUntil);
+    }
+
+    [Fact]
+    public async Task UnsuccessfulOrDuplicateSettlement_DoesNotEnqueueExtraReceipt()
+    {
+        var failed = new Fixture(Order(PlanCode.TripPass, 19000));
+        await failed.Service.ApplyVerifiedPaymentAsync(
+            new VerifiedPaymentNotification(failed.Order.ProviderOrderCode, 19000, false));
+
+        var mismatch = new Fixture(Order(PlanCode.TripPass, 19000));
+        await mismatch.Service.ApplyVerifiedPaymentAsync(
+            new VerifiedPaymentNotification(mismatch.Order.ProviderOrderCode, 1000, true));
+
+        var duplicate = new Fixture(Order(PlanCode.TripPass, 19000));
+        var notification = new VerifiedPaymentNotification(duplicate.Order.ProviderOrderCode, 19000, true);
+        await duplicate.Service.ApplyVerifiedPaymentAsync(notification);
+        await duplicate.Service.ApplyVerifiedPaymentAsync(notification);
+
+        Assert.Empty(failed.Outbox.Entries);
+        Assert.Empty(mismatch.Outbox.Entries);
+        Assert.Single(duplicate.Outbox.Entries);
+    }
+
     private static PaymentOrder Order(PlanCode planCode, decimal amount) => new()
     {
         UserId = UserId,
@@ -185,15 +255,19 @@ public sealed class PaymentSettlementServiceTests
         {
             Order = order;
             Subscriptions = new FakeSubscriptionRepository(subscriptions ?? []);
+            Outbox = new FakeEmailOutboxRepository();
             Service = new PaymentSettlementService(
                 new FakeSettlementExecutor([order]),
                 Subscriptions,
+                new FakeUserRepository(new User { Id = UserId, FullName = "Nguyễn An", Email = "an@example.com" }),
+                Outbox,
                 new FixedTimeProvider(Now),
                 NullLogger<PaymentSettlementService>.Instance);
         }
 
         public PaymentOrder Order { get; }
         public FakeSubscriptionRepository Subscriptions { get; }
+        public FakeEmailOutboxRepository Outbox { get; }
         public PaymentSettlementService Service { get; }
     }
 
@@ -245,6 +319,57 @@ public sealed class PaymentSettlementServiceTests
             Items.Add(subscription);
             return Task.CompletedTask;
         }
+    }
+
+    private sealed class FakeUserRepository(User user) : IUserRepository
+    {
+        public Task<bool> EmailExistsAsync(string email, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<User?> GetByEmailAsync(string email, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<User?> GetByIdAsync(Guid userId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(userId == user.Id ? user : null);
+
+        public Task<User?> GetByIdForUpdateAsync(Guid userId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<bool> TryAddAsync(User user, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task UpdatePasswordHashAsync(User user, string passwordHash, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task SaveProfileChangesAsync(User user, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+    }
+
+    private sealed class FakeEmailOutboxRepository : IEmailOutboxRepository
+    {
+        public List<(EmailOutboxEntry Entry, DateTime Now)> Entries { get; } = [];
+
+        public Task<bool> EnqueueAsync(EmailOutboxEntry entry, DateTime now, CancellationToken cancellationToken = default)
+        {
+            Entries.Add((entry, now));
+            return Task.FromResult(true);
+        }
+
+        public Task<IReadOnlyList<ClaimedEmailOutboxMessage>> ClaimDueAsync(
+            DateTime now, DateTime leaseUntil, int batchSize, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task MarkSentAsync(Guid id, DateTime now, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task ScheduleRetryAsync(Guid id, DateTime nextAttemptAt, DateTime now, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task MarkFailedAsync(Guid id, DateTime now, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<int> DeleteExpiredAsync(DateTime sentBefore, DateTime failedBefore, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 
 }

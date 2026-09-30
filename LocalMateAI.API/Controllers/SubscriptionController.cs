@@ -1,3 +1,4 @@
+using LocalMateAI.API.Authorization;
 using LocalMateAI.Application.DTOs.Subscription;
 using LocalMateAI.Application.Interfaces.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -18,7 +19,7 @@ public sealed class SubscriptionController(
         Ok(subscriptionService.GetPlans());
 
     [HttpGet("me")]
-    [Authorize(Roles = "User,Admin")]
+    [Authorize(Policy = AppPolicies.RegisteredUser)]
     [ProducesResponseType<SubscriptionMeResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
@@ -46,7 +47,7 @@ public sealed class SubscriptionController(
     }
 
     [HttpPost("checkout")]
-    [Authorize(Roles = "User,Admin")]
+    [Authorize(Policy = AppPolicies.RegisteredUser)]
     [ProducesResponseType<PaymentIntentResponse>(StatusCodes.Status201Created)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
@@ -73,7 +74,7 @@ public sealed class SubscriptionController(
     }
 
     [HttpPost("renew")]
-    [Authorize(Roles = "User,Admin")]
+    [Authorize(Policy = AppPolicies.RegisteredUser)]
     [ProducesResponseType<PaymentIntentResponse>(StatusCodes.Status201Created)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
@@ -95,7 +96,7 @@ public sealed class SubscriptionController(
     }
 
     [HttpGet("orders/{orderId}")]
-    [Authorize(Roles = "User,Admin")]
+    [Authorize(Policy = AppPolicies.RegisteredUser)]
     [ProducesResponseType<PaymentOrderResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]

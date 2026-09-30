@@ -1,4 +1,5 @@
 using LocalMateAI.Application.Commands;
+using LocalMateAI.Application.DTOs.Email;
 using LocalMateAI.Application.DTOs.Trips;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Domain.Entities;
@@ -202,14 +203,51 @@ public sealed class FinalizeTripCommandTests
         Assert.Equal(FinalizeTripResultStatus.TripNotFound, result.Status);
     }
 
+    [Fact]
+    public async Task Execute_Success_EnqueuesItineraryEmail()
+    {
+        var trip = Trip(TripStatus.Draft, UserId);
+        var outbox = new FakeEmailOutboxRepository();
+
+        await Command(new FakeTripRepository([trip]), outbox: outbox).ExecuteAsync(UserId, trip.Id);
+
+        var (entry, now) = Assert.Single(outbox.Entries);
+        Assert.Equal(Now, now);
+        Assert.Equal("an@example.com", entry.ToEmail);
+        Assert.Equal(EmailTemplateNames.TripItinerary, entry.TemplateName);
+        Assert.Equal($"trip-itinerary:{trip.Id}", entry.DeduplicationKey);
+        Assert.Equal("Lịch trình chuyến đi của bạn - LocalMate AI", entry.Subject);
+    }
+
+    [Fact]
+    public async Task Execute_Rejected_DoesNotEnqueueItineraryEmail()
+    {
+        var outbox = new FakeEmailOutboxRepository();
+        var alreadyFinalized = Trip(TripStatus.Finalized, UserId);
+        var lostRace = Trip(TripStatus.Draft, UserId);
+        var overQuota = Trip(TripStatus.Draft, UserId);
+
+        await Command(new FakeTripRepository([alreadyFinalized]), outbox: outbox)
+            .ExecuteAsync(UserId, alreadyFinalized.Id);
+        await Command(new FakeTripRepository([lostRace], finalizeResult: false), outbox: outbox)
+            .ExecuteAsync(UserId, lostRace.Id);
+        await Command(new FakeTripRepository([Trip(TripStatus.Finalized, UserId), overQuota]), outbox: outbox)
+            .ExecuteAsync(UserId, overQuota.Id);
+
+        Assert.Empty(outbox.Entries);
+    }
+
     private static FinalizeTripCommand Command(
         FakeTripRepository tripRepository,
         IReadOnlyList<UserSubscription>? subscriptions = null,
-        FakeQuotaExecutor? executor = null) =>
+        FakeQuotaExecutor? executor = null,
+        FakeEmailOutboxRepository? outbox = null) =>
         new(
             tripRepository,
             new FakeSubscriptionRepository(subscriptions ?? []),
             executor ?? new FakeQuotaExecutor(),
+            new FakeUserRepository(new User { Id = UserId, FullName = "Nguyễn An", Email = "an@example.com" }),
+            outbox ?? new FakeEmailOutboxRepository(),
             new FixedTimeProvider(Now));
 
     private static Trip Trip(TripStatus status, Guid userId) =>
@@ -334,7 +372,14 @@ public sealed class FinalizeTripCommandTests
         public Task<TripDetailReadModel?> GetOwnedDetailAsync(
             Guid tripId,
             Guid userId,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(trips
+                .Where(trip => trip.Id == tripId && trip.UserId == userId)
+                .Select(trip => new TripDetailReadModel(
+                    trip.Id, trip.Status, trip.StartLatitude, trip.StartLongitude, "Bến Thành",
+                    trip.DurationHours, trip.BudgetMin, trip.BudgetMax, [], [],
+                    Now, Now, Now, trip.TravelMode, trip.PlannedStartAt))
+                .SingleOrDefault());
 
         public Task AddAsync(
             Trip trip,
@@ -349,5 +394,56 @@ public sealed class FinalizeTripCommandTests
     private sealed class FixedTimeProvider(DateTime now) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => new(now);
+    }
+
+    private sealed class FakeUserRepository(User user) : IUserRepository
+    {
+        public Task<bool> EmailExistsAsync(string email, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<User?> GetByEmailAsync(string email, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<User?> GetByIdAsync(Guid userId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(userId == user.Id ? user : null);
+
+        public Task<User?> GetByIdForUpdateAsync(Guid userId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<bool> TryAddAsync(User user, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task UpdatePasswordHashAsync(User user, string passwordHash, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task SaveProfileChangesAsync(User user, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+    }
+
+    private sealed class FakeEmailOutboxRepository : IEmailOutboxRepository
+    {
+        public List<(EmailOutboxEntry Entry, DateTime Now)> Entries { get; } = [];
+
+        public Task<bool> EnqueueAsync(EmailOutboxEntry entry, DateTime now, CancellationToken cancellationToken = default)
+        {
+            Entries.Add((entry, now));
+            return Task.FromResult(true);
+        }
+
+        public Task<IReadOnlyList<ClaimedEmailOutboxMessage>> ClaimDueAsync(
+            DateTime now, DateTime leaseUntil, int batchSize, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task MarkSentAsync(Guid id, DateTime now, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task ScheduleRetryAsync(Guid id, DateTime nextAttemptAt, DateTime now, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task MarkFailedAsync(Guid id, DateTime now, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<int> DeleteExpiredAsync(DateTime sentBefore, DateTime failedBefore, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 }

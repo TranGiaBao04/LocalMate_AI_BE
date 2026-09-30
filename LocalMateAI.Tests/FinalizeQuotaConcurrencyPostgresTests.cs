@@ -35,6 +35,10 @@ public sealed class FinalizeQuotaConcurrencyPostgresTests
                 result.Status == FinalizeTripResultStatus.SavedTripQuotaExceeded);
             await AssertTripCountsAsync(connectionString, userId, finalized: 1, draft: 1);
             await AssertSubscriptionUsageAsync(connectionString, userId, used: 1, limit: 1);
+            await using var verify = CreateContext(connectionString);
+            Assert.Equal(1, await verify.EmailOutboxMessages.AsNoTracking()
+                .CountAsync(message => message.ToEmail == $"finalize-quota-{userId:N}@localmate.test"
+                                       && message.TemplateName == "trip-itinerary"));
         }
         finally
         {
@@ -174,12 +178,13 @@ public sealed class FinalizeQuotaConcurrencyPostgresTests
         bool softDeleteFinalized = false)
     {
         await using var context = CreateContext(connectionString);
+        var userRoleId = await TestRoles.GetUserRoleIdAsync(context);
         context.Users.Add(new User
         {
             Id = userId,
             FullName = "Finalize quota concurrency test",
             Email = $"finalize-quota-{userId:N}@localmate.test",
-            Role = UserRole.User
+            RoleId = userRoleId
         });
 
         if (planCode != PlanCode.Free)
@@ -263,6 +268,9 @@ public sealed class FinalizeQuotaConcurrencyPostgresTests
     private static async Task CleanupAsync(string connectionString, Guid userId)
     {
         await using var context = CreateContext(connectionString);
+        await context.EmailOutboxMessages
+            .Where(message => message.ToEmail == $"finalize-quota-{userId:N}@localmate.test")
+            .ExecuteDeleteAsync();
         await context.Trips.Where(trip => trip.UserId == userId).ExecuteDeleteAsync();
         await context.UserSubscriptions
             .Where(subscription => subscription.UserId == userId)
@@ -277,6 +285,8 @@ public sealed class FinalizeQuotaConcurrencyPostgresTests
             new TripRepository(context),
             new SubscriptionRepository(context),
             new TripFinalizeQuotaExecutor(context),
+            new UserRepository(context),
+            new EmailOutboxRepository(context),
             new FixedTimeProvider(Now));
         return new FinalizeScope(context, command);
     }
