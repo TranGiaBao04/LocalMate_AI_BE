@@ -29,6 +29,9 @@ services:
       Otp__HashKey: "${Otp__HashKey:-}"
       Smtp__Username: "${Smtp__Username:-}"
       Smtp__Password: "${Smtp__Password:-}"
+      AdminSeed__Email: "${AdminSeed__Email:-}"
+      AdminSeed__Password: "${AdminSeed__Password:-}"
+      AdminSeed__FullName: "${AdminSeed__FullName:-}"
     ports:
       - "5286:5286"
     depends_on:

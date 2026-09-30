@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LocalMateAI.Tests;
 
+[Collection(AdminAccountsCollection.Name)]
 public sealed class AdminRoleRepositoryPostgresTests
 {
     private const string ConnectionEnvironmentVariable = "LOCALMATE_TEST_CONNECTION";

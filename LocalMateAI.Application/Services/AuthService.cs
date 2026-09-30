@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using LocalMateAI.Application.DTOs.Auth;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Interfaces.Services;
+using LocalMateAI.Application.Security;
 using LocalMateAI.Domain.Entities;
 using LocalMateAI.Domain.Enums;
 
@@ -23,8 +24,6 @@ public sealed class AuthService(
     private const int MaximumEmailLength = 254;
     private const int MaximumProviderSubjectLength = 255;
     private const int MaximumGoogleIdTokenLength = 16_384;
-    private const int MinimumPasswordLength = 8;
-    private const int MaximumPasswordLength = 128;
     private const int OtpCodeLength = 6;
 
     // Bản đăng ký chưa nhập OTP được giữ 24 giờ; quá hạn phải đăng ký lại.
@@ -507,27 +506,7 @@ public sealed class AuthService(
         return errors;
     }
 
-    private static string? GetPasswordError(string password)
-    {
-        if (string.IsNullOrEmpty(password))
-        {
-            return "Password is required.";
-        }
-
-        if (password.Length < MinimumPasswordLength)
-        {
-            return $"Password must contain at least {MinimumPasswordLength} characters.";
-        }
-
-        if (password.Length > MaximumPasswordLength)
-        {
-            return $"Password must not exceed {MaximumPasswordLength} characters.";
-        }
-
-        return string.IsNullOrWhiteSpace(password)
-            ? "Password must contain at least one non-whitespace character."
-            : null;
-    }
+    private static string? GetPasswordError(string password) => PasswordRules.GetError(password);
 
     private static Dictionary<string, string[]> ValidateEmailOnly(string email)
     {

@@ -281,9 +281,16 @@ using (var seedScope = app.Services.CreateScope())
     await seedDbContext.Database.MigrateAsync();
     await DataSeeder.SeedAsync(seedDbContext);
 
+    // BE-81: admin đầu tiên từ biến môi trường, chạy ở mọi môi trường (bỏ trống biến = không tạo).
+    var passwordHashService = seedScope.ServiceProvider.GetRequiredService<IPasswordHashService>();
+    await AdminAccountSeeder.SeedAsync(
+        seedDbContext,
+        passwordHashService,
+        app.Configuration.GetSection(AdminSeedOptions.SectionName).Get<AdminSeedOptions>() ?? new AdminSeedOptions(),
+        seedScope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("AdminSeed"));
+
     if (app.Environment.IsDevelopment())
     {
-        var passwordHashService = seedScope.ServiceProvider.GetRequiredService<IPasswordHashService>();
         await DataSeeder.SeedDevelopmentUsersAsync(seedDbContext, passwordHashService);
     }
 }
