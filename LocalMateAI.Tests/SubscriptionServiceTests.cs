@@ -23,6 +23,39 @@ public sealed class SubscriptionServiceTests
         Assert.Equal(0, plans[0].Price);
         Assert.Equal(19_000, plans[1].Price);
         Assert.Equal(59_000, plans[2].Price);
+        Assert.All(plans, plan =>
+        {
+            var feature = Assert.Single(plan.Features);
+            Assert.Equal("METRO_GOOGLE_MAPS", feature.Code);
+            Assert.Equal("Bản đồ Metro & chỉ đường Google Maps", feature.Name);
+        });
+    }
+
+    [Fact]
+    public async Task Plans_UseCurrentVersionFeatures_WithoutChangingQuotaValues()
+    {
+        var repo = new FakeSubscriptionRepository([]);
+        var plan = repo.Plans.Single(p => p.Code == "TRIP_PASS");
+        var version = new SubscriptionPlanVersion
+        {
+            PlanId = plan.Id, VersionNumber = 2, Price = 19000, DurationDays = 7, SavedTripLimit = 3
+        };
+        await repo.PublishVersionAsync(version, []);
+        var response = (await CreateService(subscriptions: repo).GetPlansAsync()).Single(p => p.Code == "TripPass");
+        Assert.Empty(response.Features);
+        Assert.Equal(19000, response.Price);
+        Assert.Equal(7, response.DurationDays);
+        Assert.Null(response.GenerateLimit);
+        Assert.Equal(3, response.SavedTripLimit);
+        Assert.Single(await repo.GetFeaturesForVersionAsync(repo.Versions.Single(v =>
+            v.PlanId == plan.Id && v.VersionNumber == 1).Id));
+    }
+
+    [Fact]
+    public void PlanResponse_ExistingPositionalConstructor_DefaultsToEmptyFeatures()
+    {
+        var response = new LocalMateAI.Application.DTOs.Subscription.SubscriptionPlanResponse("Free", 0, null, 1, 1);
+        Assert.Empty(response.Features);
     }
 
     [Fact]

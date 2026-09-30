@@ -13,6 +13,7 @@ public sealed class SubscriptionController(
     IPaymentService paymentService) : ControllerBase
 {
     [HttpGet("plans")]
+    [HttpGet("/api/subscriptions/plans")]
     [AllowAnonymous]
     [ProducesResponseType<IReadOnlyList<SubscriptionPlanResponse>>(StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<SubscriptionPlanResponse>>> GetPlansAsync(CancellationToken cancellationToken) =>

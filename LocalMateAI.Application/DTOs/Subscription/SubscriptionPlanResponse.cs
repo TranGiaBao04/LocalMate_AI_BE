@@ -5,4 +5,7 @@ public sealed record SubscriptionPlanResponse(
     decimal Price,
     int? DurationDays,
     int? GenerateLimit,
-    int? SavedTripLimit);
+    int? SavedTripLimit)
+{
+    public IReadOnlyList<SubscriptionFeatureResponse> Features { get; init; } = [];
+}

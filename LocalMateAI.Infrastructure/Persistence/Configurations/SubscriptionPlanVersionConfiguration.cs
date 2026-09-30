@@ -17,6 +17,9 @@ public sealed class SubscriptionPlanVersionConfiguration : IEntityTypeConfigurat
             t.HasCheckConstraint("CK_Versions_Origin", "\"Origin\" IN ('Published','LegacyBaseline','LegacyReconstructed') AND (\"Origin\" <> 'Published' OR \"PublishedAt\" IS NOT NULL)");
         });
         b.HasKey(v => v.Id);
+        // Database-only publication stamp permits features only in the version's creating transaction.
+        b.Property<long>("FeaturePublicationTransactionId")
+            .HasDefaultValueSql("pg_current_xact_id()::text::bigint");
         b.HasAlternateKey(v => new { v.PlanId, v.Id });
         b.Property(v => v.Price).HasColumnType("numeric(12,0)");
         b.Property(v => v.Origin).HasConversion<string>().HasMaxLength(30);

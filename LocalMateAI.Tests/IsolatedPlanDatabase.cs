@@ -14,7 +14,7 @@ public sealed class IsolatedPlanDatabase : IAsyncDisposable
     { adminConnection = admin; Connection = connection; name = database; }
     public AppDbContext Context() => new(new DbContextOptionsBuilder<AppDbContext>()
         .UseNpgsql(Connection, o => o.UseNetTopologySuite()).Options);
-    public static async Task<IsolatedPlanDatabase> CreateAsync(bool previousSchema = false)
+    public static async Task<IsolatedPlanDatabase> CreateAsync(bool previousSchema = false, string? targetMigration = null)
     {
         var builder = new NpgsqlConnectionStringBuilder(PostgresTestDatabase.RequireConnection());
         builder.Database = "postgres";
@@ -29,7 +29,9 @@ public sealed class IsolatedPlanDatabase : IAsyncDisposable
         try
         {
             await using var context = result.Context();
-            if (previousSchema)
+            if (targetMigration is not null)
+                await context.GetService<IMigrator>().MigrateAsync(targetMigration);
+            else if (previousSchema)
                 await context.GetService<IMigrator>().MigrateAsync("20260930043206_AddRbacAndUserStatus");
             else await context.Database.MigrateAsync();
             return result;

@@ -11,6 +11,10 @@ public abstract class TestSubscriptionRepository : ISubscriptionRepository
     public List<SubscriptionPlan> Plans { get; } = [.. SubscriptionBaseline.Plans()];
     public List<SubscriptionPlanVersion> Versions { get; } = [.. SubscriptionBaseline.Versions()];
     public List<SubscriptionPeriod> Periods { get; } = [];
+    public List<PlanFeature> Features { get; } = [PlanFeatureBaseline.MetroGoogleMaps()];
+    public List<SubscriptionPlanVersionFeature> VersionFeatures { get; } =
+        SubscriptionBaseline.Versions().Select(v => new SubscriptionPlanVersionFeature
+        { PlanVersionId = v.Id, FeatureId = PlanFeatureBaseline.MetroGoogleMapsId }).ToList();
     public abstract Task<IReadOnlyList<UserSubscription>> GetByUserIdAsync(Guid userId, CancellationToken cancellationToken = default);
     public abstract Task<UserSubscription?> GetByUserAndPlanAsync(Guid userId, PlanCode planCode, CancellationToken cancellationToken = default);
     public abstract Task AddAsync(UserSubscription subscription, CancellationToken cancellationToken = default);
@@ -44,9 +48,20 @@ public abstract class TestSubscriptionRepository : ISubscriptionRepository
         Periods.Add(period);
         return Task.CompletedTask;
     }
-    public Task PublishVersionAsync(SubscriptionPlanVersion version, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<PlanFeature>> GetFeatureCatalogAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<PlanFeature>>(Features.OrderBy(f => f.Code).ToArray());
+    public Task<IReadOnlyList<PlanFeature>> GetFeaturesForVersionAsync(Guid versionId, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<PlanFeature>>(VersionFeatures.Where(f => f.PlanVersionId == versionId)
+            .OrderBy(f => f.SortOrder).ThenBy(f => Features.Single(x => x.Id == f.FeatureId).Code)
+            .Select(f => Features.Single(x => x.Id == f.FeatureId)).ToArray());
+    public Task PublishVersionAsync(SubscriptionPlanVersion version, CancellationToken cancellationToken = default) =>
+        PublishVersionAsync(version, [], cancellationToken);
+    public Task PublishVersionAsync(SubscriptionPlanVersion version, IReadOnlyList<Guid> featureIds,
+        CancellationToken cancellationToken = default)
     {
         Versions.Add(version);
+        VersionFeatures.AddRange(featureIds.Select((id, order) => new SubscriptionPlanVersionFeature
+        { PlanVersionId = version.Id, FeatureId = id, SortOrder = order }));
         Plans.Single(p => p.Id == version.PlanId).CurrentVersionId = version.Id;
         return Task.CompletedTask;
     }

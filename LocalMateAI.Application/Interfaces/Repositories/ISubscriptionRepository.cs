@@ -12,6 +12,11 @@ public interface ISubscriptionRepository
     Task<IReadOnlyList<SubscriptionPeriod>> GetPeriodsAsync(Guid userId, CancellationToken cancellationToken = default);
     Task AddPeriodAsync(SubscriptionPeriod period, CancellationToken cancellationToken = default);
     Task PublishVersionAsync(SubscriptionPlanVersion version, CancellationToken cancellationToken = default);
+    Task PublishVersionAsync(SubscriptionPlanVersion version, IReadOnlyList<Guid> featureIds,
+        CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<PlanFeature>> GetFeatureCatalogAsync(CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<PlanFeature>> GetFeaturesForVersionAsync(Guid versionId,
+        CancellationToken cancellationToken = default);
     Task<IReadOnlyList<UserSubscription>> GetByUserIdAsync(
         Guid userId,
         CancellationToken cancellationToken = default);
