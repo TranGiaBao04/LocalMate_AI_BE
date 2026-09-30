@@ -141,6 +141,8 @@ public sealed class PaymentSettlementConcurrencyPostgresTests
             .Where(message => message.ToEmail == $"settlement-concurrency-{userId:N}@localmate.test")
             .ExecuteDeleteAsync();
         if (await context.SubscriptionPeriods.AnyAsync(p => p.UserId == userId)) return;
+        if (await context.PaymentOrderStatusHistories.AnyAsync(h =>
+            context.PaymentOrders.Any(o => o.Id == h.PaymentOrderId && o.UserId == userId))) return;
         await context.UserSubscriptions
             .Where(subscription => subscription.UserId == userId)
             .ExecuteDeleteAsync();

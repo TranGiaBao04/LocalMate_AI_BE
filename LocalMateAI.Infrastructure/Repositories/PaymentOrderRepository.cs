@@ -3,10 +3,11 @@ using LocalMateAI.Domain.Entities;
 using LocalMateAI.Domain.Enums;
 using LocalMateAI.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using LocalMateAI.Application.Payments;
 
 namespace LocalMateAI.Infrastructure.Repositories;
 
-public sealed class PaymentOrderRepository(AppDbContext dbContext) : IPaymentOrderRepository
+public sealed class PaymentOrderRepository(AppDbContext dbContext, TimeProvider? timeProvider = null) : IPaymentOrderRepository
 {
     public Task<PaymentOrder?> GetPendingAsync(
         Guid userId,
@@ -31,25 +32,47 @@ public sealed class PaymentOrderRepository(AppDbContext dbContext) : IPaymentOrd
                 order => order.Id == orderId && order.UserId == userId,
                 cancellationToken);
 
-    public async Task<bool> MarkExpiredIfPendingAsync(
+    public Task<bool> MarkExpiredIfPendingAsync(
         Guid orderId,
         DateTime updatedAt,
-        CancellationToken cancellationToken = default) =>
-        await dbContext.PaymentOrders
-            .Where(order => order.Id == orderId
-                            && order.Status == PaymentOrderStatus.Pending)
-            .ExecuteUpdateAsync(
-                setters => setters.SetProperty(
-                    order => order.Status,
-                    PaymentOrderStatus.Expired)
-                    .SetProperty(order => order.UpdatedAt, updatedAt),
-                cancellationToken) == 1;
+        CancellationToken cancellationToken = default) => MarkExpiredIfPendingAsync(orderId, updatedAt,
+            new(PaymentStatusChangeSource.LocalExpiration, ReasonCode: "local_expired"), cancellationToken);
+
+    public async Task<bool> MarkExpiredIfPendingAsync(Guid orderId, DateTime nowUtc, PaymentTransitionContext context,
+        CancellationToken cancellationToken = default)
+    {
+        var code = await dbContext.PaymentOrders.AsNoTracking().Where(o => o.Id == orderId)
+            .Select(o => (long?)o.ProviderOrderCode).SingleOrDefaultAsync(cancellationToken);
+        if (code is null) return false;
+        var execution = await new PaymentSettlementExecutor(dbContext, timeProvider).ExecuteAsync(code.Value, context,
+            (order, _) =>
+            {
+                if (order.Status != PaymentOrderStatus.Pending) return Task.FromResult(false);
+                order.Status = PaymentOrderStatus.Expired;
+                return Task.FromResult(true);
+            }, cancellationToken);
+        return execution.OrderExists && execution.Result;
+    }
+
+    public async Task TransitionStatusAsync(PaymentOrder order, PaymentOrderStatus status, PaymentTransitionContext context,
+        DateTime nowUtc, CancellationToken cancellationToken = default)
+    {
+        if (order.Status == status) return;
+        var before = order.Status;
+        order.Status = status;
+        dbContext.PaymentOrderStatusHistories.Add(context.History(order, before, nowUtc));
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
 
     public async Task AddAsync(
         PaymentOrder order,
         CancellationToken cancellationToken = default)
     {
         dbContext.PaymentOrders.Add(order);
+        if (order.Status == PaymentOrderStatus.Pending && order.PlanVersionBinding == PlanVersionBinding.Native)
+            dbContext.PaymentOrderStatusHistories.Add(new PaymentTransitionContext(PaymentStatusChangeSource.Checkout,
+                order.UserId, ReasonCode: "order_created").History(order, null,
+                (timeProvider ?? TimeProvider.System).GetUtcNow().UtcDateTime));
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 

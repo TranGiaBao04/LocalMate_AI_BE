@@ -442,6 +442,7 @@ public sealed class PaymentServiceTests
         : IPaymentOrderRepository
     {
         private long nextProviderCode = 1000;
+        public List<PaymentOrderStatusHistory> Histories { get; } = [];
         public List<PaymentOrder> Items { get; } = [.. existing];
         public int LookupCalls { get; private set; }
 
@@ -488,6 +489,26 @@ public sealed class PaymentServiceTests
 
         public Task SaveChangesAsync(CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
+
+        public Task TransitionStatusAsync(PaymentOrder order, PaymentOrderStatus status, PaymentTransitionContext context,
+            DateTime nowUtc, CancellationToken cancellationToken = default)
+        {
+            if (order.Status != status)
+            {
+                var before = order.Status;
+                order.Status = status;
+                Histories.Add(context.History(order, before, nowUtc));
+            }
+            return Task.CompletedTask;
+        }
+
+        public async Task<bool> MarkExpiredIfPendingAsync(Guid id, DateTime now, PaymentTransitionContext context,
+            CancellationToken cancellationToken = default)
+        {
+            var changed = await MarkExpiredIfPendingAsync(id, now, cancellationToken);
+            if (changed) Histories.Add(context.History(Items.Single(o => o.Id == id), PaymentOrderStatus.Pending, now));
+            return changed;
+        }
     }
 
     private sealed class FakeGateway(
@@ -542,6 +563,9 @@ public sealed class PaymentServiceTests
 
     private sealed class FakeSettlementService : IPaymentSettlementService
     {
+        public Task<PaymentSettlementResult> ApplyVerifiedPaymentAsync(VerifiedPaymentNotification notification,
+            PaymentTransitionContext context, CancellationToken cancellationToken = default) =>
+            ApplyVerifiedPaymentAsync(notification, cancellationToken);
         public Task<PaymentSettlementResult> ApplyVerifiedPaymentAsync(
             VerifiedPaymentNotification notification,
             CancellationToken cancellationToken = default) =>
@@ -551,6 +575,9 @@ public sealed class PaymentServiceTests
     private sealed class RecordingSettlementService(PaymentOrder order)
         : IPaymentSettlementService
     {
+        public Task<PaymentSettlementResult> ApplyVerifiedPaymentAsync(VerifiedPaymentNotification notification,
+            PaymentTransitionContext context, CancellationToken cancellationToken = default) =>
+            ApplyVerifiedPaymentAsync(notification, cancellationToken);
         public List<VerifiedPaymentNotification> Notifications { get; } = [];
 
         public Task<PaymentSettlementResult> ApplyVerifiedPaymentAsync(

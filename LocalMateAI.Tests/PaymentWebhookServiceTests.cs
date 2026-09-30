@@ -2,6 +2,7 @@ using LocalMateAI.Application.Interfaces.Payments;
 using LocalMateAI.Application.Payments;
 using LocalMateAI.Application.Services;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
 namespace LocalMateAI.Tests;
 
@@ -60,6 +61,9 @@ public sealed class PaymentWebhookServiceTests
         new(
             new FakeGateway(verification),
             settlement,
+            new PaymentEvidenceTestRepository(),
+            Options.Create(new PaymentEvidenceOptions()),
+            TimeProvider.System,
             NullLogger<PaymentWebhookService>.Instance);
 
     private sealed class FakeGateway(PaymentWebhookVerificationResult verification)
@@ -85,6 +89,10 @@ public sealed class PaymentWebhookServiceTests
         : IPaymentSettlementService
     {
         public List<VerifiedPaymentNotification> Notifications { get; } = [];
+
+        public Task<PaymentSettlementResult> ApplyVerifiedPaymentAsync(VerifiedPaymentNotification notification,
+            PaymentTransitionContext context, CancellationToken cancellationToken = default) =>
+            ApplyVerifiedPaymentAsync(notification, cancellationToken);
 
         public Task<PaymentSettlementResult> ApplyVerifiedPaymentAsync(
             VerifiedPaymentNotification notification,

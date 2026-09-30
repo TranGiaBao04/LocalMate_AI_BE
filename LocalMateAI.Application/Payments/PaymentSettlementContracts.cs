@@ -11,12 +11,16 @@ public enum PaymentSettlementStatus
     UnresolvedPlanVersion
 }
 
-public sealed record PaymentSettlementResult(PaymentSettlementStatus Status);
+public sealed record PaymentSettlementResult(PaymentSettlementStatus Status)
+{
+    public string? TransitionReasonCode { get; init; }
+}
 
 public enum PaymentWebhookStatus
 {
     Acknowledged,
-    InvalidSignature
+    InvalidSignature,
+    PayloadTooLarge
 }
 
 public sealed record PaymentWebhookResult(PaymentWebhookStatus Status);
