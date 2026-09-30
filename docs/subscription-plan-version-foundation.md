@@ -94,3 +94,25 @@ dotnet ef migrations has-pending-model-changes --project LocalMateAI.Infrastruct
 ```
 
 No PayOS network calls, real payments, production migration, Admin CRUD/lifecycle/history APIs, PlanFeatures, single-itinerary, refund or frontend changes are part of this batch.
+
+## S1C RBAC Integration Verification
+
+Integrated dev c74d4087e07a96b5bb6a358b31732a44f6325b28 using a normal merge.
+RegisteredUser authorization, RoleId/navigation, account status/locking, Roles/RolePermissions and authorization registration are retained.
+Subscription catalog remains async and DB-backed. PostgreSQL user fixtures resolve system RoleId through TestRoles.
+
+The subscription migration keeps its original ID and reviewed Up/Down SQL, seeds, provenance backfill, exclusion constraint and integrity triggers.
+Its Designer target model and the final model snapshot were regenerated from the combined RBAC/subscription model, not resolved by choosing either branch wholesale.
+The temporary scaffolding migration was removed; no additional migration or historical RBAC migration modification remains.
+
+Final chain:
+AddEmailOutbox -> 20260930043206_AddRbacAndUserStatus -> 20260930114805_AddVersionedSubscriptionFoundation.
+
+Fresh full-chain migration and upgrade from latest-dev RBAC schema both passed on a new disposable PostGIS container.
+Upgrade tests retain custom role permissions, user RoleId/status/lock metadata, historical 19k/49k/59k payments, aggregate subscription timing and null-attributed usage.
+Legacy Pending/Failed/Expired bindings remain unresolved without financial rewrites or grants; already-Paid legacy orders remain no-ops.
+Missing PostgreSQL connection now fails explicitly in imported RBAC/Admin tests as well as subscription tests.
+
+Final verification: build passed; 809 tests passed, 0 failed/skipped, including 82 actually executed PostgreSQL cases.
+No pending EF model changes. Ordinary local/team/production databases were not migrated.
+The deployment and legacy-binding gates above still apply; successful isolated tests are not permission for automatic production cutover.

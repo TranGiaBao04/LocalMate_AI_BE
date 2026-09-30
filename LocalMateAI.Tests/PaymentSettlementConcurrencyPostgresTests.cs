@@ -111,12 +111,13 @@ public sealed class PaymentSettlementConcurrencyPostgresTests
         int orderCount)
     {
         await using var context = CreateContext(connectionString);
+        var userRoleId = await TestRoles.GetUserRoleIdAsync(context);
         context.Users.Add(new User
         {
             Id = userId,
             FullName = "Settlement concurrency test",
             Email = $"settlement-concurrency-{userId:N}@localmate.test",
-            Role = UserRole.User
+            RoleId = userRoleId
         });
         var orders = Enumerable.Range(0, orderCount).Select(_ => new PaymentOrder
         {

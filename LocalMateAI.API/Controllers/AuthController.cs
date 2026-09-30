@@ -160,6 +160,7 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
     [ProducesResponseType<LoginResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
     public async Task<ActionResult<LoginResponse>> LoginAsync(
         [FromBody] LoginRequest request,
         CancellationToken cancellationToken)
@@ -173,6 +174,8 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
                 CreateValidationProblem(result.ValidationErrors!),
             LoginResultStatus.InvalidCredentials =>
                 Unauthorized(CreateInvalidCredentialsProblem()),
+            LoginResultStatus.AccountLocked =>
+                StatusCode(StatusCodes.Status403Forbidden, CreateAccountLockedProblem()),
             _ => throw new InvalidOperationException("Unsupported login result status.")
         };
     }
@@ -182,6 +185,7 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
     [ProducesResponseType<LoginResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<LoginResponse>> GoogleSignInAsync(
         [FromBody] GoogleSignInRequest request,
@@ -200,6 +204,8 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
                 Conflict(CreateAccountLinkRequiredProblem()),
             GoogleSignInResultStatus.AccountConflict =>
                 Conflict(CreateAccountConflictProblem()),
+            GoogleSignInResultStatus.AccountLocked =>
+                StatusCode(StatusCodes.Status403Forbidden, CreateAccountLockedProblem()),
             _ => throw new InvalidOperationException("Unsupported Google sign-in result status.")
         };
     }
@@ -403,6 +409,22 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
         };
 
         problem.Extensions["code"] = "account_conflict";
+        return problem;
+    }
+
+    // BE-83: không trả lý do khoá (ghi chú nội bộ của admin).
+    private ProblemDetails CreateAccountLockedProblem()
+    {
+        var problem = new ProblemDetails
+        {
+            Status = StatusCodes.Status403Forbidden,
+            Title = "Account is locked.",
+            Detail = "Tài khoản đã bị khoá, vui lòng liên hệ hỗ trợ.",
+            Type = "https://httpstatuses.com/403",
+            Instance = HttpContext.Request.Path
+        };
+
+        problem.Extensions["code"] = "account_locked";
         return problem;
     }
 }

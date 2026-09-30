@@ -4,6 +4,7 @@ using System.Security.Claims;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using LocalMateAI.API.Authorization;
 using LocalMateAI.API.Controllers;
 using LocalMateAI.Application.DTOs.Subscription;
 using LocalMateAI.Application.Interfaces.Payments;
@@ -260,7 +261,7 @@ public sealed class SubscriptionHttpContractTests
                 .AddScheme<AuthenticationSchemeOptions, TestAuthenticationHandler>(
                     TestAuthenticationHandler.SchemeName,
                     _ => { });
-            builder.Services.AddAuthorization();
+            builder.Services.AddLocalMateAuthorization();
             builder.Services.AddControllers()
                 .AddApplicationPart(typeof(SubscriptionController).Assembly)
                 .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(

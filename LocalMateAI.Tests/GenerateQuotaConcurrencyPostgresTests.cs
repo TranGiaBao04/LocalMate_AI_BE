@@ -239,12 +239,13 @@ public sealed class GenerateQuotaConcurrencyPostgresTests
         var userId = Guid.NewGuid();
         var placeIds = new[] { Guid.NewGuid(), Guid.NewGuid() };
         await using var context = CreateContext(connectionString);
+        var userRoleId = await TestRoles.GetUserRoleIdAsync(context);
         context.Users.Add(new User
         {
             Id = userId,
             FullName = "Generate quota concurrency test",
             Email = $"generate-quota-{userId:N}@localmate.test",
-            Role = UserRole.User
+            RoleId = userRoleId
         });
         context.Places.AddRange(placeIds.Select((placeId, index) => new Place
         {

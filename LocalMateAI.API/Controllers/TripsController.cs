@@ -1,3 +1,4 @@
+using LocalMateAI.API.Authorization;
 using LocalMateAI.Application.Commands;
 using LocalMateAI.Application.DTOs.Matching;
 using LocalMateAI.Application.DTOs.Trips;
@@ -43,7 +44,7 @@ public sealed class TripsController(
     }
 
     [HttpPost("match")]
-    [Authorize(Roles = "User,Admin")]
+    [Authorize(Policy = AppPolicies.RegisteredUser)]
     [ProducesResponseType<TripMatchingResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
@@ -64,7 +65,7 @@ public sealed class TripsController(
     }
 
     [HttpPost("fallback-itinerary")]
-    [Authorize(Roles = "User,Admin")]
+    [Authorize(Policy = AppPolicies.RegisteredUser)]
     [ProducesResponseType<FallbackItineraryPayload>(StatusCodes.Status200OK)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
@@ -89,7 +90,7 @@ public sealed class TripsController(
     }
 
     [HttpPost("generate")]
-    [Authorize(Roles = "User,Admin")]
+    [Authorize(Policy = AppPolicies.RegisteredUser)]
     [ProducesResponseType<TripDetailResponse>(StatusCodes.Status201Created)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
@@ -142,7 +143,7 @@ public sealed class TripsController(
     }
 
     [HttpPost("save")]
-    [Authorize(Roles = "User,Admin")]
+    [Authorize(Policy = AppPolicies.RegisteredUser)]
     [ProducesResponseType<SaveTripResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
@@ -185,7 +186,7 @@ public sealed class TripsController(
     }
 
     [HttpPost("{tripId:guid}/finalize")]
-    [Authorize(Roles = "User,Admin")]
+    [Authorize(Policy = AppPolicies.RegisteredUser)]
     [ProducesResponseType<FinalizeTripResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
@@ -233,7 +234,7 @@ public sealed class TripsController(
     }
 
     [HttpPost("{tripId:guid}/fork")]
-    [Authorize(Roles = "User,Admin")]
+    [Authorize(Policy = AppPolicies.RegisteredUser)]
     [ProducesResponseType<ForkTripResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
@@ -271,7 +272,7 @@ public sealed class TripsController(
     }
 
     [HttpGet("{tripId:guid}/items/{itemId:guid}/alternatives")]
-    [Authorize(Roles = "User,Admin")]
+    [Authorize(Policy = AppPolicies.RegisteredUser)]
     [ProducesResponseType<IReadOnlyList<AlternativePlaceResponse>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
@@ -333,7 +334,7 @@ public sealed class TripsController(
     }
 
     [HttpPut("{tripId:guid}/items/{itemId:guid}/replace")]
-    [Authorize(Roles = "User,Admin")]
+    [Authorize(Policy = AppPolicies.RegisteredUser)]
     [ProducesResponseType<ReplaceItineraryItemResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
@@ -410,7 +411,7 @@ public sealed class TripsController(
     }
 
     [HttpDelete("{tripId:guid}/items/{itemId:guid}")]
-    [Authorize(Roles = "User,Admin")]
+    [Authorize(Policy = AppPolicies.RegisteredUser)]
     [ProducesResponseType<IReadOnlyList<ItineraryTimelineItemResponse>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
@@ -465,7 +466,7 @@ public sealed class TripsController(
     }
 
     [HttpGet("{tripId:guid}")]
-    [Authorize(Roles = "User,Admin")]
+    [Authorize(Policy = AppPolicies.RegisteredUser)]
     [ProducesResponseType<TripDetailResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
@@ -508,7 +509,7 @@ public sealed class TripsController(
     }
 
     [HttpDelete("{tripId:guid}")]
-    [Authorize(Roles = "User,Admin")]
+    [Authorize(Policy = AppPolicies.RegisteredUser)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
@@ -551,7 +552,7 @@ public sealed class TripsController(
     }
 
     [HttpGet("my-trips")]
-    [Authorize(Roles = "User,Admin")]
+    [Authorize(Policy = AppPolicies.RegisteredUser)]
     [ProducesResponseType<IReadOnlyList<MyTripResponse>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
@@ -578,7 +579,7 @@ public sealed class TripsController(
     }
 
     [HttpPut("items/{id:guid}/visit")]
-    [Authorize(Roles = "User,Admin")]
+    [Authorize(Policy = AppPolicies.RegisteredUser)]
     [ProducesResponseType<VisitItineraryItemResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]

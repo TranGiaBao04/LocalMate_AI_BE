@@ -2,6 +2,7 @@ using LocalMateAI.Application.Interfaces.Payments;
 using LocalMateAI.Application.DTOs.Subscription;
 using LocalMateAI.Application.Payments;
 using LocalMateAI.Application.Services;
+using LocalMateAI.Application.Security;
 using LocalMateAI.Domain.Entities;
 using LocalMateAI.Domain.Enums;
 using LocalMateAI.Infrastructure.Persistence;
@@ -32,6 +33,86 @@ public sealed class PlanVersionFoundationPostgresTests
         Assert.False(context.Database.HasPendingModelChanges());
         Assert.Empty(await context.SubscriptionPeriods.ToListAsync());
         Assert.Empty(await context.Database.GetPendingMigrationsAsync());
+        Assert.Equal(2, await context.Roles.CountAsync(r => r.IsSystem));
+        Assert.Empty(await context.RolePermissions.ToListAsync());
+        var columns = await context.Database.SqlQueryRaw<string>(
+            "SELECT column_name AS \"Value\" FROM information_schema.columns WHERE table_name='Users'").ToListAsync();
+        Assert.Contains("RoleId", columns);
+        Assert.Contains("Status", columns);
+        Assert.Contains("LockedAt", columns);
+        Assert.Contains("LockReason", columns);
+        Assert.DoesNotContain("Role", columns);
+    }
+
+    [Theory]
+    [InlineData(PlanCode.TripPass, 19000, PaymentOrderStatus.Pending)]
+    [InlineData(PlanCode.TripPass, 49000, PaymentOrderStatus.Pending)]
+    [InlineData(PlanCode.TripPass, 19000, PaymentOrderStatus.Failed)]
+    [InlineData(PlanCode.TripPass, 19000, PaymentOrderStatus.Expired)]
+    [InlineData(PlanCode.TripPass, 19000, PaymentOrderStatus.Paid)]
+    [InlineData(PlanCode.Membership, 59000, PaymentOrderStatus.Paid)]
+    public async Task LatestDevUpgrade_PreservesRbacAndHistoricalPayment(
+        PlanCode planCode, int amount, PaymentOrderStatus status)
+    {
+        await using var db = await IsolatedPlanDatabase.CreateAsync(previousSchema: true);
+        await using var c = db.Context();
+        Assert.Equal("20260930043206_AddRbacAndUserStatus", (await c.Database.GetAppliedMigrationsAsync()).Last());
+        var role = new Role { Name = "Plan Auditor", NormalizedName = "PLAN AUDITOR" };
+        role.Permissions.Add(new RolePermission { RoleId = role.Id, Permission = Permissions.ViewRevenue });
+        var user = new User
+        {
+            FullName = "Locked legacy user",
+            Email = $"legacy-{Guid.NewGuid():N}@localmate.test",
+            RoleId = role.Id,
+            Role = role,
+            Status = UserStatus.Locked,
+            LockedAt = Now,
+            LockReason = "Isolated migration test"
+        };
+        c.Users.Add(user);
+        await c.SaveChangesAsync();
+        var orderId = Guid.NewGuid();
+        DateTime? paidAt = status == PaymentOrderStatus.Paid ? Now : null;
+        await c.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO "PaymentOrders" ("Id","UserId","PlanCode","Type","Amount","Status","ProviderOrderCode","ExpiresAt","PaidAt","CheckoutUrl","QrCode","CreatedAt","UpdatedAt")
+            VALUES ({orderId},{user.Id},{planCode.ToString()},'Purchase',{amount},{status.ToString()},9910,{Now.AddMinutes(15)},{paidAt},'historical-url','historical-qr',{Now},{Now});
+            """);
+        await c.Database.MigrateAsync();
+        c.ChangeTracker.Clear();
+        var savedUser = await c.Users.AsNoTracking().Include(u => u.Role).SingleAsync(u => u.Id == user.Id);
+        Assert.Equal(role.Id, savedUser.RoleId);
+        Assert.Equal(role.Name, savedUser.RoleName);
+        Assert.Equal(UserStatus.Locked, savedUser.Status);
+        Assert.Equal(Now, savedUser.LockedAt);
+        Assert.Equal(user.LockReason, savedUser.LockReason);
+        Assert.Equal(Permissions.ViewRevenue, (await c.RolePermissions.SingleAsync()).Permission);
+        Assert.Equal(2, await c.Roles.CountAsync(r => r.IsSystem));
+        Assert.Equal(3, await c.SubscriptionPlans.CountAsync());
+
+        var order = await c.PaymentOrders.AsNoTracking().SingleAsync();
+        Assert.Equal(orderId, order.Id);
+        Assert.Equal(user.Id, order.UserId);
+        Assert.Equal(planCode, order.PlanCode);
+        Assert.Equal(PaymentOrderType.Purchase, order.Type);
+        Assert.Equal(amount, order.Amount);
+        Assert.Equal(status, order.Status);
+        Assert.Equal(9910, order.ProviderOrderCode);
+        Assert.Equal(paidAt, order.PaidAt);
+        Assert.Equal(Now.AddMinutes(15), order.ExpiresAt);
+        Assert.Equal(Now, order.CreatedAt);
+        Assert.Equal(Now, order.UpdatedAt);
+        Assert.Equal("historical-url", order.CheckoutUrl);
+        Assert.Equal("historical-qr", order.QrCode);
+        Assert.Equal(SubscriptionBaseline.PlanId(planCode), order.PlanId);
+        Assert.Null(order.PlanVersionId);
+        Assert.Equal(PlanVersionBinding.LegacyUnresolved, order.PlanVersionBinding);
+        var settlement = await Settlement(c, new Clock(Now)).ApplyVerifiedPaymentAsync(new(9910, amount, true));
+        Assert.Equal(status == PaymentOrderStatus.Paid
+            ? PaymentSettlementStatus.AlreadyPaid : PaymentSettlementStatus.UnresolvedPlanVersion, settlement.Status);
+        Assert.Equal(status, (await c.PaymentOrders.AsNoTracking().SingleAsync()).Status);
+        Assert.Empty(await c.SubscriptionPeriods.ToListAsync());
+        Assert.Empty(await c.EmailOutboxMessages.ToListAsync());
+        Assert.False(c.Database.HasPendingModelChanges());
     }
 
     [Fact]
@@ -286,7 +367,12 @@ public sealed class PlanVersionFoundationPostgresTests
 
     internal static async Task<User> UserAsync(AppDbContext c)
     {
-        var user = new User { FullName = "Version test", Email = $"version-{Guid.NewGuid():N}@localmate.test" };
+        var user = new User
+        {
+            FullName = "Version test",
+            Email = $"version-{Guid.NewGuid():N}@localmate.test",
+            RoleId = await TestRoles.GetUserRoleIdAsync(c)
+        };
         c.Users.Add(user);
         await c.SaveChangesAsync();
         return user;

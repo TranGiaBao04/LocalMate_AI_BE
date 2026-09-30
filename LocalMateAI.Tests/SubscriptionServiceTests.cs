@@ -1,6 +1,7 @@
 using LocalMateAI.Application.DTOs.Trips;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Services;
+using LocalMateAI.Domain.Common;
 using LocalMateAI.Domain.Entities;
 using LocalMateAI.Domain.Enums;
 
@@ -133,7 +134,7 @@ public sealed class SubscriptionServiceTests
     [Fact]
     public async Task Me_PersistedAdmin_IsAllowed()
     {
-        var response = await CreateService(role: UserRole.Admin).GetMySubscriptionAsync(UserId);
+        var response = await CreateService(roleName: SystemRoles.AdminName).GetMySubscriptionAsync(UserId);
 
         Assert.Equal("Free", response!.Plan);
     }
@@ -143,12 +144,12 @@ public sealed class SubscriptionServiceTests
 
     private static SubscriptionService CreateService(
         bool persistedUser = true,
-        UserRole role = UserRole.User,
+        string roleName = SystemRoles.UserName,
         FakeSubscriptionRepository? subscriptions = null,
         FakeUsageRepository? events = null,
         FakeTripRepository? trips = null) =>
         new(
-            new FakeUserRepository(persistedUser ? new User { Id = UserId, Role = role } : null),
+            new FakeUserRepository(persistedUser ? new User { Id = UserId, Role = new Role { Name = roleName } } : null),
             subscriptions ?? new FakeSubscriptionRepository([]),
             events ?? new FakeUsageRepository([]),
             trips ?? new FakeTripRepository([]),

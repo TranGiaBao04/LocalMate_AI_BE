@@ -8,6 +8,8 @@ namespace LocalMateAI.Infrastructure.Persistence;
 public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
     public DbSet<User> Users => Set<User>();
+    public DbSet<Role> Roles => Set<Role>();
+    public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
     public DbSet<MetroStation> MetroStations => Set<MetroStation>();
     public DbSet<Place> Places => Set<Place>();
     public DbSet<CuratedItinerary> CuratedItineraries => Set<CuratedItinerary>();

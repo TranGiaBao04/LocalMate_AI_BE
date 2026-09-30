@@ -97,12 +97,13 @@ public sealed class PaymentConcurrencyPostgresTests
     private static async Task SeedUsersAsync(string connectionString, IReadOnlyList<Guid> userIds)
     {
         await using var context = CreateContext(connectionString);
+        var userRoleId = await TestRoles.GetUserRoleIdAsync(context);
         context.Users.AddRange(userIds.Select(userId => new User
         {
             Id = userId,
             FullName = "Payment concurrency test",
             Email = $"payment-concurrency-{userId:N}@localmate.test",
-            Role = UserRole.User
+            RoleId = userRoleId
         }));
         await context.SaveChangesAsync();
     }

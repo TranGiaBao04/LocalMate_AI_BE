@@ -2,6 +2,7 @@ using LocalMateAI.Application.DTOs.Auth;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Interfaces.Services;
 using LocalMateAI.Application.Services;
+using LocalMateAI.Domain.Common;
 using LocalMateAI.Domain.Entities;
 using LocalMateAI.Domain.Enums;
 
@@ -173,7 +174,7 @@ public sealed class AuthServiceRegistrationTests
         Assert.Equal("Nguyen Van A", user.FullName);
         Assert.Equal(Email, user.Email);
         Assert.Equal(FakePasswordHasher.HashOf(Password), user.PasswordHash);
-        Assert.Equal(UserRole.User, user.Role);
+        Assert.Equal(FakeSystemRoleProvider.User.Id, user.RoleId);
 
         Assert.Equal(user.Id, result.Response!.Id);
         Assert.Equal(Email, result.Response.Email);
@@ -271,12 +272,35 @@ public sealed class AuthServiceRegistrationTests
     public async Task GoogleSignIn_AlreadyLinkedUser_DoesNotTouchPendingRegistrations()
     {
         var fixture = new Fixture();
-        fixture.ExternalLogins.LinkedUser = new User { FullName = "Nguyen Van A", Email = Email };
+        fixture.ExternalLogins.LinkedUser = new User
+        {
+            FullName = "Nguyen Van A",
+            Email = Email,
+            Role = new Role { Name = SystemRoles.UserName }
+        };
 
         var result = await fixture.Service.GoogleSignInAsync(new GoogleSignInRequest("google-id-token"));
 
         Assert.Equal(GoogleSignInResultStatus.Success, result.Status);
         Assert.Empty(fixture.Pending.DeletedEmails);
+    }
+
+    [Fact]
+    public async Task GoogleSignIn_LinkedUserLocked_ReturnsAccountLocked()
+    {
+        var fixture = new Fixture();
+        fixture.ExternalLogins.LinkedUser = new User
+        {
+            FullName = "Nguyen Van A",
+            Email = Email,
+            Status = UserStatus.Locked,
+            Role = new Role { Name = SystemRoles.UserName }
+        };
+
+        var result = await fixture.Service.GoogleSignInAsync(new GoogleSignInRequest("google-id-token"));
+
+        Assert.Equal(GoogleSignInResultStatus.AccountLocked, result.Status);
+        Assert.Null(result.Response);
     }
 
     private static RegisterRequest ValidRegisterRequest() => new()
@@ -312,6 +336,7 @@ public sealed class AuthServiceRegistrationTests
                 new FakePasswordHasher(),
                 new FakeAccessTokenService(),
                 new FakeGoogleValidator(),
+                new FakeSystemRoleProvider(),
                 new FixedTimeProvider(new DateTimeOffset(Now)));
         }
 
@@ -465,7 +490,7 @@ public sealed class AuthServiceRegistrationTests
 
     private sealed class FakeAccessTokenService : IAccessTokenService
     {
-        public AccessTokenResult CreateAccessToken(User user) =>
+        public AccessTokenResult CreateAccessToken(User user, string roleName) =>
             new("token", new DateTimeOffset(Now).AddHours(1));
 
         public AccessTokenResult CreateDemoAccessToken(Guid sessionId) =>

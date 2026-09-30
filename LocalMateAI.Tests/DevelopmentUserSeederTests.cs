@@ -1,4 +1,5 @@
 using LocalMateAI.Application.Interfaces.Services;
+using LocalMateAI.Domain.Common;
 using LocalMateAI.Domain.Entities;
 using LocalMateAI.Domain.Enums;
 using LocalMateAI.Infrastructure.Persistence;
@@ -24,11 +25,11 @@ public sealed class DevelopmentUserSeederTests
 
         Assert.Equal(4, users.Count);
 
-        var admin = Assert.Single(users, u => u.Role == UserRole.Admin);
+        var admin = Assert.Single(users, u => u.RoleName == SystemRoles.AdminName);
         Assert.Equal("admin@localmate.dev", admin.Email);
         Assert.Equal("LocalMate Admin", admin.FullName);
 
-        var normalUsers = users.Where(u => u.Role == UserRole.User).ToList();
+        var normalUsers = users.Where(u => u.RoleName == SystemRoles.UserName).ToList();
         Assert.Equal(3, normalUsers.Count);
 
         Assert.Contains(normalUsers, u => u.Email == "user1@localmate.dev" && u.FullName == "LocalMate User 1");
@@ -51,8 +52,7 @@ public sealed class DevelopmentUserSeederTests
             {
                 Id = Guid.NewGuid(),
                 FullName = seed.FullName,
-                Email = seed.Email,
-                Role = seed.Role
+                Email = seed.Email
             };
 
             var hash = passwordHashService.HashPassword(user, DataSeeder.DevelopmentDefaultPassword);

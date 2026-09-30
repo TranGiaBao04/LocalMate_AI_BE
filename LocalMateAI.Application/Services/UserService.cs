@@ -1,6 +1,7 @@
 using LocalMateAI.Application.DTOs.Users;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Interfaces.Services;
+using LocalMateAI.Application.Security;
 using LocalMateAI.Domain.Entities;
 using LocalMateAI.Domain.Enums;
 
@@ -213,9 +214,10 @@ public sealed class UserService(
             user.Id,
             user.FullName,
             user.Email,
-            user.Role.ToString(),
+            user.RoleName,
             user.CreatedAt,
             new UserPreferencesResponse(
                 interestTagIds.Order().ToArray(),
-                travelStyleTagIds.Order().ToArray()));
+                travelStyleTagIds.Order().ToArray()),
+            RolePermissionRules.Resolve(user.Role!));
 }

@@ -30,7 +30,7 @@ public sealed class IsolatedPlanDatabase : IAsyncDisposable
         {
             await using var context = result.Context();
             if (previousSchema)
-                await context.GetService<IMigrator>().MigrateAsync("20260928050449_AddEmailOutbox");
+                await context.GetService<IMigrator>().MigrateAsync("20260930043206_AddRbacAndUserStatus");
             else await context.Database.MigrateAsync();
             return result;
         }
