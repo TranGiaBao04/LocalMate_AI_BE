@@ -44,11 +44,9 @@ public sealed class FinalizeTripCommand(
                 }
 
                 var nowUtc = timeProvider.GetUtcNow().UtcDateTime;
-                var subscriptions = await subscriptionRepository.GetByUserIdAsync(
-                    userId,
-                    transactionCancellationToken);
-                var effective = SubscriptionCatalog.ResolveEffectivePaid(subscriptions, nowUtc);
-                var plan = SubscriptionCatalog.Get(effective?.PlanCode ?? PlanCode.Free);
+                var effective = await EffectiveSubscriptionResolver.ResolveAsync(
+                    subscriptionRepository, userId, nowUtc, transactionCancellationToken);
+                var plan = effective.Version;
 
                 if (plan.SavedTripLimit is { } limit)
                 {

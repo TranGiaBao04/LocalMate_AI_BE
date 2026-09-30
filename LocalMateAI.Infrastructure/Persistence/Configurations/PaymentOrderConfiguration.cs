@@ -10,7 +10,16 @@ public sealed class PaymentOrderConfiguration : IEntityTypeConfiguration<Payment
     {
         builder.ToTable("PaymentOrders");
         builder.HasKey(order => order.Id);
-        builder.Property(order => order.PlanCode).HasConversion<string>().HasMaxLength(20).IsRequired();
+        builder.Property(order => order.PlanCode).HasConversion<string>().HasMaxLength(20).IsRequired(false);
+        builder.Property(order => order.PlanVersionBinding).HasConversion<string>().HasMaxLength(30);
+        builder.ToTable("PaymentOrders", t => t.HasCheckConstraint("CK_PaymentOrders_NativeBinding",
+            "\"PlanVersionBinding\" <> 'Native' OR (\"PlanId\" IS NOT NULL AND \"PlanVersionId\" IS NOT NULL)"));
+        builder.HasOne<SubscriptionPlan>().WithMany().HasForeignKey(o => o.PlanId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<SubscriptionPlanVersion>().WithMany()
+            .HasForeignKey(o => new { o.PlanId, o.PlanVersionId })
+            .HasPrincipalKey(v => new { v.PlanId, v.Id }).OnDelete(DeleteBehavior.Restrict);
+        builder.HasAlternateKey(o => new { o.Id, o.UserId });
+        builder.HasIndex(o => new { o.UserId, o.PlanId, o.Type, o.Status });
         builder.Property(order => order.Type).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.Property(order => order.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.Property(order => order.Amount).HasColumnType("numeric(12,0)");

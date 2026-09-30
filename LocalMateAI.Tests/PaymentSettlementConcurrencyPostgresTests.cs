@@ -11,18 +11,13 @@ namespace LocalMateAI.Tests;
 
 public sealed class PaymentSettlementConcurrencyPostgresTests
 {
-    private const string ConnectionEnvironmentVariable = "LOCALMATE_TEST_CONNECTION";
     private static readonly DateTime Now =
         new(2026, 10, 5, 4, 0, 0, DateTimeKind.Utc);
 
     [Fact]
     public async Task ConcurrentDuplicateSettlement_ExtendsExactlyOnce()
     {
-        var connectionString = Environment.GetEnvironmentVariable(ConnectionEnvironmentVariable);
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            return;
-        }
+        var connectionString = PostgresTestDatabase.RequireConnection();
 
         var userId = Guid.NewGuid();
         var order = await SeedAsync(connectionString, userId, orderCount: 1);
@@ -45,12 +40,11 @@ public sealed class PaymentSettlementConcurrencyPostgresTests
             await using var verify = CreateContext(connectionString);
             var storedOrder = await verify.PaymentOrders.AsNoTracking()
                 .SingleAsync(candidate => candidate.Id == order[0].Id);
-            var subscription = await verify.UserSubscriptions.AsNoTracking()
-                .SingleAsync(candidate => candidate.UserId == userId
-                                          && candidate.PlanCode == PlanCode.Membership);
+            var periods = await verify.SubscriptionPeriods.AsNoTracking()
+                .Where(candidate => candidate.UserId == userId).OrderBy(p => p.StartsAt).ToListAsync();
             Assert.Equal(PaymentOrderStatus.Paid, storedOrder.Status);
             Assert.Equal(Now, storedOrder.PaidAt);
-            Assert.Equal(Now.AddDays(30), subscription.EndsAt);
+            Assert.Equal(Now.AddDays(30), Assert.Single(periods).EndsAt);
             var receipt = await verify.EmailOutboxMessages.AsNoTracking()
                 .SingleAsync(candidate => candidate.DeduplicationKey == $"payment-receipt:{order[0].Id}");
             Assert.Equal(EmailOutboxStatus.Pending, receipt.Status);
@@ -65,11 +59,7 @@ public sealed class PaymentSettlementConcurrencyPostgresTests
     [Fact]
     public async Task ConcurrentDistinctOrders_ExtendSamePlanTwiceWithoutLostUpdate()
     {
-        var connectionString = Environment.GetEnvironmentVariable(ConnectionEnvironmentVariable);
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            return;
-        }
+        var connectionString = PostgresTestDatabase.RequireConnection();
 
         var userId = Guid.NewGuid();
         var orders = await SeedAsync(connectionString, userId, orderCount: 2);
@@ -99,12 +89,13 @@ public sealed class PaymentSettlementConcurrencyPostgresTests
                 .Where(candidate => candidate.UserId == userId)
                 .Select(candidate => candidate.Status)
                 .ToListAsync();
-            var subscription = await verify.UserSubscriptions.AsNoTracking()
-                .SingleAsync(candidate => candidate.UserId == userId
-                                          && candidate.PlanCode == PlanCode.Membership);
+            var periods = await verify.SubscriptionPeriods.AsNoTracking()
+                .Where(candidate => candidate.UserId == userId).OrderBy(p => p.StartsAt).ToListAsync();
             Assert.Equal(2, statuses.Count);
             Assert.All(statuses, status => Assert.Equal(PaymentOrderStatus.Paid, status));
-            Assert.Equal(Now.AddDays(60), subscription.EndsAt);
+            Assert.Equal(2, periods.Count);
+            Assert.Equal(periods[0].EndsAt, periods[1].StartsAt);
+            Assert.Equal(Now.AddDays(60), periods[1].EndsAt);
             Assert.Equal(2, await verify.EmailOutboxMessages.AsNoTracking()
                 .CountAsync(candidate => candidate.ToEmail == $"settlement-concurrency-{userId:N}@localmate.test"));
         }
@@ -136,6 +127,7 @@ public sealed class PaymentSettlementConcurrencyPostgresTests
             Status = PaymentOrderStatus.Pending,
             ExpiresAt = Now.AddMinutes(15)
         }).ToArray();
+        foreach (var order in orders) TestSubscriptionRepository.Bind(order);
         context.PaymentOrders.AddRange(orders);
         await context.SaveChangesAsync();
         return orders;
@@ -147,6 +139,7 @@ public sealed class PaymentSettlementConcurrencyPostgresTests
         await context.EmailOutboxMessages
             .Where(message => message.ToEmail == $"settlement-concurrency-{userId:N}@localmate.test")
             .ExecuteDeleteAsync();
+        if (await context.SubscriptionPeriods.AnyAsync(p => p.UserId == userId)) return;
         await context.UserSubscriptions
             .Where(subscription => subscription.UserId == userId)
             .ExecuteDeleteAsync();

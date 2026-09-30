@@ -8,16 +8,11 @@ namespace LocalMateAI.Tests;
 
 public sealed class EmailOutboxRepositoryPostgresTests
 {
-    private const string ConnectionEnvironmentVariable = "LOCALMATE_TEST_CONNECTION";
 
     [Fact]
     public async Task Enqueue_SameDeduplicationKeyTwice_InsertsOnce()
     {
-        var connectionString = Environment.GetEnvironmentVariable(ConnectionEnvironmentVariable);
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            return;
-        }
+        var connectionString = PostgresTestDatabase.RequireConnection();
 
         var key = NewKey();
         try
@@ -42,11 +37,7 @@ public sealed class EmailOutboxRepositoryPostgresTests
     [Fact]
     public async Task Enqueue_DuplicateInsideTransaction_DoesNotAbortTransaction()
     {
-        var connectionString = Environment.GetEnvironmentVariable(ConnectionEnvironmentVariable);
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            return;
-        }
+        var connectionString = PostgresTestDatabase.RequireConnection();
 
         var key = NewKey();
         var otherKey = NewKey();
@@ -76,11 +67,7 @@ public sealed class EmailOutboxRepositoryPostgresTests
     [Fact]
     public async Task ClaimDue_ConcurrentClaims_NeverReturnSameMessage()
     {
-        var connectionString = Environment.GetEnvironmentVariable(ConnectionEnvironmentVariable);
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            return;
-        }
+        var connectionString = PostgresTestDatabase.RequireConnection();
 
         var keys = Enumerable.Range(0, 10).Select(_ => NewKey()).ToArray();
         try
@@ -127,11 +114,7 @@ public sealed class EmailOutboxRepositoryPostgresTests
     [Fact]
     public async Task ClaimDue_LeasedMessage_IsNotClaimedAgainUntilLeaseExpires()
     {
-        var connectionString = Environment.GetEnvironmentVariable(ConnectionEnvironmentVariable);
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            return;
-        }
+        var connectionString = PostgresTestDatabase.RequireConnection();
 
         var key = NewKey();
         try
@@ -159,11 +142,7 @@ public sealed class EmailOutboxRepositoryPostgresTests
     [Fact]
     public async Task MarkSent_ThenDeleteExpired_RemovesOnlyOldSentMessages()
     {
-        var connectionString = Environment.GetEnvironmentVariable(ConnectionEnvironmentVariable);
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            return;
-        }
+        var connectionString = PostgresTestDatabase.RequireConnection();
 
         var oldKey = NewKey();
         var recentKey = NewKey();

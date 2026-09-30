@@ -12,11 +12,11 @@ public sealed class SubscriptionServiceTests
     private static readonly DateTime Now = new(2026, 9, 30, 17, 0, 0, DateTimeKind.Utc);
 
     [Fact]
-    public void Plans_ReturnStableStringCodesAndCatalogValues()
+    public async Task Plans_ReturnStableStringCodesAndCatalogValues()
     {
         var service = CreateService();
 
-        var plans = service.GetPlans();
+        var plans = await service.GetPlansAsync();
 
         Assert.Equal(["Free", "TripPass", "Membership"], plans.Select(plan => plan.Code));
         Assert.Equal(0, plans[0].Price);
@@ -160,11 +160,11 @@ public sealed class SubscriptionServiceTests
     }
 
     private sealed class FakeSubscriptionRepository(IReadOnlyList<UserSubscription> subscriptions)
-        : ISubscriptionRepository
+        : TestSubscriptionRepository
     {
         public int Calls { get; private set; }
 
-        public Task<IReadOnlyList<UserSubscription>> GetByUserIdAsync(
+        public override Task<IReadOnlyList<UserSubscription>> GetByUserIdAsync(
             Guid userId, CancellationToken cancellationToken = default)
         {
             Calls++;
@@ -172,12 +172,12 @@ public sealed class SubscriptionServiceTests
                 subscriptions.Where(subscription => subscription.UserId == userId).ToArray());
         }
 
-        public Task<UserSubscription?> GetByUserAndPlanAsync(
+        public override Task<UserSubscription?> GetByUserAndPlanAsync(
             Guid userId, PlanCode planCode, CancellationToken cancellationToken = default) =>
             Task.FromResult(subscriptions.SingleOrDefault(subscription =>
                 subscription.UserId == userId && subscription.PlanCode == planCode));
 
-        public Task AddAsync(
+        public override Task AddAsync(
             UserSubscription subscription,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
@@ -185,6 +185,8 @@ public sealed class SubscriptionServiceTests
 
     private sealed class FakeUsageRepository(IReadOnlyList<DateTime> events) : IUsageEventRepository
     {
+        public Task<int> CountForPeriodAsync(Guid userId, Guid periodId, UsageEventType type, CancellationToken cancellationToken = default) =>
+            Task.FromResult(0);
         public int Calls { get; private set; }
         public UsageEventType? LastType { get; private set; }
         public DateTime LastStart { get; private set; }

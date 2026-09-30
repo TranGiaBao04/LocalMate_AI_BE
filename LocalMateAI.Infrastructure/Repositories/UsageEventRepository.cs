@@ -8,6 +8,10 @@ namespace LocalMateAI.Infrastructure.Repositories;
 
 public sealed class UsageEventRepository(AppDbContext dbContext) : IUsageEventRepository
 {
+    public Task<int> CountForPeriodAsync(Guid userId, Guid periodId, UsageEventType type,
+        CancellationToken cancellationToken = default) =>
+        dbContext.UsageEvents.CountAsync(e => e.UserId == userId && e.SubscriptionPeriodId == periodId
+            && e.Type == type, cancellationToken);
     public Task<int> CountAsync(
         Guid userId,
         UsageEventType type,
@@ -18,6 +22,7 @@ public sealed class UsageEventRepository(AppDbContext dbContext) : IUsageEventRe
             .AsNoTracking()
             .CountAsync(usage => usage.UserId == userId
                                  && usage.Type == type
+                                 && usage.SubscriptionPeriodId == null
                                  && usage.CreatedAt >= startUtc
                                  && usage.CreatedAt < nextStartUtc, cancellationToken);
 
@@ -27,9 +32,9 @@ public sealed class UsageEventRepository(AppDbContext dbContext) : IUsageEventRe
     {
         await dbContext.Database.ExecuteSqlInterpolatedAsync(
             $"""
-            INSERT INTO "UsageEvents" ("Id", "CreatedAt", "TripId", "Type", "UpdatedAt", "UserId")
+            INSERT INTO "UsageEvents" ("Id", "CreatedAt", "TripId", "Type", "UpdatedAt", "UserId", "SubscriptionPeriodId")
             VALUES ({usageEvent.Id}, {usageEvent.CreatedAt}, {usageEvent.TripId},
-                    {usageEvent.Type.ToString()}, {usageEvent.UpdatedAt}, {usageEvent.UserId})
+                    {usageEvent.Type.ToString()}, {usageEvent.UpdatedAt}, {usageEvent.UserId}, {usageEvent.SubscriptionPeriodId})
             """,
             cancellationToken);
     }

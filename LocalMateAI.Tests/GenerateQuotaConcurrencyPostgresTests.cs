@@ -15,16 +15,11 @@ namespace LocalMateAI.Tests;
 
 public sealed class GenerateQuotaConcurrencyPostgresTests
 {
-    private const string ConnectionEnvironmentVariable = "LOCALMATE_TEST_CONNECTION";
 
     [Fact]
     public async Task FreeUser_TwoConcurrentGenerates_ExactlyOneTripAndUsageEventCommit()
     {
         var connectionString = GetConnectionString();
-        if (connectionString is null)
-        {
-            return;
-        }
 
         var seed = await SeedAsync(connectionString, PlanCode.Free);
         try
@@ -67,10 +62,6 @@ public sealed class GenerateQuotaConcurrencyPostgresTests
     public async Task PaidUser_TwoConcurrentGenerates_BothCommitWithoutUsageEvents(PlanCode planCode)
     {
         var connectionString = GetConnectionString();
-        if (connectionString is null)
-        {
-            return;
-        }
 
         var seed = await SeedAsync(connectionString, planCode);
         try
@@ -97,10 +88,6 @@ public sealed class GenerateQuotaConcurrencyPostgresTests
     public async Task FreeUser_DeletingGeneratedTrip_DoesNotRefundQuota()
     {
         var connectionString = GetConnectionString();
-        if (connectionString is null)
-        {
-            return;
-        }
 
         var seed = await SeedAsync(connectionString, PlanCode.Free);
         try
@@ -131,10 +118,6 @@ public sealed class GenerateQuotaConcurrencyPostgresTests
     public async Task FreeUser_UsageInsertFailure_RollsBackFlushedTrip()
     {
         var connectionString = GetConnectionString();
-        if (connectionString is null)
-        {
-            return;
-        }
 
         var seed = await SeedAsync(connectionString, PlanCode.Free);
         try
@@ -162,10 +145,6 @@ public sealed class GenerateQuotaConcurrencyPostgresTests
     public async Task FreeUser_VietnamMonthBoundary_ResetsAtSeventeenUtc()
     {
         var connectionString = GetConnectionString();
-        if (connectionString is null)
-        {
-            return;
-        }
 
         var beforeBoundary = new DateTime(2026, 9, 30, 16, 59, 59, DateTimeKind.Utc);
         var afterBoundary = new DateTime(2026, 9, 30, 17, 0, 1, DateTimeKind.Utc);
@@ -207,10 +186,6 @@ public sealed class GenerateQuotaConcurrencyPostgresTests
     public async Task PaymentAndGenerate_ForSameUser_ShareLockOrderWithoutDeadlock()
     {
         var connectionString = GetConnectionString();
-        if (connectionString is null)
-        {
-            return;
-        }
 
         var seed = await SeedAsync(connectionString, PlanCode.Free);
         var paymentEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -247,10 +222,9 @@ public sealed class GenerateQuotaConcurrencyPostgresTests
         }
     }
 
-    private static string? GetConnectionString()
+    private static string GetConnectionString()
     {
-        var connectionString = Environment.GetEnvironmentVariable(ConnectionEnvironmentVariable);
-        return string.IsNullOrWhiteSpace(connectionString) ? null : connectionString;
+        return PostgresTestDatabase.RequireConnection();
     }
 
     private static TripRequestDto Request() =>
@@ -296,10 +270,11 @@ public sealed class GenerateQuotaConcurrencyPostgresTests
         }
 
         await context.SaveChangesAsync();
+        await PostgresTestDatabase.ImportLegacyAsync(context, userId);
         return new SeedData(userId, placeIds, nowUtc);
     }
 
-    private static GenerateScope CreateScope(
+    internal static GenerateScope CreateScope(
         string connectionString,
         SeedData seed,
         Func<AppDbContext, IUsageEventRepository>? usageRepositoryFactory = null)
@@ -334,6 +309,8 @@ public sealed class GenerateQuotaConcurrencyPostgresTests
         await using var context = CreateContext(connectionString);
         await context.UsageEvents.Where(usage => usage.UserId == seed.UserId).ExecuteDeleteAsync();
         await context.Trips.Where(trip => trip.UserId == seed.UserId).ExecuteDeleteAsync();
+        // Immutable fixtures are retained until the disposable test DB is dropped.
+        if (await context.SubscriptionPeriods.AnyAsync(p => p.UserId == seed.UserId)) return;
         await context.UserSubscriptions
             .Where(subscription => subscription.UserId == seed.UserId)
             .ExecuteDeleteAsync();
@@ -349,9 +326,9 @@ public sealed class GenerateQuotaConcurrencyPostgresTests
         return new AppDbContext(options);
     }
 
-    private sealed record SeedData(Guid UserId, Guid[] PlaceIds, DateTime NowUtc);
+    internal sealed record SeedData(Guid UserId, Guid[] PlaceIds, DateTime NowUtc);
 
-    private sealed record GenerateScope(AppDbContext Context, TripGenerationService Service)
+    internal sealed record GenerateScope(AppDbContext Context, TripGenerationService Service)
         : IAsyncDisposable
     {
         public ValueTask DisposeAsync() => Context.DisposeAsync();
@@ -436,6 +413,8 @@ public sealed class GenerateQuotaConcurrencyPostgresTests
 
     private sealed class FailingUsageEventRepository(AppDbContext context) : IUsageEventRepository
     {
+        public Task<int> CountForPeriodAsync(Guid userId, Guid periodId, UsageEventType type, CancellationToken cancellationToken = default) =>
+            new UsageEventRepository(context).CountForPeriodAsync(userId, periodId, type, cancellationToken);
         private readonly UsageEventRepository inner = new(context);
 
         public Task<int> CountAsync(

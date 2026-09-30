@@ -11,17 +11,12 @@ namespace LocalMateAI.Tests;
 
 public sealed class FinalizeQuotaConcurrencyPostgresTests
 {
-    private const string ConnectionEnvironmentVariable = "LOCALMATE_TEST_CONNECTION";
     private static readonly DateTime Now = new(2026, 10, 5, 4, 0, 0, DateTimeKind.Utc);
 
     [Fact]
     public async Task FreeUser_TwoConcurrentFinalizes_ExactlyOneSucceeds()
     {
-        var connectionString = Environment.GetEnvironmentVariable(ConnectionEnvironmentVariable);
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            return;
-        }
+        var connectionString = PostgresTestDatabase.RequireConnection();
 
         var userId = Guid.NewGuid();
         var drafts = await SeedAsync(connectionString, userId, PlanCode.Free, finalizedCount: 0);
@@ -49,11 +44,7 @@ public sealed class FinalizeQuotaConcurrencyPostgresTests
     [Fact]
     public async Task TripPassAtTwo_TwoConcurrentFinalizes_StopsAtThree()
     {
-        var connectionString = Environment.GetEnvironmentVariable(ConnectionEnvironmentVariable);
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            return;
-        }
+        var connectionString = PostgresTestDatabase.RequireConnection();
 
         var userId = Guid.NewGuid();
         var drafts = await SeedAsync(connectionString, userId, PlanCode.TripPass, finalizedCount: 2);
@@ -76,11 +67,7 @@ public sealed class FinalizeQuotaConcurrencyPostgresTests
     [Fact]
     public async Task Membership_TwoConcurrentFinalizes_BothSucceed()
     {
-        var connectionString = Environment.GetEnvironmentVariable(ConnectionEnvironmentVariable);
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            return;
-        }
+        var connectionString = PostgresTestDatabase.RequireConnection();
 
         var userId = Guid.NewGuid();
         var drafts = await SeedAsync(connectionString, userId, PlanCode.Membership, finalizedCount: 0);
@@ -101,11 +88,7 @@ public sealed class FinalizeQuotaConcurrencyPostgresTests
     [Fact]
     public async Task FreeUser_SoftDeletedFinalizedTrip_DoesNotConsumeQuota()
     {
-        var connectionString = Environment.GetEnvironmentVariable(ConnectionEnvironmentVariable);
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            return;
-        }
+        var connectionString = PostgresTestDatabase.RequireConnection();
 
         var userId = Guid.NewGuid();
         var drafts = await SeedAsync(
@@ -132,11 +115,7 @@ public sealed class FinalizeQuotaConcurrencyPostgresTests
     [Fact]
     public async Task FreeUser_HistoricalOverLimit_BlocksWithoutDeletingTrips()
     {
-        var connectionString = Environment.GetEnvironmentVariable(ConnectionEnvironmentVariable);
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            return;
-        }
+        var connectionString = PostgresTestDatabase.RequireConnection();
 
         var userId = Guid.NewGuid();
         var drafts = await SeedAsync(connectionString, userId, PlanCode.Free, finalizedCount: 5);
@@ -211,6 +190,7 @@ public sealed class FinalizeQuotaConcurrencyPostgresTests
         };
         context.Trips.AddRange(drafts);
         await context.SaveChangesAsync();
+        await PostgresTestDatabase.ImportLegacyAsync(context, userId);
         return drafts;
     }
 
@@ -271,6 +251,7 @@ public sealed class FinalizeQuotaConcurrencyPostgresTests
             .Where(message => message.ToEmail == $"finalize-quota-{userId:N}@localmate.test")
             .ExecuteDeleteAsync();
         await context.Trips.Where(trip => trip.UserId == userId).ExecuteDeleteAsync();
+        if (await context.SubscriptionPeriods.AnyAsync(p => p.UserId == userId)) return;
         await context.UserSubscriptions
             .Where(subscription => subscription.UserId == userId)
             .ExecuteDeleteAsync();

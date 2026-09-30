@@ -5,6 +5,8 @@ namespace LocalMateAI.Application.Interfaces.Repositories;
 
 public interface IUsageEventRepository
 {
+    Task<int> CountForPeriodAsync(Guid userId, Guid periodId, UsageEventType type,
+        CancellationToken cancellationToken = default);
     Task<int> CountAsync(
         Guid userId,
         UsageEventType type,

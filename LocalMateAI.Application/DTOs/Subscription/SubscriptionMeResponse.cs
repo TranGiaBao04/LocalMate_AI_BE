@@ -8,4 +8,7 @@ public sealed record SubscriptionMeResponse(
     string Plan,
     DateTime? EndsAt,
     SubscriptionUsageResponse Usage,
-    SubscriptionSavedTripsResponse SavedTrips);
+    SubscriptionSavedTripsResponse SavedTrips)
+{
+    public DateTime? EffectiveUntil { get; init; }
+}

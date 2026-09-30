@@ -4,7 +4,7 @@ namespace LocalMateAI.Application.Interfaces.Services;
 
 public interface ISubscriptionService
 {
-    IReadOnlyList<SubscriptionPlanResponse> GetPlans();
+    Task<IReadOnlyList<SubscriptionPlanResponse>> GetPlansAsync(CancellationToken cancellationToken = default);
 
     Task<SubscriptionMeResponse?> GetMySubscriptionAsync(
         Guid userId,

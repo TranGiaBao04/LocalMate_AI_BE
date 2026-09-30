@@ -10,12 +10,12 @@ public sealed class PaymentOrderRepository(AppDbContext dbContext) : IPaymentOrd
 {
     public Task<PaymentOrder?> GetPendingAsync(
         Guid userId,
-        PlanCode planCode,
+        Guid planId,
         PaymentOrderType type,
         CancellationToken cancellationToken = default) =>
         dbContext.PaymentOrders
             .Where(order => order.UserId == userId
-                            && order.PlanCode == planCode
+                            && order.PlanId == planId
                             && order.Type == type
                             && order.Status == PaymentOrderStatus.Pending)
             .OrderByDescending(order => order.CreatedAt)

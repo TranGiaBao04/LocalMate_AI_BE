@@ -14,8 +14,8 @@ public sealed class SubscriptionController(
     [HttpGet("plans")]
     [AllowAnonymous]
     [ProducesResponseType<IReadOnlyList<SubscriptionPlanResponse>>(StatusCodes.Status200OK)]
-    public ActionResult<IReadOnlyList<SubscriptionPlanResponse>> GetPlans() =>
-        Ok(subscriptionService.GetPlans());
+    public async Task<ActionResult<IReadOnlyList<SubscriptionPlanResponse>>> GetPlansAsync(CancellationToken cancellationToken) =>
+        Ok(await subscriptionService.GetPlansAsync(cancellationToken));
 
     [HttpGet("me")]
     [Authorize(Roles = "User,Admin")]
