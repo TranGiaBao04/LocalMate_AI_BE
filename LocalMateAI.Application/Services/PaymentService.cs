@@ -15,7 +15,7 @@ public sealed class PaymentService(
     IPaymentOrderRepository paymentOrderRepository,
     IPaymentOperationExecutor paymentOperationExecutor,
     IPaymentGateway paymentGateway,
-    IPaymentSettlementService paymentSettlementService,
+    IPaymentReconciliationService reconciliation,
     TimeProvider timeProvider,
     ILogger<PaymentService> logger) : IPaymentService
 {
@@ -72,9 +72,11 @@ public sealed class PaymentService(
             return new PaymentOrderLookupResult(PaymentOrderLookupStatus.NotFound);
         }
 
-        if (order.Status != PaymentOrderStatus.Paid && HasUsablePaymentLink(order))
+        if (HasUsablePaymentLink(order))
         {
-            await ReconcileOrderAsync(order, userId, cancellationToken);
+            var reconciled = await reconciliation.ReconcileAsync(order.Id,
+                new(PaymentStatusChangeSource.ProviderLookup, userId), cancellationToken);
+            logger.LogDebug("Owned payment lookup {OrderId}: {ReconciliationResult}.", order.Id, reconciled.Status);
             order = await paymentOrderRepository.GetOwnedByIdAsync(
                 orderId,
                 userId,
@@ -89,93 +91,6 @@ public sealed class PaymentService(
             PaymentOrderLookupStatus.Success,
             ToOrderResponse(order, order.PlanId is { } planId
                 ? (await subscriptionRepository.GetPlanAsync(planId, cancellationToken))?.Code : null));
-    }
-
-    private async Task ReconcileOrderAsync(
-        PaymentOrder order,
-        Guid actorUserId,
-        CancellationToken cancellationToken)
-    {
-        PaymentGatewayOrderResult providerOrder;
-        try
-        {
-            providerOrder = await paymentGateway.GetPaymentAsync(
-                order.ProviderOrderCode,
-                cancellationToken);
-        }
-        catch (Exception exception) when (
-            exception is PaymentGatewayUnavailableException or TimeoutException)
-        {
-            return;
-        }
-
-        if (!providerOrder.IsAvailable)
-        {
-            return;
-        }
-
-        if (providerOrder.ProviderOrderCode != order.ProviderOrderCode)
-        {
-            logger.LogWarning(
-                "Ignored payment lookup with mismatched provider order code for local order {OrderId}",
-                order.Id);
-            return;
-        }
-
-        switch (providerOrder.Status)
-        {
-            case PaymentGatewayOrderStatus.Paid:
-                await paymentSettlementService.ApplyVerifiedPaymentAsync(
-                    new VerifiedPaymentNotification(
-                        providerOrder.ProviderOrderCode,
-                        providerOrder.Amount,
-                        IsSuccessful: true),
-                    new(PaymentStatusChangeSource.ProviderLookup, actorUserId, ReasonCode: "provider_paid"),
-                    cancellationToken);
-                break;
-            case PaymentGatewayOrderStatus.Cancelled:
-            case PaymentGatewayOrderStatus.Underpaid:
-            case PaymentGatewayOrderStatus.Failed:
-                await paymentSettlementService.ApplyVerifiedPaymentAsync(
-                    new VerifiedPaymentNotification(
-                        providerOrder.ProviderOrderCode,
-                        providerOrder.Amount,
-                        IsSuccessful: false),
-                    new(PaymentStatusChangeSource.ProviderLookup, actorUserId,
-                        ReasonCode: $"provider_{providerOrder.Status.ToString().ToLowerInvariant()}"),
-                    cancellationToken);
-                break;
-            case PaymentGatewayOrderStatus.Expired:
-                await paymentOrderRepository.MarkExpiredIfPendingAsync(
-                    order.Id,
-                    timeProvider.GetUtcNow().UtcDateTime,
-                    new(PaymentStatusChangeSource.ProviderLookup, actorUserId, ReasonCode: "provider_expired"),
-                    cancellationToken);
-                break;
-            case PaymentGatewayOrderStatus.Pending:
-                if (order.Status == PaymentOrderStatus.Pending
-                    && order.ExpiresAt <= timeProvider.GetUtcNow().UtcDateTime)
-                {
-                    await paymentOrderRepository.MarkExpiredIfPendingAsync(
-                        order.Id,
-                        timeProvider.GetUtcNow().UtcDateTime,
-                        new(PaymentStatusChangeSource.LocalExpiration, actorUserId, ReasonCode: "local_expired"),
-                        cancellationToken);
-                }
-                break;
-            case PaymentGatewayOrderStatus.Processing:
-                break;
-            case PaymentGatewayOrderStatus.Unknown:
-                logger.LogWarning(
-                    "Ignored unknown provider payment status for order {ProviderOrderCode}",
-                    order.ProviderOrderCode);
-                break;
-            default:
-                throw new ArgumentOutOfRangeException(
-                    nameof(providerOrder.Status),
-                    providerOrder.Status,
-                    "Unsupported provider payment status.");
-        }
     }
 
     private async Task<PaymentIntentResult> CheckoutLockedAsync(

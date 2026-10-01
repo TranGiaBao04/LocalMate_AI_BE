@@ -139,7 +139,8 @@ public sealed class PaymentConcurrencyPostgresTests
             new PaymentOrderRepository(context),
             new PaymentOperationExecutor(context),
             gateway,
-            settlementService,
+            new PaymentReconciliationService(new PaymentOrderRepository(context), gateway, settlementService,
+                TimeProvider.System, NullLogger<PaymentReconciliationService>.Instance),
             TimeProvider.System,
             NullLogger<PaymentService>.Instance);
         return new PaymentServiceScope(context, service);

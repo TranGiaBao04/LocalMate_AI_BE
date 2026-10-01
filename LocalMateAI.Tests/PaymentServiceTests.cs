@@ -412,7 +412,8 @@ public sealed class PaymentServiceTests
                 Orders,
                 new FakePaymentOperationExecutor(persistedUser),
                 Gateway,
-                settlementService ?? new FakeSettlementService(),
+                new PaymentReconciliationService(Orders, Gateway, settlementService ?? new FakeSettlementService(),
+                    new FixedTimeProvider(Now), NullLogger<PaymentReconciliationService>.Instance),
                 new FixedTimeProvider(Now),
                 NullLogger<PaymentService>.Instance);
         }
@@ -445,6 +446,12 @@ public sealed class PaymentServiceTests
         public List<PaymentOrderStatusHistory> Histories { get; } = [];
         public List<PaymentOrder> Items { get; } = [.. existing];
         public int LookupCalls { get; private set; }
+
+        public Task<PaymentOrder?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
+            Task.FromResult(Items.SingleOrDefault(o => o.Id == id));
+        public Task<IReadOnlyList<Guid>> GetExpiredPendingIdsAsync(DateTime now, int batchSize, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<Guid>>(Items.Where(o => o.Status == PaymentOrderStatus.Pending && o.ExpiresAt <= now)
+                .OrderBy(o => o.ExpiresAt).ThenBy(o => o.Id).Take(batchSize).Select(o => o.Id).ToArray());
 
         public Task<PaymentOrder?> GetPendingAsync(
             Guid userId, Guid planId, PaymentOrderType type,

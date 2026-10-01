@@ -9,6 +9,13 @@ namespace LocalMateAI.Infrastructure.Repositories;
 
 public sealed class PaymentOrderRepository(AppDbContext dbContext, TimeProvider? timeProvider = null) : IPaymentOrderRepository
 {
+    public Task<PaymentOrder?> GetByIdAsync(Guid orderId, CancellationToken cancellationToken = default) =>
+        dbContext.PaymentOrders.AsNoTracking().SingleOrDefaultAsync(o => o.Id == orderId, cancellationToken);
+
+    public async Task<IReadOnlyList<Guid>> GetExpiredPendingIdsAsync(DateTime nowUtc, int batchSize,
+        CancellationToken cancellationToken = default) =>
+        await dbContext.PaymentOrders.AsNoTracking().Where(o => o.Status == PaymentOrderStatus.Pending && o.ExpiresAt <= nowUtc)
+            .OrderBy(o => o.ExpiresAt).ThenBy(o => o.Id).Select(o => o.Id).Take(batchSize).ToListAsync(cancellationToken);
     public Task<PaymentOrder?> GetPendingAsync(
         Guid userId,
         Guid planId,

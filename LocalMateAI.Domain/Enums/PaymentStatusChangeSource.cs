@@ -5,5 +5,7 @@ public enum PaymentStatusChangeSource
     Checkout,
     Webhook,
     ProviderLookup,
-    LocalExpiration
+    LocalExpiration,
+    AdminReconcile,
+    BackgroundReconcile
 }
