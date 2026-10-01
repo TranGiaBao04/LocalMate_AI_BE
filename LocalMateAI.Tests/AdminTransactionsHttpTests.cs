@@ -9,6 +9,7 @@ using LocalMateAI.API.Middlewares;
 using LocalMateAI.Application.DTOs.Auth;
 using LocalMateAI.Application.DTOs.Payments;
 using LocalMateAI.Application.Interfaces.Services;
+using LocalMateAI.Application.Interfaces.Payments;
 using LocalMateAI.Application.Security;
 using LocalMateAI.Domain.Enums;
 using Microsoft.AspNetCore.Authentication;
@@ -168,17 +169,19 @@ public sealed class AdminTransactionsHttpTests
     {
         private readonly WebApplication app;
         internal HttpClient Client { get; }
-        internal Host(IAdminTransactionService? service = null)
+        internal Host(IAdminTransactionService? service = null, IPaymentReconciliationService? reconciliation = null)
         {
             var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "ContractTests" });
             builder.WebHost.UseTestServer();
             builder.Logging.ClearProviders();
             builder.Services.AddSingleton(service ?? AdminTransactionTests.Service(new AdminTransactionTests.RecordingRepository()));
+            if (reconciliation is not null) builder.Services.AddSingleton(reconciliation);
             builder.Services.AddSingleton<IUserAccessService, Access>();
             builder.Services.AddAuthentication("TransactionTest")
                 .AddScheme<AuthenticationSchemeOptions, Authentication>("TransactionTest", _ => { });
             builder.Services.AddLocalMateAuthorization();
-            builder.Services.AddControllers().AddApplicationPart(typeof(AdminTransactionsController).Assembly);
+            builder.Services.AddControllers().AddApplicationPart(typeof(AdminTransactionsController).Assembly)
+                .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter()));
             app = builder.Build();
             app.UseRouting();
             app.UseAuthentication();

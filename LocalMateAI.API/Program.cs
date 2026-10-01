@@ -185,6 +185,12 @@ builder.Services.AddScoped<ITripFinalizeQuotaExecutor, TripFinalizeQuotaExecutor
 builder.Services.AddScoped<ITripGenerationQuotaExecutor, TripGenerationQuotaExecutor>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
 builder.Services.AddScoped<IPaymentSettlementService, PaymentSettlementService>();
+builder.Services.AddScoped<IPaymentReconciliationService, PaymentReconciliationService>();
+builder.Services.AddScoped<IPaymentReconciliationLeaseProvider, PaymentReconciliationLeaseProvider>();
+builder.Services.AddOptions<PaymentReconciliationOptions>()
+    .Bind(builder.Configuration.GetSection(PaymentReconciliationOptions.SectionName)).ValidateOnStart();
+builder.Services.AddSingleton<IValidateOptions<PaymentReconciliationOptions>, PaymentReconciliationOptionsValidator>();
+builder.Services.AddHostedService<PaymentReconciliationWorker>();
 builder.Services.AddScoped<IPaymentWebhookService, PaymentWebhookService>();
 if (configuredPayOSOptions.IsComplete())
 {

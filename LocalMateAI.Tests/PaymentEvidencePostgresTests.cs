@@ -210,7 +210,7 @@ public sealed class PaymentEvidencePostgresTests
         await c.SaveChangesAsync();
         await Payment(c, new() { Lookup = new(true, order.ProviderOrderCode, order.Amount, PaymentGatewayOrderStatus.Pending) }).GetOrderAsync(order.UserId, order.Id);
         var expiry = Assert.Single(await c.PaymentOrderStatusHistories.Where(h => h.FromStatus != null).ToListAsync());
-        Assert.Equal(PaymentStatusChangeSource.LocalExpiration, expiry.Source);
+        Assert.Equal(PaymentStatusChangeSource.ProviderLookup, expiry.Source);
         Assert.Equal(PaymentOrderStatus.Expired, expiry.ToStatus);
         Assert.Equal(PaymentSettlementStatus.Settled, (await Settlement(c).ApplyVerifiedPaymentAsync(new(order.ProviderOrderCode, order.Amount, true))).Status);
         Assert.Single(await c.SubscriptionPeriods.ToListAsync());
@@ -487,7 +487,9 @@ public sealed class PaymentEvidencePostgresTests
         new SubscriptionRepository(c), new UserRepository(c), new EmailOutboxRepository(c), new PaymentEvidenceTestClock(Now), NullLogger<PaymentSettlementService>.Instance);
     private static PaymentService Payment(AppDbContext c, PaymentEvidenceTestGateway gateway) => new(new UserRepository(c),
         new SubscriptionRepository(c), new PaymentOrderRepository(c, new PaymentEvidenceTestClock(Now)), new PaymentOperationExecutor(c),
-        gateway, Settlement(c), new PaymentEvidenceTestClock(Now), NullLogger<PaymentService>.Instance);
+        gateway, new PaymentReconciliationService(new PaymentOrderRepository(c, new PaymentEvidenceTestClock(Now)),
+            gateway, Settlement(c), new PaymentEvidenceTestClock(Now), NullLogger<PaymentReconciliationService>.Instance),
+        new PaymentEvidenceTestClock(Now), NullLogger<PaymentService>.Instance);
     private static PaymentWebhookService Webhook(AppDbContext c, PaymentEvidenceTestGateway gateway) => new(gateway, Settlement(c),
         new PaymentEvidenceRepository(c), Options.Create(new PaymentEvidenceOptions()), new PaymentEvidenceTestClock(Now), NullLogger<PaymentWebhookService>.Instance);
 }

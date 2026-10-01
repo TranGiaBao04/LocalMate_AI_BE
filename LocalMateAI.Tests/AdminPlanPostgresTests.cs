@@ -247,7 +247,9 @@ public sealed class AdminPlanPostgresTests
         var gateway = new Gateway();
         var settlement = PlanVersionFoundationPostgresTests.Settlement(c, clock);
         var payment = new PaymentService(new UserRepository(c), new SubscriptionRepository(c), new PaymentOrderRepository(c),
-            new PaymentOperationExecutor(c), gateway, settlement, clock, NullLogger<PaymentService>.Instance);
+            new PaymentOperationExecutor(c), gateway,
+            new PaymentReconciliationService(new PaymentOrderRepository(c), gateway, settlement, clock,
+                NullLogger<PaymentReconciliationService>.Instance), clock, NullLogger<PaymentService>.Instance);
         Assert.Equal(PaymentIntentResultStatus.InvalidPlanCode, (await payment.CheckoutAsync(newUser.Id, first.Code)).Status);
         Assert.Equal(AdminPlanResultStatus.Success, (await admin.SetStatusAsync(first.Id, true)).Status);
         Assert.Equal(PaymentIntentResultStatus.Success, (await payment.CheckoutAsync(user.Id, first.Code)).Status);
