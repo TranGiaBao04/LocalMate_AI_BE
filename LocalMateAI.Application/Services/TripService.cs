@@ -11,6 +11,8 @@ public sealed class TripService(
     IUserRepository userRepository,
     IFinalizeTripCommand finalizeTripCommand) : ITripService
 {
+    public Task<FinalizeTripResult> FinalizeTripAsync(Guid userId, Guid tripId, FinalizeTripRequest request,
+        CancellationToken ct = default) => finalizeTripCommand.ExecuteAsync(userId, tripId, request, ct);
     public async Task<MyTripsResult> GetMyTripsAsync(
         Guid userId,
         CancellationToken cancellationToken = default)

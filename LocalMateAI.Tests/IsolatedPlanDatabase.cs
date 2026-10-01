@@ -1,4 +1,5 @@
 using LocalMateAI.Infrastructure.Persistence;
+using LocalMateAI.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
@@ -14,6 +15,9 @@ public sealed class IsolatedPlanDatabase : IAsyncDisposable
     { adminConnection = admin; Connection = connection; name = database; }
     public AppDbContext Context() => new(new DbContextOptionsBuilder<AppDbContext>()
         .UseNpgsql(Connection, o => o.UseNetTopologySuite()).Options);
+    internal AppDbContext ContextBeforeSingleItinerary() => new(new DbContextOptionsBuilder<AppDbContext>()
+        .UseNpgsql(Connection, o => o.UseNetTopologySuite())
+        .ReplaceService<IModelCustomizer, BeforeSingleItineraryModelCustomizer>().Options);
     public static async Task<IsolatedPlanDatabase> CreateAsync(bool previousSchema = false, string? targetMigration = null)
     {
         var builder = new NpgsqlConnectionStringBuilder(PostgresTestDatabase.RequireConnection());
@@ -46,5 +50,21 @@ public sealed class IsolatedPlanDatabase : IAsyncDisposable
         await using var connection = new NpgsqlConnection(adminConnection);
         await connection.OpenAsync();
         await new NpgsqlCommand($"DROP DATABASE IF EXISTS \"{name}\" WITH (FORCE)", connection).ExecuteNonQueryAsync();
+    }
+}
+
+// Historical upgrade fixtures must not select/write columns introduced by a later migration.
+internal sealed class BeforeSingleItineraryModelCustomizer(ModelCustomizerDependencies dependencies)
+    : ModelCustomizer(dependencies)
+{
+    public override void Customize(ModelBuilder modelBuilder, DbContext context)
+    {
+        base.Customize(modelBuilder, context);
+        modelBuilder.Ignore<SingleItineraryEntitlement>();
+        modelBuilder.Ignore<SingleItineraryProductVersion>();
+        var order = modelBuilder.Entity<PaymentOrder>();
+        order.Ignore(o => o.ProductKind);
+        order.Ignore(o => o.CheckoutAttemptId);
+        order.Ignore(o => o.SingleItineraryProductVersionId);
     }
 }

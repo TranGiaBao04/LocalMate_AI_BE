@@ -5,6 +5,13 @@ namespace LocalMateAI.Application.Interfaces.Repositories;
 
 public interface ITripRepository
 {
+    Task<int> CountNormalFinalizedByUserAsync(Guid userId, CancellationToken cancellationToken = default) =>
+        CountFinalizedByUserAsync(userId, cancellationToken);
+    async Task<Trip?> LockOwnedForFinalizeAsync(Guid tripId, Guid userId, CancellationToken ct = default)
+    {
+        var trip = await GetByIdAsync(tripId, ct);
+        return trip?.UserId == userId ? trip : null;
+    }
     Task<int> CountFinalizedByUserAsync(
         Guid userId,
         CancellationToken cancellationToken = default);

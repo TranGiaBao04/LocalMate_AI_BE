@@ -76,7 +76,8 @@ public sealed class PaymentOrderRepository(AppDbContext dbContext, TimeProvider?
         CancellationToken cancellationToken = default)
     {
         dbContext.PaymentOrders.Add(order);
-        if (order.Status == PaymentOrderStatus.Pending && order.PlanVersionBinding == PlanVersionBinding.Native)
+        if (order.Status == PaymentOrderStatus.Pending && (order.PlanVersionBinding == PlanVersionBinding.Native
+            || order.ProductKind == PaymentProductKind.SingleItinerary))
             dbContext.PaymentOrderStatusHistories.Add(new PaymentTransitionContext(PaymentStatusChangeSource.Checkout,
                 order.UserId, ReasonCode: "order_created").History(order, null,
                 (timeProvider ?? TimeProvider.System).GetUtcNow().UtcDateTime));

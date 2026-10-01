@@ -33,7 +33,7 @@ internal sealed class EntitlementRepairPostgresFixture(IsolatedPlanDatabase data
         var db = await IsolatedPlanDatabase.CreateAsync(targetMigration: "20260930174809_AddPaymentEvidenceHistory");
         try
         {
-            await using var c = db.Context();
+            await using var c = db.ContextBeforeSingleItinerary();
             var roleId = await TestRoles.GetUserRoleIdAsync(c);
             var actor = Guid.Parse("00000000-0000-0000-0000-000000000003");
             var owner = new User { FullName = "Repair owner", Email = "repair-owner@fixture.local", RoleId = roleId };
@@ -68,9 +68,10 @@ internal sealed class EntitlementRepairPostgresFixture(IsolatedPlanDatabase data
             var removed = (missing ?? [0]).Select(i => orders[i].Id).ToHashSet();
             if (removed.Count > 0)
                 await SimulateLostPeriodsBeforeAuditMigration(c, periods.Where(p => !removed.Contains(p.SourcePaymentOrderId!.Value)));
-            await c.GetService<IMigrator>().MigrateAsync();
+            await using var current = db.Context();
+            await current.GetService<IMigrator>().MigrateAsync();
             c.ChangeTracker.Clear();
-            return new(db, await c.PaymentOrders.AsNoTracking().OrderBy(o => o.ProviderOrderCode).ToArrayAsync(), actor, periods);
+            return new(db, await current.PaymentOrders.AsNoTracking().OrderBy(o => o.ProviderOrderCode).ToArrayAsync(), actor, periods);
         }
         catch { await db.DisposeAsync(); throw; }
     }

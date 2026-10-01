@@ -11,6 +11,8 @@ public static class EntitlementRepairAssessmentPolicy
     public static EntitlementRepairAssessment Assess(EntitlementRepairEvidence evidence, DateTime nowUtc)
     {
         var target = evidence.Target.Order;
+        if (target.ProductKind != PaymentProductKind.SubscriptionPlan)
+            return Reject("product_not_applicable", "Subscription repair does not apply to this product.", status: "NotApplicable");
         var linked = evidence.Periods.Where(p => p.SourcePaymentOrderId == target.Id).ToArray();
         if (linked.Length > 0)
         {

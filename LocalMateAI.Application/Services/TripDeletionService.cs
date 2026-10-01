@@ -6,7 +6,8 @@ namespace LocalMateAI.Application.Services;
 
 public sealed class TripDeletionService(
     IUserRepository userRepository,
-    ITripRepository tripRepository) : ITripDeletionService
+    ITripRepository tripRepository,
+    ITripFinalizeQuotaExecutor? executor = null) : ITripDeletionService
 {
     public async Task<DeleteTripResult> DeleteAsync(
         Guid userId,
@@ -24,7 +25,14 @@ public sealed class TripDeletionService(
             return DeleteTripResult.MissingUser();
         }
 
-        // Không tồn tại, của người khác hoặc đã xoá đều cho cùng một kết quả để không lộ thông tin.
+        // Serialize deletion with finalize/consumption; retain consumed evidence after soft deletion.
+        if (executor is not null)
+        {
+            var result = await executor.ExecuteForUserAsync(userId, async ct =>
+                await tripRepository.LockOwnedForFinalizeAsync(tripId, userId, ct) is not null
+                && await tripRepository.SoftDeleteAsync(tripId, userId, ct), cancellationToken);
+            return result.PersistedUserExists && result.Result ? DeleteTripResult.Succeeded() : DeleteTripResult.MissingTrip();
+        }
         return await tripRepository.SoftDeleteAsync(tripId, userId, cancellationToken)
             ? DeleteTripResult.Succeeded()
             : DeleteTripResult.MissingTrip();

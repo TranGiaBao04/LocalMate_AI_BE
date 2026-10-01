@@ -176,6 +176,8 @@ builder.Services.AddScoped<ISubscriptionRepository, SubscriptionRepository>();
 builder.Services.AddScoped<IUsageEventRepository, UsageEventRepository>();
 builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
 builder.Services.AddScoped<IPaymentOrderRepository, PaymentOrderRepository>();
+builder.Services.AddScoped<ISingleItineraryRepository, SingleItineraryRepository>();
+builder.Services.AddScoped<IItineraryPurchaseService, ItineraryPurchaseService>();
 builder.Services.AddScoped<IPaymentEvidenceRepository, PaymentEvidenceRepository>();
 builder.Services.AddOptions<PaymentEvidenceOptions>().Bind(builder.Configuration.GetSection(PaymentEvidenceOptions.SectionName))
     .ValidateOnStart();

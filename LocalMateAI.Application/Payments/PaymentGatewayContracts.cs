@@ -5,7 +5,7 @@ using LocalMateAI.Domain.Enums;
 public sealed record PaymentLinkRequest(
     Guid OrderId,
     long ProviderOrderCode,
-    string PlanCode,
+    string? PlanCode,
     PaymentOrderType Type,
     decimal Amount,
     DateTime ExpiresAt);

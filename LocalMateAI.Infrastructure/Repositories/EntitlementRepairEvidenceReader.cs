@@ -11,16 +11,19 @@ internal static class EntitlementRepairEvidenceReader
     {
         var order = await context.PaymentOrders.AsNoTracking().Where(o => o.Id == orderId)
             .Select(o => new RepairOrderEvidence(o.Id, o.UserId, o.PlanId, o.PlanVersionId,
-                o.PlanVersionBinding, o.Status, o.Amount, o.PaidAt)).SingleOrDefaultAsync(ct);
+                o.PlanVersionBinding, o.Status, o.Amount, o.PaidAt) { ProductKind = o.ProductKind }).SingleOrDefaultAsync(ct);
         return order is null ? null : await ReadAsync(context, order, ct);
     }
 
     internal static async Task<EntitlementRepairEvidence> ReadAsync(AppDbContext context, RepairOrderEvidence order, CancellationToken ct)
     {
         var userExists = await context.Users.AnyAsync(u => u.Id == order.UserId, ct);
+        if (order.ProductKind != PaymentProductKind.SubscriptionPlan)
+            return new(userExists, new(order, null), [], []);
         var purchases = await (
             from o in context.PaymentOrders.AsNoTracking()
-            where o.Id == order.Id || (o.UserId == order.UserId && o.PlanId == order.PlanId && o.Status == PaymentOrderStatus.Paid)
+            where o.ProductKind == PaymentProductKind.SubscriptionPlan &&
+                (o.Id == order.Id || (o.UserId == order.UserId && o.PlanId == order.PlanId && o.Status == PaymentOrderStatus.Paid))
             join v in context.SubscriptionPlanVersions.AsNoTracking() on o.PlanVersionId equals (Guid?)v.Id into versions
             from v in versions.DefaultIfEmpty()
             join p in context.SubscriptionPlans.AsNoTracking() on o.PlanId equals (Guid?)p.Id into plans

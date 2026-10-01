@@ -10,12 +10,13 @@ public sealed record AdminTransactionDetailResponse(
     public EntitlementEvidence? Entitlement { get; init; }
     public EntitlementRepairEligibility? RepairEligibility { get; init; }
     public IReadOnlyList<EntitlementRepairHistoryResponse> RepairHistory { get; init; } = [];
+    public LocalMateAI.Application.DTOs.ItineraryPurchases.SingleItineraryEntitlementResponse? SingleItineraryEntitlement { get; init; }
 }
 
 public sealed record AdminTransactionDetailTransactionResponse : AdminTransactionResponse
 {
     public AdminTransactionDetailTransactionResponse(AdminTransactionResponse transaction,
-        Guid? planId, Guid? planVersionId, string planVersionBinding, DateTime? updatedAt) : base(transaction)
+        Guid? planId, Guid? planVersionId, string? planVersionBinding, DateTime? updatedAt) : base(transaction)
     {
         PlanId = planId;
         PlanVersionId = planVersionId;
@@ -25,7 +26,7 @@ public sealed record AdminTransactionDetailTransactionResponse : AdminTransactio
 
     public Guid? PlanId { get; init; }
     public Guid? PlanVersionId { get; init; }
-    public string PlanVersionBinding { get; init; }
+    public string? PlanVersionBinding { get; init; }
     public DateTime? UpdatedAt { get; init; }
 }
 

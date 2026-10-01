@@ -13,7 +13,8 @@ public sealed class PaymentSettlementService(
     IUserRepository userRepository,
     IEmailOutboxRepository emailOutboxRepository,
     TimeProvider timeProvider,
-    ILogger<PaymentSettlementService> logger) : IPaymentSettlementService
+    ILogger<PaymentSettlementService> logger,
+    ISingleItineraryRepository? singleRepository = null) : IPaymentSettlementService
 {
     public Task<PaymentSettlementResult> ApplyVerifiedPaymentAsync(
         VerifiedPaymentNotification notification,
@@ -68,6 +69,9 @@ public sealed class PaymentSettlementService(
             { TransitionReasonCode = "amount_mismatch" };
         }
 
+        if (order.ProductKind == PaymentProductKind.SingleItinerary)
+            return await SettleSingleAsync(order, context, cancellationToken);
+
         if (order.PlanVersionBinding == PlanVersionBinding.LegacyUnresolved)
         {
             logger.LogError("Settlement blocked: order {OrderId} requires an approved historical version binding.", order.Id);
@@ -109,6 +113,32 @@ public sealed class PaymentSettlementService(
         order.PaidAt = nowUtc;
         await EnqueueReceiptAsync(order, subscription, plan, version, nowUtc, cancellationToken);
         return new PaymentSettlementResult(PaymentSettlementStatus.Settled)
+        { TransitionReasonCode = context.ReasonCode ?? "verified_success" };
+    }
+
+    private async Task<PaymentSettlementResult> SettleSingleAsync(PaymentOrder order,
+        PaymentTransitionContext context, CancellationToken ct)
+    {
+        var version = singleRepository is not null && order.SingleItineraryProductVersionId is { } id
+            ? await singleRepository.GetVersionAsync(id, ct) : null;
+        if (version is null || version.Price <= 0 || version.Price != order.Amount
+            || order.Type != PaymentOrderType.Purchase || order.PlanId is not null || order.PlanVersionId is not null
+            || order.PlanCode is not null || order.PlanVersionBinding is not null)
+            return new(PaymentSettlementStatus.InvalidPaidPlan);
+        if (await singleRepository!.GetForOrderAsync(order.Id, ct) is not null)
+            return new(PaymentSettlementStatus.AlreadyPaid);
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        await singleRepository.AddAsync(new SingleItineraryEntitlement
+        {
+            UserId = order.UserId, SourcePaymentOrderId = order.Id,
+            SingleItineraryProductVersionId = version.Id, GrantedAt = now
+        }, ct);
+        order.Status = PaymentOrderStatus.Paid;
+        order.PaidAt = now;
+        var user = await userRepository.GetByIdAsync(order.UserId, ct)
+            ?? throw new InvalidOperationException("Paid order owner is missing.");
+        await emailOutboxRepository.EnqueueAsync(SingleItineraryReceiptEmailBuilder.Build(user, order, now), now, ct);
+        return new(PaymentSettlementStatus.Settled)
         { TransitionReasonCode = context.ReasonCode ?? "verified_success" };
     }
 

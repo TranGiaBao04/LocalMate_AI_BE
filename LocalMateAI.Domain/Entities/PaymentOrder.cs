@@ -9,7 +9,10 @@ public sealed class PaymentOrder : BaseEntity
     public PlanCode? PlanCode { get; set; }
     public Guid? PlanId { get; set; }
     public Guid? PlanVersionId { get; set; }
-    public PlanVersionBinding PlanVersionBinding { get; set; }
+    public PlanVersionBinding? PlanVersionBinding { get; set; } = LocalMateAI.Domain.Enums.PlanVersionBinding.LegacyUnresolved;
+    public PaymentProductKind ProductKind { get; set; } = PaymentProductKind.SubscriptionPlan;
+    public Guid? SingleItineraryProductVersionId { get; set; }
+    public Guid? CheckoutAttemptId { get; set; }
     public PaymentOrderType Type { get; set; }
     public decimal Amount { get; set; }
     public PaymentOrderStatus Status { get; set; }

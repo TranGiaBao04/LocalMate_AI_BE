@@ -6,7 +6,10 @@ public enum FinalizeTripResultStatus
     InvalidTripId,
     TripNotFound,
     AlreadyFinalized,
-    SavedTripQuotaExceeded
+    SavedTripQuotaExceeded,
+    InvalidFunding,
+    EntitlementNotFound,
+    EntitlementConsumed
 }
 
 public sealed record FinalizeTripResult(
