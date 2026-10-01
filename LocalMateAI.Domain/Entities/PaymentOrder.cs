@@ -6,7 +6,10 @@ namespace LocalMateAI.Domain.Entities;
 public sealed class PaymentOrder : BaseEntity
 {
     public Guid UserId { get; set; }
-    public PlanCode PlanCode { get; set; }
+    public PlanCode? PlanCode { get; set; }
+    public Guid? PlanId { get; set; }
+    public Guid? PlanVersionId { get; set; }
+    public PlanVersionBinding PlanVersionBinding { get; set; }
     public PaymentOrderType Type { get; set; }
     public decimal Amount { get; set; }
     public PaymentOrderStatus Status { get; set; }

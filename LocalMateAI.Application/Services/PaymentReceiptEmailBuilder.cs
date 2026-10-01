@@ -8,6 +8,10 @@ namespace LocalMateAI.Application.Services;
 // Dựng mail biên nhận cho 1 đơn vừa thanh toán thành công (logic thuần, không chạm DB).
 public static class PaymentReceiptEmailBuilder
 {
+    public static EmailOutboxEntry Build(User user, PaymentOrder order, SubscriptionPeriod period,
+        SubscriptionPlan plan, SubscriptionPlanVersion version, DateTime paidAtUtc) =>
+        BuildReceipt(user, order, plan.Name, version.DurationDays, period.EndsAt, paidAtUtc);
+
     public static EmailOutboxEntry Build(
         User user,
         PaymentOrder order,
@@ -15,7 +19,13 @@ public static class PaymentReceiptEmailBuilder
         SubscriptionPlanDefinition plan,
         DateTime paidAtUtc)
     {
-        var planName = PlanName(order.PlanCode);
+        return BuildReceipt(user, order, PlanName(order.PlanCode ?? PlanCode.Free),
+            plan.DurationDays, subscription.EndsAt, paidAtUtc);
+    }
+
+    private static EmailOutboxEntry BuildReceipt(User user, PaymentOrder order, string planName,
+        int? durationDays, DateTime endsAt, DateTime paidAtUtc)
+    {
         var model = new PaymentReceiptEmailModel(
             user.FullName,
             order.ProviderOrderCode.ToString(CultureInfo.InvariantCulture),
@@ -23,8 +33,8 @@ public static class PaymentReceiptEmailBuilder
             order.Type == PaymentOrderType.Renewal ? "Gia hạn" : "Mua mới",
             EmailDisplayFormat.Money(order.Amount),
             EmailDisplayFormat.VietnamDateTime(paidAtUtc),
-            $"{plan.DurationDays} ngày",
-            EmailDisplayFormat.VietnamDateTime(subscription.EndsAt));
+            $"{durationDays} ngày",
+            EmailDisplayFormat.VietnamDateTime(endsAt));
 
         return new EmailOutboxEntry(
             user.Email,

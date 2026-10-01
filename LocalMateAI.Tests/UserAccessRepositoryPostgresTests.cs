@@ -10,16 +10,11 @@ namespace LocalMateAI.Tests;
 
 public sealed class UserAccessRepositoryPostgresTests
 {
-    private const string ConnectionEnvironmentVariable = "LOCALMATE_TEST_CONNECTION";
 
     [Fact]
     public async Task GetAsync_CustomRoleLockedUser_ReadsStatusRoleAndPermissions()
     {
-        var connectionString = Environment.GetEnvironmentVariable(ConnectionEnvironmentVariable);
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            return;
-        }
+        var connectionString = PostgresTestDatabase.RequireConnection();
 
         var suffix = Guid.NewGuid().ToString("N");
         var role = new Role
@@ -68,11 +63,7 @@ public sealed class UserAccessRepositoryPostgresTests
     [Fact]
     public async Task GetAsync_UnknownUser_ReturnsNull()
     {
-        var connectionString = Environment.GetEnvironmentVariable(ConnectionEnvironmentVariable);
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            return;
-        }
+        var connectionString = PostgresTestDatabase.RequireConnection();
 
         await using var context = CreateContext(connectionString);
 

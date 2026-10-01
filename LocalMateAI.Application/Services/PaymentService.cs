@@ -87,7 +87,8 @@ public sealed class PaymentService(
 
         return new PaymentOrderLookupResult(
             PaymentOrderLookupStatus.Success,
-            ToOrderResponse(order));
+            ToOrderResponse(order, order.PlanId is { } planId
+                ? (await subscriptionRepository.GetPlanAsync(planId, cancellationToken))?.Code : null));
     }
 
     private async Task ReconcileOrderAsync(
@@ -176,22 +177,24 @@ public sealed class PaymentService(
         string? planCode,
         CancellationToken cancellationToken)
     {
-        if (!Enum.TryParse<PlanCode>(planCode, ignoreCase: false, out var requestedPlan)
-            || requestedPlan == PlanCode.Free)
+        var code = PlanIdentity.Canonical(planCode);
+        var requestedPlan = code is null ? null
+            : await subscriptionRepository.GetPlanByCodeAsync(code, cancellationToken);
+        if (requestedPlan is null || !requestedPlan.IsActive || requestedPlan.CurrentVersionId is null
+            || requestedPlan.Code == PlanIdentity.Free)
         {
             return new PaymentIntentResult(PaymentIntentResultStatus.InvalidPlanCode);
         }
 
         var nowUtc = timeProvider.GetUtcNow().UtcDateTime;
-        var subscriptions = await subscriptionRepository.GetByUserIdAsync(userId, cancellationToken);
-        var effective = SubscriptionCatalog.ResolveEffectivePaid(subscriptions, nowUtc);
+        var effective = await EffectiveSubscriptionResolver.ResolveAsync(subscriptionRepository, userId, nowUtc, cancellationToken);
 
-        if (effective?.PlanCode == requestedPlan)
+        if (effective.Plan.Id == requestedPlan.Id)
         {
             return new PaymentIntentResult(PaymentIntentResultStatus.PlanAlreadyActive);
         }
 
-        if (effective?.PlanCode == PlanCode.Membership && requestedPlan == PlanCode.TripPass)
+        if (effective.Plan.Code == PlanIdentity.Membership && requestedPlan.Code == PlanIdentity.TripPass)
         {
             return new PaymentIntentResult(PaymentIntentResultStatus.CoveredByHigherPlan);
         }
@@ -209,16 +212,15 @@ public sealed class PaymentService(
         CancellationToken cancellationToken)
     {
         var nowUtc = timeProvider.GetUtcNow().UtcDateTime;
-        var subscriptions = await subscriptionRepository.GetByUserIdAsync(userId, cancellationToken);
-        var effective = SubscriptionCatalog.ResolveEffectivePaid(subscriptions, nowUtc);
-        if (effective is null)
+        var effective = await EffectiveSubscriptionResolver.ResolveAsync(subscriptionRepository, userId, nowUtc, cancellationToken);
+        if (effective.Period is null || !effective.Plan.IsActive)
         {
             return new PaymentIntentResult(PaymentIntentResultStatus.NoActiveSubscription);
         }
 
         return await CreatePaymentIntentAsync(
             userId,
-            effective.PlanCode,
+            effective.Plan,
             PaymentOrderType.Renewal,
             nowUtc,
             cancellationToken);
@@ -226,14 +228,14 @@ public sealed class PaymentService(
 
     private async Task<PaymentIntentResult> CreatePaymentIntentAsync(
         Guid userId,
-        PlanCode planCode,
+        SubscriptionPlan plan,
         PaymentOrderType type,
         DateTime nowUtc,
         CancellationToken cancellationToken)
     {
         var pending = await paymentOrderRepository.GetPendingAsync(
             userId,
-            planCode,
+            plan.Id,
             type,
             cancellationToken);
         if (pending is not null)
@@ -257,13 +259,19 @@ public sealed class PaymentService(
             }
         }
 
-        var plan = SubscriptionCatalog.Get(planCode);
+        var version = plan.CurrentVersionId is { } versionId
+            ? await subscriptionRepository.GetVersionAsync(versionId, cancellationToken) : null;
+        if (version is null || version.PlanId != plan.Id || version.DurationDays is null || version.Price <= 0)
+            return new PaymentIntentResult(PaymentIntentResultStatus.InvalidPlanCode);
         var order = new PaymentOrder
         {
             UserId = userId,
-            PlanCode = planCode,
+            PlanCode = PlanIdentity.Legacy(plan.Code),
+            PlanId = plan.Id,
+            PlanVersionId = version.Id,
+            PlanVersionBinding = PlanVersionBinding.Native,
             Type = type,
-            Amount = plan.Price,
+            Amount = version.Price,
             Status = PaymentOrderStatus.Pending,
             ExpiresAt = nowUtc.Add(PaymentIntentLifetime),
             PaidAt = null
@@ -277,7 +285,7 @@ public sealed class PaymentService(
                 new PaymentLinkRequest(
                     order.Id,
                     order.ProviderOrderCode,
-                    order.PlanCode.ToString(),
+                    PlanIdentity.PublicCode(plan.Code),
                     order.Type,
                     order.Amount,
                     order.ExpiresAt),
@@ -314,11 +322,11 @@ public sealed class PaymentService(
     private static PaymentIntentResponse ToIntentResponse(PaymentOrder order) =>
         new(order.Id, order.QrCode!, order.CheckoutUrl!, order.Amount, order.ExpiresAt);
 
-    private static PaymentOrderResponse ToOrderResponse(PaymentOrder order) =>
+    private static PaymentOrderResponse ToOrderResponse(PaymentOrder order, string? code) =>
         new(
             order.Id,
             order.Status.ToString(),
-            order.PlanCode.ToString(),
+            code is null ? order.PlanCode?.ToString() ?? "" : PlanIdentity.PublicCode(code),
             order.Amount,
             order.ExpiresAt,
             order.PaidAt);

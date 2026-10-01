@@ -11,16 +11,11 @@ namespace LocalMateAI.Tests;
 [Collection(AdminAccountsCollection.Name)]
 public sealed class AdminRoleRepositoryPostgresTests
 {
-    private const string ConnectionEnvironmentVariable = "LOCALMATE_TEST_CONNECTION";
 
     [Fact]
     public async Task AddAndRead_RoleWithPermissionAndUser_ReturnsPermissionsAndUserCount()
     {
-        var connectionString = Environment.GetEnvironmentVariable(ConnectionEnvironmentVariable);
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            return;
-        }
+        var connectionString = PostgresTestDatabase.RequireConnection();
 
         var testData = new TestData();
         try
@@ -53,11 +48,7 @@ public sealed class AdminRoleRepositoryPostgresTests
     [Fact]
     public async Task TryAddAsync_DuplicateNameInsideExecutor_ReturnsFalseAndTransactionStillCommits()
     {
-        var connectionString = Environment.GetEnvironmentVariable(ConnectionEnvironmentVariable);
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            return;
-        }
+        var connectionString = PostgresTestDatabase.RequireConnection();
 
         var testData = new TestData();
         try
@@ -95,11 +86,7 @@ public sealed class AdminRoleRepositoryPostgresTests
     [Fact]
     public async Task CountActiveRoleManagersAsync_CountsOnlyActiveManagersAndHonorsExclusions()
     {
-        var connectionString = Environment.GetEnvironmentVariable(ConnectionEnvironmentVariable);
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            return;
-        }
+        var connectionString = PostgresTestDatabase.RequireConnection();
 
         var testData = new TestData();
         try
@@ -134,11 +121,7 @@ public sealed class AdminRoleRepositoryPostgresTests
     [Fact]
     public async Task SetUserRoleAsync_ChangesUserRole()
     {
-        var connectionString = Environment.GetEnvironmentVariable(ConnectionEnvironmentVariable);
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            return;
-        }
+        var connectionString = PostgresTestDatabase.RequireConnection();
 
         var testData = new TestData();
         try

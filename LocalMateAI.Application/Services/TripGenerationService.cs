@@ -76,30 +76,24 @@ public sealed class TripGenerationService(
             async transactionCancellationToken =>
             {
                 var nowUtc = timeProvider.GetUtcNow().UtcDateTime;
-                var subscriptions = await subscriptionRepository.GetByUserIdAsync(
-                    userId,
-                    transactionCancellationToken);
-                var effective = SubscriptionCatalog.ResolveEffectivePaid(subscriptions, nowUtc);
-                var plan = SubscriptionCatalog.Get(effective?.PlanCode ?? PlanCode.Free);
+                var effective = await EffectiveSubscriptionResolver.ResolveAsync(
+                    subscriptionRepository, userId, nowUtc, transactionCancellationToken);
+                var plan = effective.Version;
 
                 if (plan.GenerateLimit is { } limit)
                 {
                     var month = VietnamMonthWindow.For(nowUtc);
-                    var used = await usageEventRepository.CountAsync(
-                        userId,
-                        UsageEventType.Generate,
-                        month.StartUtc,
-                        month.NextStartUtc,
-                        transactionCancellationToken);
+                    var used = await EffectiveSubscriptionResolver.CountGenerateAsync(
+                        usageEventRepository, userId, effective, nowUtc, transactionCancellationToken);
                     if (used >= limit)
                     {
-                        return GeneratePersistenceResult.QuotaExceeded(used, limit, month.NextStartUtc);
+                        return GeneratePersistenceResult.QuotaExceeded(used, limit, effective.EffectiveUntil ?? month.NextStartUtc);
                     }
                 }
 
                 await tripRepository.AddAsync(trip, transactionCancellationToken);
 
-                if (plan.Code == PlanCode.Free)
+                if (plan.GenerateLimit is not null)
                 {
                     await usageEventRepository.AddAsync(
                         new UsageEvent
@@ -107,6 +101,7 @@ public sealed class TripGenerationService(
                             UserId = userId,
                             Type = UsageEventType.Generate,
                             TripId = trip.Id,
+                            SubscriptionPeriodId = effective.Period?.Id,
                             CreatedAt = nowUtc,
                             UpdatedAt = nowUtc
                         },

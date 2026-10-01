@@ -334,12 +334,12 @@ public sealed class SubscriptionHttpContractTests
                 new DateTime(2026, 10, 31, 17, 0, 0, DateTimeKind.Utc)),
             new SubscriptionSavedTripsResponse(0, 1));
 
-        public IReadOnlyList<SubscriptionPlanResponse> GetPlans() =>
-        [
+        public Task<IReadOnlyList<SubscriptionPlanResponse>> GetPlansAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<SubscriptionPlanResponse>>([
             new("Free", 0m, null, 1, 1),
             new("TripPass", 19000m, 7, null, 3),
             new("Membership", 59000m, 30, null, null)
-        ];
+        ]);
 
         public Task<SubscriptionMeResponse?> GetMySubscriptionAsync(
             Guid userId,

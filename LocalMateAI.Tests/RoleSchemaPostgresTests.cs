@@ -8,16 +8,11 @@ namespace LocalMateAI.Tests;
 
 public sealed class RoleSchemaPostgresTests
 {
-    private const string ConnectionEnvironmentVariable = "LOCALMATE_TEST_CONNECTION";
 
     [Fact]
     public async Task Migration_SeedsBothSystemRoles()
     {
-        var connectionString = Environment.GetEnvironmentVariable(ConnectionEnvironmentVariable);
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            return;
-        }
+        var connectionString = PostgresTestDatabase.RequireConnection();
 
         await using var context = CreateContext(connectionString);
         var systemRoles = await context.Roles
@@ -33,11 +28,7 @@ public sealed class RoleSchemaPostgresTests
     [Fact]
     public async Task NewUserWithUserRole_IsActiveAndLoadsRoleName()
     {
-        var connectionString = Environment.GetEnvironmentVariable(ConnectionEnvironmentVariable);
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            return;
-        }
+        var connectionString = PostgresTestDatabase.RequireConnection();
 
         var userId = Guid.NewGuid();
         try
@@ -74,11 +65,7 @@ public sealed class RoleSchemaPostgresTests
     [Fact]
     public async Task UserWithoutRole_IsRejectedByForeignKey()
     {
-        var connectionString = Environment.GetEnvironmentVariable(ConnectionEnvironmentVariable);
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            return;
-        }
+        var connectionString = PostgresTestDatabase.RequireConnection();
 
         var userId = Guid.NewGuid();
         try
@@ -102,11 +89,7 @@ public sealed class RoleSchemaPostgresTests
     [Fact]
     public async Task DeletingRoleInUse_IsRejectedByForeignKey()
     {
-        var connectionString = Environment.GetEnvironmentVariable(ConnectionEnvironmentVariable);
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            return;
-        }
+        var connectionString = PostgresTestDatabase.RequireConnection();
 
         var suffix = Guid.NewGuid().ToString("N");
         var role = new Role

@@ -5,6 +5,7 @@ namespace LocalMateAI.Domain.Entities;
 
 public sealed class UsageEvent : BaseEntity
 {
+    public Guid? SubscriptionPeriodId { get; set; }
     public Guid UserId { get; set; }
     public UsageEventType Type { get; set; }
     public Guid TripId { get; set; }

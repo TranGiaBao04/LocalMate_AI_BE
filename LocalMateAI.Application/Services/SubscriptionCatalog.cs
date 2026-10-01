@@ -10,6 +10,7 @@ public sealed record SubscriptionPlanDefinition(
     int? GenerateLimit,
     int? SavedTripLimit);
 
+// Legacy Phase 1 definitions retained for compatibility tests; native runtime uses the database.
 public static class SubscriptionCatalog
 {
     private static readonly IReadOnlyList<SubscriptionPlanDefinition> Plans = Array.AsReadOnly<SubscriptionPlanDefinition>(

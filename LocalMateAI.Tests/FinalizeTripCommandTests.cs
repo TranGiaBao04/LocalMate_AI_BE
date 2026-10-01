@@ -292,20 +292,20 @@ public sealed class FinalizeTripCommandTests
     }
 
     private sealed class FakeSubscriptionRepository(IReadOnlyList<UserSubscription> subscriptions)
-        : ISubscriptionRepository
+        : TestSubscriptionRepository
     {
-        public Task<IReadOnlyList<UserSubscription>> GetByUserIdAsync(
+        public override Task<IReadOnlyList<UserSubscription>> GetByUserIdAsync(
             Guid userId,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(subscriptions);
 
-        public Task<UserSubscription?> GetByUserAndPlanAsync(
+        public override Task<UserSubscription?> GetByUserAndPlanAsync(
             Guid userId,
             PlanCode planCode,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
-        public Task AddAsync(
+        public override Task AddAsync(
             UserSubscription subscription,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();

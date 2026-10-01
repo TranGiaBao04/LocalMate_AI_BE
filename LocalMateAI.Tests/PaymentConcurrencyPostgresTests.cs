@@ -13,16 +13,11 @@ namespace LocalMateAI.Tests;
 
 public sealed class PaymentConcurrencyPostgresTests
 {
-    private const string ConnectionEnvironmentVariable = "LOCALMATE_TEST_CONNECTION";
 
     [Fact]
     public async Task SameUserConcurrentCheckout_CreatesOneUsablePendingOrder()
     {
-        var connectionString = Environment.GetEnvironmentVariable(ConnectionEnvironmentVariable);
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            return;
-        }
+        var connectionString = PostgresTestDatabase.RequireConnection();
 
         var userId = Guid.NewGuid();
         await SeedUsersAsync(connectionString, [userId]);
@@ -65,11 +60,7 @@ public sealed class PaymentConcurrencyPostgresTests
     [Fact]
     public async Task ConcurrentCheckoutsAcrossUsers_GeneratePositiveUniqueProviderCodes()
     {
-        var connectionString = Environment.GetEnvironmentVariable(ConnectionEnvironmentVariable);
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            return;
-        }
+        var connectionString = PostgresTestDatabase.RequireConnection();
 
         var userIds = Enumerable.Range(0, 8).Select(_ => Guid.NewGuid()).ToArray();
         await SeedUsersAsync(connectionString, userIds);

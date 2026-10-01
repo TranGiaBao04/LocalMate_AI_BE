@@ -10,6 +10,11 @@ public sealed class UsageEventConfiguration : IEntityTypeConfiguration<UsageEven
     {
         builder.ToTable("UsageEvents");
         builder.HasKey(usage => usage.Id);
+        builder.HasOne<SubscriptionPeriod>().WithMany()
+            .HasForeignKey(e => new { e.SubscriptionPeriodId, e.UserId })
+            .HasPrincipalKey(p => new { p.Id, p.UserId }).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(e => new { e.SubscriptionPeriodId, e.Type })
+            .HasFilter("\"SubscriptionPeriodId\" IS NOT NULL");
         builder.Property(usage => usage.Type).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.HasIndex(usage => new { usage.UserId, usage.Type, usage.CreatedAt })
             .HasDatabaseName("IX_UsageEvents_UserId_Type_CreatedAt");

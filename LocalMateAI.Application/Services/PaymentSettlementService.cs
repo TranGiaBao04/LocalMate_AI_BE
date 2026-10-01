@@ -59,10 +59,19 @@ public sealed class PaymentSettlementService(
             return new PaymentSettlementResult(PaymentSettlementStatus.AmountMismatch);
         }
 
-        var plan = SubscriptionCatalog.Get(order.PlanCode);
-        if (order.PlanCode == PlanCode.Free || plan.DurationDays is null)
+        if (order.PlanVersionBinding == PlanVersionBinding.LegacyUnresolved)
         {
-            order.Status = PaymentOrderStatus.Failed;
+            logger.LogError("Settlement blocked: order {OrderId} requires an approved historical version binding.", order.Id);
+            return new PaymentSettlementResult(PaymentSettlementStatus.UnresolvedPlanVersion);
+        }
+        var plan = order.PlanId is { } planId
+            ? await subscriptionRepository.GetPlanAsync(planId, cancellationToken) : null;
+        var version = order.PlanVersionId is { } versionId
+            ? await subscriptionRepository.GetVersionAsync(versionId, cancellationToken) : null;
+        if (plan is null || version is null || version.PlanId != plan.Id
+            || plan.Code == PlanIdentity.Free || version.DurationDays is null
+            || version.Price != order.Amount)
+        {
             logger.LogWarning(
                 "Rejected paid settlement for non-paid plan on provider order {ProviderOrderCode}",
                 order.ProviderOrderCode);
@@ -70,44 +79,35 @@ public sealed class PaymentSettlementService(
         }
 
         var nowUtc = timeProvider.GetUtcNow().UtcDateTime;
-        var subscription = await subscriptionRepository.GetByUserAndPlanAsync(
-            order.UserId,
-            order.PlanCode,
-            cancellationToken);
-        var duration = TimeSpan.FromDays(plan.DurationDays.Value);
-
-        if (subscription is null)
+        var periods = await subscriptionRepository.GetPeriodsAsync(order.UserId, cancellationToken);
+        if (periods.Any(p => p.SourcePaymentOrderId == order.Id))
+            return new PaymentSettlementResult(PaymentSettlementStatus.AlreadyPaid);
+        var tail = periods.Where(p => p.PlanId == plan.Id).Select(p => p.EndsAt)
+            .DefaultIfEmpty(nowUtc).Max();
+        var start = tail > nowUtc ? tail : nowUtc;
+        var subscription = new SubscriptionPeriod
         {
-            subscription = new UserSubscription
-            {
-                UserId = order.UserId,
-                PlanCode = order.PlanCode,
-                StartsAt = nowUtc,
-                EndsAt = nowUtc.Add(duration)
-            };
-            await subscriptionRepository.AddAsync(subscription, cancellationToken);
-        }
-        else if (subscription.EndsAt <= nowUtc)
-        {
-            subscription.StartsAt = nowUtc;
-            subscription.EndsAt = nowUtc.Add(duration);
-        }
-        else
-        {
-            subscription.EndsAt = subscription.EndsAt.Add(duration);
-        }
+            UserId = order.UserId,
+            PlanId = plan.Id,
+            PlanVersionId = version.Id,
+            StartsAt = start,
+            EndsAt = start.AddDays(version.DurationDays.Value),
+            SourcePaymentOrderId = order.Id
+        };
+        await subscriptionRepository.AddPeriodAsync(subscription, cancellationToken);
 
         order.Status = PaymentOrderStatus.Paid;
         order.PaidAt = nowUtc;
-        await EnqueueReceiptAsync(order, subscription, plan, nowUtc, cancellationToken);
+        await EnqueueReceiptAsync(order, subscription, plan, version, nowUtc, cancellationToken);
         return new PaymentSettlementResult(PaymentSettlementStatus.Settled);
     }
 
     // Xếp biên nhận vào outbox trong CÙNG transaction thanh toán: commit thì chắc chắn có mail chờ gửi.
     private async Task EnqueueReceiptAsync(
         PaymentOrder order,
-        UserSubscription subscription,
-        SubscriptionPlanDefinition plan,
+        SubscriptionPeriod subscription,
+        SubscriptionPlan plan,
+        SubscriptionPlanVersion version,
         DateTime nowUtc,
         CancellationToken cancellationToken)
     {
@@ -120,7 +120,7 @@ public sealed class PaymentSettlementService(
             return;
         }
 
-        var entry = PaymentReceiptEmailBuilder.Build(user, order, subscription, plan, nowUtc);
+        var entry = PaymentReceiptEmailBuilder.Build(user, order, subscription, plan, version, nowUtc);
         await emailOutboxRepository.EnqueueAsync(entry, nowUtc, cancellationToken);
     }
 }

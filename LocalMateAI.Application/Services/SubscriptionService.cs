@@ -12,15 +12,20 @@ public sealed class SubscriptionService(
     ITripRepository tripRepository,
     TimeProvider timeProvider) : ISubscriptionService
 {
-    public IReadOnlyList<SubscriptionPlanResponse> GetPlans() =>
-        SubscriptionCatalog.All
-            .Select(plan => new SubscriptionPlanResponse(
-                plan.Code.ToString(),
-                plan.Price,
-                plan.DurationDays,
-                plan.GenerateLimit,
-                plan.SavedTripLimit))
-            .ToArray();
+    public async Task<IReadOnlyList<SubscriptionPlanResponse>> GetPlansAsync(CancellationToken cancellationToken = default)
+    {
+        var result = new List<SubscriptionPlanResponse>();
+        foreach (var plan in await subscriptionRepository.GetPlansAsync(cancellationToken))
+        {
+            // Consumer discovery remains built-in only until custom-plan UI is ready.
+            if (!plan.IsSystem || !plan.IsActive || plan.CurrentVersionId is not { } id) continue;
+            var version = await subscriptionRepository.GetVersionAsync(id, cancellationToken)
+                ?? throw new InvalidOperationException("Missing current version.");
+            result.Add(new(PlanIdentity.PublicCode(plan.Code), version.Price, version.DurationDays,
+                version.GenerateLimit, version.SavedTripLimit));
+        }
+        return result;
+    }
 
     public async Task<SubscriptionMeResponse?> GetMySubscriptionAsync(
         Guid userId,
@@ -32,22 +37,18 @@ public sealed class SubscriptionService(
         }
 
         var nowUtc = timeProvider.GetUtcNow().UtcDateTime;
-        var subscriptions = await subscriptionRepository.GetByUserIdAsync(userId, cancellationToken);
-        var effective = SubscriptionCatalog.ResolveEffectivePaid(subscriptions, nowUtc);
-        var plan = SubscriptionCatalog.Get(effective?.PlanCode ?? PlanCode.Free);
+        var effective = await EffectiveSubscriptionResolver.ResolveAsync(subscriptionRepository, userId, nowUtc, cancellationToken);
+        var plan = effective.Version;
         var month = VietnamMonthWindow.For(nowUtc);
-        var generateUsed = await usageEventRepository.CountAsync(
-            userId,
-            UsageEventType.Generate,
-            month.StartUtc,
-            month.NextStartUtc,
-            cancellationToken);
+        var generateUsed = await EffectiveSubscriptionResolver.CountGenerateAsync(
+            usageEventRepository, userId, effective, nowUtc, cancellationToken);
         var savedTripsUsed = await tripRepository.CountFinalizedByUserAsync(userId, cancellationToken);
 
         return new SubscriptionMeResponse(
-            plan.Code.ToString(),
-            effective?.EndsAt,
-            new SubscriptionUsageResponse(generateUsed, plan.GenerateLimit, month.NextStartUtc),
-            new SubscriptionSavedTripsResponse(savedTripsUsed, plan.SavedTripLimit));
+            PlanIdentity.PublicCode(effective.Plan.Code),
+            effective.PaidThrough,
+            new SubscriptionUsageResponse(generateUsed, plan.GenerateLimit, effective.EffectiveUntil ?? month.NextStartUtc),
+            new SubscriptionSavedTripsResponse(savedTripsUsed, plan.SavedTripLimit))
+        { EffectiveUntil = effective.EffectiveUntil };
     }
 }

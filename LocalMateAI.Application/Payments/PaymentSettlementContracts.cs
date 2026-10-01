@@ -7,7 +7,8 @@ public enum PaymentSettlementStatus
     NonSuccessful,
     AmountMismatch,
     UnknownOrder,
-    InvalidPaidPlan
+    InvalidPaidPlan,
+    UnresolvedPlanVersion
 }
 
 public sealed record PaymentSettlementResult(PaymentSettlementStatus Status);

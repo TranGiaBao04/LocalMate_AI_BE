@@ -7,7 +7,7 @@ public interface IPaymentOrderRepository
 {
     Task<PaymentOrder?> GetPendingAsync(
         Guid userId,
-        PlanCode planCode,
+        Guid planId,
         PaymentOrderType type,
         CancellationToken cancellationToken = default);
 

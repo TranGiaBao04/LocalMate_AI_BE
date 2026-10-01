@@ -29,7 +29,7 @@ public sealed class PaymentSettlementServiceTests
         Assert.Equal(PaymentSettlementStatus.Settled, result.Status);
         Assert.Equal(PaymentOrderStatus.Paid, fixture.Order.Status);
         Assert.Equal(Now, fixture.Order.PaidAt);
-        var subscription = Assert.Single(fixture.Subscriptions.Items);
+        var subscription = Assert.Single(fixture.Subscriptions.Periods);
         Assert.Equal(Now, subscription.StartsAt);
         Assert.Equal(Now.AddDays(durationDays), subscription.EndsAt);
     }
@@ -51,7 +51,10 @@ public sealed class PaymentSettlementServiceTests
             new VerifiedPaymentNotification(fixture.Order.ProviderOrderCode, 59000, true));
 
         Assert.Equal(startsAt, subscription.StartsAt);
-        Assert.Equal(new DateTime(2026, 11, 19, 0, 0, 0, DateTimeKind.Utc), subscription.EndsAt);
+        Assert.Equal(new DateTime(2026, 10, 20, 0, 0, 0, DateTimeKind.Utc), subscription.EndsAt);
+        var appended = Assert.Single(fixture.Subscriptions.Periods, p => p.SourcePaymentOrderId != null);
+        Assert.Equal(subscription.EndsAt, appended.StartsAt);
+        Assert.Equal(new DateTime(2026, 11, 19, 0, 0, 0, DateTimeKind.Utc), appended.EndsAt);
     }
 
     [Fact]
@@ -69,8 +72,10 @@ public sealed class PaymentSettlementServiceTests
         await fixture.Service.ApplyVerifiedPaymentAsync(
             new VerifiedPaymentNotification(fixture.Order.ProviderOrderCode, 59000, true));
 
-        Assert.Equal(Now, subscription.StartsAt);
-        Assert.Equal(Now.AddDays(30), subscription.EndsAt);
+        Assert.Equal(Now.AddDays(-60), subscription.StartsAt);
+        var appended = Assert.Single(fixture.Subscriptions.Periods, p => p.SourcePaymentOrderId != null);
+        Assert.Equal(Now, appended.StartsAt);
+        Assert.Equal(Now.AddDays(30), appended.EndsAt);
     }
 
     [Fact]
@@ -114,7 +119,7 @@ public sealed class PaymentSettlementServiceTests
 
         Assert.Equal(PaymentSettlementStatus.Settled, result.Status);
         Assert.Equal(PaymentOrderStatus.Paid, order.Status);
-        Assert.Equal(Now.AddDays(7), Assert.Single(fixture.Subscriptions.Items).EndsAt);
+        Assert.Equal(Now.AddDays(7), Assert.Single(fixture.Subscriptions.Periods).EndsAt);
     }
 
     [Theory]
@@ -129,7 +134,7 @@ public sealed class PaymentSettlementServiceTests
         await fixture.Service.ApplyVerifiedPaymentAsync(
             new VerifiedPaymentNotification(order.ProviderOrderCode, 19000, true));
 
-        Assert.Equal(Now.AddDays(7), Assert.Single(fixture.Subscriptions.Items).EndsAt);
+        Assert.Equal(Now.AddDays(7), Assert.Single(fixture.Subscriptions.Periods).EndsAt);
     }
 
     [Fact]
@@ -152,7 +157,7 @@ public sealed class PaymentSettlementServiceTests
         Assert.Equal(PaymentSettlementStatus.AlreadyPaid, second.Status);
         Assert.Equal(PaymentSettlementStatus.AlreadyPaid, laterFailure.Status);
         Assert.Equal(paidAt, fixture.Order.PaidAt);
-        Assert.Equal(Now.AddDays(30), Assert.Single(fixture.Subscriptions.Items).EndsAt);
+        Assert.Equal(Now.AddDays(30), Assert.Single(fixture.Subscriptions.Periods).EndsAt);
     }
 
     [Fact]
@@ -254,6 +259,7 @@ public sealed class PaymentSettlementServiceTests
             IReadOnlyList<UserSubscription>? subscriptions = null)
         {
             Order = order;
+            TestSubscriptionRepository.Bind(order);
             Subscriptions = new FakeSubscriptionRepository(subscriptions ?? []);
             Outbox = new FakeEmailOutboxRepository();
             Service = new PaymentSettlementService(
@@ -295,24 +301,24 @@ public sealed class PaymentSettlementServiceTests
     }
 
     private sealed class FakeSubscriptionRepository(IReadOnlyList<UserSubscription> subscriptions)
-        : ISubscriptionRepository
+        : TestSubscriptionRepository
     {
         public List<UserSubscription> Items { get; } = [.. subscriptions];
 
-        public Task<IReadOnlyList<UserSubscription>> GetByUserIdAsync(
+        public override Task<IReadOnlyList<UserSubscription>> GetByUserIdAsync(
             Guid userId,
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<UserSubscription>>(
                 Items.Where(subscription => subscription.UserId == userId).ToArray());
 
-        public Task<UserSubscription?> GetByUserAndPlanAsync(
+        public override Task<UserSubscription?> GetByUserAndPlanAsync(
             Guid userId,
             PlanCode planCode,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(Items.SingleOrDefault(subscription =>
                 subscription.UserId == userId && subscription.PlanCode == planCode));
 
-        public Task AddAsync(
+        public override Task AddAsync(
             UserSubscription subscription,
             CancellationToken cancellationToken = default)
         {

@@ -446,10 +446,10 @@ public sealed class PaymentServiceTests
         public int LookupCalls { get; private set; }
 
         public Task<PaymentOrder?> GetPendingAsync(
-            Guid userId, PlanCode planCode, PaymentOrderType type,
+            Guid userId, Guid planId, PaymentOrderType type,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(Items
-                .Where(order => order.UserId == userId && order.PlanCode == planCode
+                .Where(order => order.UserId == userId && (order.PlanId ?? LocalMateAI.Infrastructure.Persistence.SubscriptionBaseline.PlanId(order.PlanCode!.Value)) == planId
                                 && order.Type == type && order.Status == PaymentOrderStatus.Pending)
                 .OrderByDescending(order => order.CreatedAt)
                 .FirstOrDefault());
@@ -522,19 +522,19 @@ public sealed class PaymentServiceTests
     }
 
     private sealed class FakeSubscriptionRepository(IReadOnlyList<UserSubscription> subscriptions)
-        : ISubscriptionRepository
+        : TestSubscriptionRepository
     {
-        public Task<IReadOnlyList<UserSubscription>> GetByUserIdAsync(
+        public override Task<IReadOnlyList<UserSubscription>> GetByUserIdAsync(
             Guid userId, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<UserSubscription>>(
                 subscriptions.Where(subscription => subscription.UserId == userId).ToArray());
 
-        public Task<UserSubscription?> GetByUserAndPlanAsync(
+        public override Task<UserSubscription?> GetByUserAndPlanAsync(
             Guid userId, PlanCode planCode, CancellationToken cancellationToken = default) =>
             Task.FromResult(subscriptions.SingleOrDefault(subscription =>
                 subscription.UserId == userId && subscription.PlanCode == planCode));
 
-        public Task AddAsync(
+        public override Task AddAsync(
             UserSubscription subscription,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();

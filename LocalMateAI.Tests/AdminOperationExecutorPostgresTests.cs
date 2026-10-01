@@ -9,16 +9,11 @@ namespace LocalMateAI.Tests;
 
 public sealed class AdminOperationExecutorPostgresTests
 {
-    private const string ConnectionEnvironmentVariable = "LOCALMATE_TEST_CONNECTION";
 
     [Fact]
     public async Task ExecuteExclusiveAsync_SameLockName_RunsOperationsOneAfterAnother()
     {
-        var connectionString = Environment.GetEnvironmentVariable(ConnectionEnvironmentVariable);
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            return;
-        }
+        var connectionString = PostgresTestDatabase.RequireConnection();
 
         var lockName = $"test-lock:{Guid.NewGuid():N}";
         var clock = Stopwatch.StartNew();
@@ -52,11 +47,7 @@ public sealed class AdminOperationExecutorPostgresTests
     [Fact]
     public async Task ExecuteExclusiveAsync_OperationThrows_RollsBackChanges()
     {
-        var connectionString = Environment.GetEnvironmentVariable(ConnectionEnvironmentVariable);
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            return;
-        }
+        var connectionString = PostgresTestDatabase.RequireConnection();
 
         var name = $"Rollback test {Guid.NewGuid():N}";
         var role = new Role { Name = name, NormalizedName = SystemRoles.Normalize(name) };

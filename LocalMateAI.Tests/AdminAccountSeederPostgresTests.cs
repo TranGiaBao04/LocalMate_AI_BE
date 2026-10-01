@@ -10,7 +10,6 @@ namespace LocalMateAI.Tests;
 [Collection(AdminAccountsCollection.Name)]
 public sealed class AdminAccountSeederPostgresTests
 {
-    private const string ConnectionEnvironmentVariable = "LOCALMATE_TEST_CONNECTION";
     private const string Password = "Admin-Seed-Test-123";
 
     private readonly IPasswordHashService passwordHashService = AdminAccountSeederTests.PasswordHasher();
@@ -18,11 +17,7 @@ public sealed class AdminAccountSeederPostgresTests
     [Fact]
     public async Task Seed_NewEmail_CreatesAdminAndRemovesPendingRegistration()
     {
-        var connectionString = Environment.GetEnvironmentVariable(ConnectionEnvironmentVariable);
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            return;
-        }
+        var connectionString = PostgresTestDatabase.RequireConnection();
 
         var email = NewEmail();
         try
@@ -66,11 +61,7 @@ public sealed class AdminAccountSeederPostgresTests
     [Fact]
     public async Task Seed_EmailAlreadyUser_DoesNotPromoteOrChangePassword()
     {
-        var connectionString = Environment.GetEnvironmentVariable(ConnectionEnvironmentVariable);
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            return;
-        }
+        var connectionString = PostgresTestDatabase.RequireConnection();
 
         var email = NewEmail();
         try
@@ -111,11 +102,7 @@ public sealed class AdminAccountSeederPostgresTests
     [Fact]
     public async Task Seed_RunTwice_SecondRunReportsAlreadyExists()
     {
-        var connectionString = Environment.GetEnvironmentVariable(ConnectionEnvironmentVariable);
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            return;
-        }
+        var connectionString = PostgresTestDatabase.RequireConnection();
 
         var email = NewEmail();
         var options = new AdminSeedOptions { Email = email, Password = Password, FullName = "Seed Twice" };
