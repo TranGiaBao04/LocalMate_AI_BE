@@ -16,6 +16,21 @@ namespace LocalMateAI.API.Controllers;
 [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
 public sealed class AdminTransactionsController(IAdminTransactionService service) : ControllerBase
 {
+    [HttpGet("{id:guid}")]
+    [ProducesResponseType<AdminTransactionDetailResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DetailAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var detail = await service.GetDetailAsync(id, cancellationToken);
+        if (detail is not null) return Ok(detail);
+        var problem = new ProblemDetails
+        {
+            Status = 404, Title = "Transaction not found.", Instance = Request.Path
+        };
+        problem.Extensions["code"] = "transaction_not_found";
+        return NotFound(problem);
+    }
+
     [HttpGet]
     [ProducesResponseType<PagedResult<AdminTransactionResponse>>(StatusCodes.Status200OK)]
     public async Task<IActionResult> ListAsync([FromQuery] AdminTransactionQuery query, CancellationToken cancellationToken)

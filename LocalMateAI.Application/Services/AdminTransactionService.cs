@@ -15,6 +15,9 @@ public sealed class AdminTransactionService(IAdminTransactionRepository reposito
 {
     public const int MaxExportRows = 10_000;
 
+    public Task<AdminTransactionDetailResponse?> GetDetailAsync(Guid id, CancellationToken cancellationToken = default) =>
+        repository.GetDetailAsync(id, cancellationToken);
+
     public async Task<AdminTransactionResult<PagedResult<AdminTransactionResponse>>> GetTransactionsAsync(
         AdminTransactionQuery query, CancellationToken cancellationToken = default)
     {
