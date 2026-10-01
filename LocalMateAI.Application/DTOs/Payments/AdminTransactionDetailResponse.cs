@@ -1,9 +1,16 @@
+using LocalMateAI.Application.Payments;
+
 namespace LocalMateAI.Application.DTOs.Payments;
 
 public sealed record AdminTransactionDetailResponse(
     AdminTransactionDetailTransactionResponse Transaction,
     IReadOnlyList<AdminTransactionStatusHistoryResponse> StatusHistory,
-    IReadOnlyList<AdminTransactionWebhookReceiptResponse> WebhookReceipts);
+    IReadOnlyList<AdminTransactionWebhookReceiptResponse> WebhookReceipts)
+{
+    public EntitlementEvidence? Entitlement { get; init; }
+    public EntitlementRepairEligibility? RepairEligibility { get; init; }
+    public IReadOnlyList<EntitlementRepairHistoryResponse> RepairHistory { get; init; } = [];
+}
 
 public sealed record AdminTransactionDetailTransactionResponse : AdminTransactionResponse
 {

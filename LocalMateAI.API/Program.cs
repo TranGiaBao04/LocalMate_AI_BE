@@ -149,6 +149,8 @@ builder.Services.AddScoped<IAdminPlanRepository, AdminPlanRepository>();
 builder.Services.AddScoped<IAdminPlanService, AdminPlanService>();
 builder.Services.AddScoped<IAdminTransactionRepository, AdminTransactionRepository>();
 builder.Services.AddScoped<IAdminTransactionService, AdminTransactionService>();
+builder.Services.AddScoped<IEntitlementRepairExecutor, EntitlementRepairExecutor>();
+builder.Services.AddScoped<IEntitlementRepairService, EntitlementRepairService>();
 builder.Services.AddScoped<IExternalLoginRepository, ExternalLoginRepository>();
 builder.Services.AddScoped<IPendingRegistrationRepository, PendingRegistrationRepository>();
 builder.Services.AddScoped<ITagRepository, TagRepository>();

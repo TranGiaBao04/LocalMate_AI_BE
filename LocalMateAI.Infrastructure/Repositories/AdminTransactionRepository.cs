@@ -3,6 +3,8 @@ using System.Globalization;
 using LocalMateAI.Application.DTOs.Common;
 using LocalMateAI.Application.DTOs.Payments;
 using LocalMateAI.Application.Interfaces.Repositories;
+using LocalMateAI.Application.Payments;
+using LocalMateAI.Application.Services;
 using LocalMateAI.Domain.Enums;
 using LocalMateAI.Infrastructure.Persistence;
 using LocalMateAI.Infrastructure.Persistence.Querying;
@@ -10,7 +12,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LocalMateAI.Infrastructure.Repositories;
 
-public sealed class AdminTransactionRepository(AppDbContext context) : IAdminTransactionRepository
+public sealed class AdminTransactionRepository(AppDbContext context, TimeProvider? timeProvider = null) : IAdminTransactionRepository
 {
     private static readonly SortMap<TransactionRow> Sort = new SortMap<TransactionRow>("createdAt", true, r => r.Id)
         .Add("createdAt", r => r.CreatedAt).Add("paidAt", r => r.PaidAt).Add("amount", r => r.Amount)
@@ -80,9 +82,20 @@ public sealed class AdminTransactionRepository(AppDbContext context) : IAdminTra
             .Select(r => new AdminTransactionWebhookReceiptResponse(r.Id, r.ProviderOrderCode, r.Amount,
                 r.IsSuccessful, r.ReceivedAt, r.RawPayloadSha256, r.RawPayload != null,
                 r.RawPayloadRetainUntil, r.RawPayloadPurgedAt)).ToListAsync(cancellationToken);
+        var evidence = await EntitlementRepairEvidenceReader.ReadAsync(context,
+            new RepairOrderEvidence(row.Id, row.UserId, row.PlanId, row.PlanVersionId,
+                row.PlanVersionBinding, row.Status, row.Amount, row.PaidAt), cancellationToken);
+        var assessment = EntitlementRepairAssessmentPolicy.Assess(evidence, (timeProvider ?? TimeProvider.System).GetUtcNow().UtcDateTime);
+        var repairs = await context.EntitlementRepairAudits.AsNoTracking().Where(a => a.PaymentOrderId == id)
+            .OrderByDescending(a => a.OccurredAt).ThenByDescending(a => a.Id)
+            .Select(a => new EntitlementRepairHistoryResponse(a.Id, a.SubscriptionPeriodId, a.ActorUserId,
+                a.Reason, a.Outcome.ToString(), a.DecisionCode, a.ReconstructionMode, a.OccurredAt)).ToListAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return new(new(Response(row), row.PlanId, row.PlanVersionId, row.PlanVersionBinding.ToString(), row.UpdatedAt),
-            history, receipts);
+            history, receipts)
+        {
+            Entitlement = assessment.Entitlement, RepairEligibility = assessment.Eligibility, RepairHistory = repairs
+        };
     }
 
     public async Task<PagedResult<AdminTransactionResponse>> GetTransactionsAsync(AdminTransactionFilter filter, PagedQuery paging,

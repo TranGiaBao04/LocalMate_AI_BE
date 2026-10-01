@@ -26,6 +26,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, TimePro
     public DbSet<PaymentOrder> PaymentOrders => Set<PaymentOrder>();
     public DbSet<PaymentWebhookReceipt> PaymentWebhookReceipts => Set<PaymentWebhookReceipt>();
     public DbSet<PaymentOrderStatusHistory> PaymentOrderStatusHistories => Set<PaymentOrderStatusHistory>();
+    public DbSet<EntitlementRepairAudit> EntitlementRepairAudits => Set<EntitlementRepairAudit>();
     public DbSet<UsageEvent> UsageEvents => Set<UsageEvent>();
     public DbSet<ItineraryItem> ItineraryItems => Set<ItineraryItem>();
     public DbSet<Feedback> Feedbacks => Set<Feedback>();
@@ -63,6 +64,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, TimePro
 
     private void ApplyAudit()
     {
+        if (ChangeTracker.Entries<EntitlementRepairAudit>().Any(e => e.State is EntityState.Modified or EntityState.Deleted))
+            throw new InvalidOperationException("Entitlement repair audits are insert-only.");
         if (ChangeTracker.Entries<PaymentOrderStatusHistory>().Any(e => e.State is EntityState.Modified or EntityState.Deleted))
             throw new InvalidOperationException("Payment status history is insert-only.");
         foreach (var entry in ChangeTracker.Entries<PaymentWebhookReceipt>())
