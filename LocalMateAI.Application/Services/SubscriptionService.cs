@@ -21,8 +21,12 @@ public sealed class SubscriptionService(
             if (!plan.IsSystem || !plan.IsActive || plan.CurrentVersionId is not { } id) continue;
             var version = await subscriptionRepository.GetVersionAsync(id, cancellationToken)
                 ?? throw new InvalidOperationException("Missing current version.");
+            var features = await subscriptionRepository.GetFeaturesForVersionAsync(id, cancellationToken);
             result.Add(new(PlanIdentity.PublicCode(plan.Code), version.Price, version.DurationDays,
-                version.GenerateLimit, version.SavedTripLimit));
+                version.GenerateLimit, version.SavedTripLimit)
+            {
+                Features = features.Select(f => new SubscriptionFeatureResponse(f.Code, f.Name, f.Description)).ToArray()
+            });
         }
         return result;
     }

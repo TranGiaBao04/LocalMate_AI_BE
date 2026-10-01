@@ -20,6 +20,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<UserSubscription> UserSubscriptions => Set<UserSubscription>();
     public DbSet<SubscriptionPlan> SubscriptionPlans => Set<SubscriptionPlan>();
     public DbSet<SubscriptionPlanVersion> SubscriptionPlanVersions => Set<SubscriptionPlanVersion>();
+    public DbSet<PlanFeature> PlanFeatures => Set<PlanFeature>();
+    public DbSet<SubscriptionPlanVersionFeature> SubscriptionPlanVersionFeatures => Set<SubscriptionPlanVersionFeature>();
     public DbSet<SubscriptionPeriod> SubscriptionPeriods => Set<SubscriptionPeriod>();
     public DbSet<PaymentOrder> PaymentOrders => Set<PaymentOrder>();
     public DbSet<UsageEvent> UsageEvents => Set<UsageEvent>();
@@ -60,9 +62,15 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     private void ApplyAudit()
     {
         if (ChangeTracker.Entries().Any(e =>
-            (e.Entity is SubscriptionPlanVersion or SubscriptionPeriod)
+            (e.Entity is SubscriptionPlanVersion or SubscriptionPeriod or SubscriptionPlanVersionFeature)
             && e.State is EntityState.Modified or EntityState.Deleted))
-            throw new InvalidOperationException("Published versions and entitlement periods are immutable.");
+            throw new InvalidOperationException("Published versions, their features and entitlement periods are immutable.");
+
+        var newVersions = ChangeTracker.Entries<SubscriptionPlanVersion>()
+            .Where(e => e.State == EntityState.Added).Select(e => e.Entity.Id).ToHashSet();
+        if (ChangeTracker.Entries<SubscriptionPlanVersionFeature>().Any(e =>
+            e.State == EntityState.Added && !newVersions.Contains(e.Entity.PlanVersionId)))
+            throw new InvalidOperationException("Features must be added together with a new plan version.");
 
         var now = DateTime.UtcNow;
 

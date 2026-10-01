@@ -40,6 +40,26 @@ public sealed class SubscriptionHttpContractTests
     }
 
     [Theory]
+    [InlineData("/api/subscription/plans")]
+    [InlineData("/api/subscriptions/plans")]
+    public async Task Plans_FeaturesAreAdditiveAndAnonymous(string path)
+    {
+        using var host = new ContractTestHost();
+        var response = await host.Client.GetAsync(path);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        foreach (var plan in json.RootElement.EnumerateArray())
+        {
+            var feature = Assert.Single(plan.GetProperty("features").EnumerateArray());
+            Assert.Equal("METRO_GOOGLE_MAPS", feature.GetProperty("code").GetString());
+            Assert.Equal("Bản đồ Metro & chỉ đường Google Maps", feature.GetProperty("name").GetString());
+            Assert.Equal(JsonValueKind.Null, feature.GetProperty("description").ValueKind);
+            Assert.True(plan.TryGetProperty("generateLimit", out _));
+            Assert.True(plan.TryGetProperty("savedTripLimit", out _));
+        }
+    }
+
+    [Theory]
     [InlineData("GET", "/api/subscription/me")]
     [InlineData("POST", "/api/subscription/checkout")]
     [InlineData("POST", "/api/subscription/renew")]
@@ -336,10 +356,13 @@ public sealed class SubscriptionHttpContractTests
 
         public Task<IReadOnlyList<SubscriptionPlanResponse>> GetPlansAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<SubscriptionPlanResponse>>([
-            new("Free", 0m, null, 1, 1),
-            new("TripPass", 19000m, 7, null, 3),
-            new("Membership", 59000m, 30, null, null)
+            new("Free", 0m, null, 1, 1) { Features = [MetroFeature] },
+            new("TripPass", 19000m, 7, null, 3) { Features = [MetroFeature] },
+            new("Membership", 59000m, 30, null, null) { Features = [MetroFeature] }
         ]);
+
+        private static readonly SubscriptionFeatureResponse MetroFeature =
+            new("METRO_GOOGLE_MAPS", "Bản đồ Metro & chỉ đường Google Maps", null);
 
         public Task<SubscriptionMeResponse?> GetMySubscriptionAsync(
             Guid userId,
