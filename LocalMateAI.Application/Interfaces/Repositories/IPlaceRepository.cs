@@ -43,6 +43,9 @@ public interface IPlaceRepository
 
     Task SaveChangesAsync(CancellationToken cancellationToken = default);
 
+    /// <summary>Lưu thay đổi; trả false nếu địa điểm đã bị người khác sửa trước (xmin lệch).</summary>
+    Task<bool> TrySaveChangesAsync(CancellationToken cancellationToken = default);
+
     Task<DeletePlacePersistenceResult> DeleteForAdminAsync(
         Guid placeId,
         CancellationToken cancellationToken = default);

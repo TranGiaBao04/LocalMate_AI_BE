@@ -468,13 +468,19 @@ public sealed class AdminPlaceServiceTests
 
         public bool ThrowConcurrencyOnSave { get; set; }
 
-        public Task SaveChangesAsync(CancellationToken cancellationToken = default)
+        public async Task<bool> TrySaveChangesAsync(CancellationToken cancellationToken = default)
         {
             if (ThrowConcurrencyOnSave)
             {
-                throw new Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException("Concurrency error");
+                return false;
             }
 
+            await SaveChangesAsync(cancellationToken);
+            return true;
+        }
+
+        public Task SaveChangesAsync(CancellationToken cancellationToken = default)
+        {
             SaveChangesCalls++;
             var now = DateTime.UtcNow;
             if (AddedPlace is not null)
