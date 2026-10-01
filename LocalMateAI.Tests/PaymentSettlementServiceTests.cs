@@ -285,6 +285,9 @@ public sealed class PaymentSettlementServiceTests
     private sealed class FakeSettlementExecutor(IReadOnlyList<PaymentOrder> orders)
         : IPaymentSettlementExecutor
     {
+        public Task<PaymentSettlementExecution<T>> ExecuteAsync<T>(long providerOrderCode, PaymentTransitionContext context,
+            Func<PaymentOrder, CancellationToken, Task<T>> operation, CancellationToken cancellationToken = default) =>
+            ExecuteAsync(providerOrderCode, operation, cancellationToken);
         public async Task<PaymentSettlementExecution<T>> ExecuteAsync<T>(
             long providerOrderCode,
             Func<PaymentOrder, CancellationToken, Task<T>> operation,

@@ -113,6 +113,9 @@ public sealed class PaymentConcurrencyPostgresTests
         await using var context = CreateContext(connectionString);
         var emails = userIds.Select(userId => $"payment-concurrency-{userId:N}@localmate.test").ToArray();
         await context.EmailOutboxMessages.Where(message => emails.Contains(message.ToEmail)).ExecuteDeleteAsync();
+        // Immutable evidence lives until the isolated test database is disposed.
+        if (await context.PaymentOrderStatusHistories.AnyAsync(h =>
+            context.PaymentOrders.Any(o => o.Id == h.PaymentOrderId && userIds.Contains(o.UserId)))) return;
         await context.PaymentOrders.Where(order => userIds.Contains(order.UserId)).ExecuteDeleteAsync();
         await context.Users.Where(user => userIds.Contains(user.Id)).ExecuteDeleteAsync();
     }

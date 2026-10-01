@@ -44,7 +44,7 @@ public sealed class AdminPlanPostgresTests
         Assert.Equal(4, await c.SubscriptionPlanVersions.CountAsync());
         Assert.Equal(4, await c.SubscriptionPlanVersionFeatures.CountAsync());
         Assert.False(c.Database.HasPendingModelChanges());
-        Assert.Equal("20260930143244_AddVersionedPlanFeatures", (await c.Database.GetAppliedMigrationsAsync()).Last());
+        Assert.Contains("20260930143244_AddVersionedPlanFeatures", await c.Database.GetAppliedMigrationsAsync());
         Assert.Empty(await c.Database.GetPendingMigrationsAsync());
     }
 

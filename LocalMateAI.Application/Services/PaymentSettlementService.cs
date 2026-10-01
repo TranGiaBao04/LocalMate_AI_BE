@@ -15,15 +15,21 @@ public sealed class PaymentSettlementService(
     TimeProvider timeProvider,
     ILogger<PaymentSettlementService> logger) : IPaymentSettlementService
 {
-    public async Task<PaymentSettlementResult> ApplyVerifiedPaymentAsync(
+    public Task<PaymentSettlementResult> ApplyVerifiedPaymentAsync(
         VerifiedPaymentNotification notification,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) => ApplyVerifiedPaymentAsync(notification,
+            new(PaymentStatusChangeSource.ProviderLookup), cancellationToken);
+
+    public async Task<PaymentSettlementResult> ApplyVerifiedPaymentAsync(VerifiedPaymentNotification notification,
+        PaymentTransitionContext context, CancellationToken cancellationToken = default)
     {
         var execution = await settlementExecutor.ExecuteAsync(
             notification.ProviderOrderCode,
+            context,
             (order, lockedCancellationToken) => SettleLockedAsync(
                 order,
                 notification,
+                context,
                 lockedCancellationToken),
             cancellationToken);
 
@@ -35,6 +41,7 @@ public sealed class PaymentSettlementService(
     private async Task<PaymentSettlementResult> SettleLockedAsync(
         PaymentOrder order,
         VerifiedPaymentNotification notification,
+        PaymentTransitionContext context,
         CancellationToken cancellationToken)
     {
         if (order.Status == PaymentOrderStatus.Paid)
@@ -45,7 +52,8 @@ public sealed class PaymentSettlementService(
         if (!notification.IsSuccessful)
         {
             order.Status = PaymentOrderStatus.Failed;
-            return new PaymentSettlementResult(PaymentSettlementStatus.NonSuccessful);
+            return new PaymentSettlementResult(PaymentSettlementStatus.NonSuccessful)
+            { TransitionReasonCode = context.ReasonCode ?? "verified_non_success" };
         }
 
         if (order.Amount != notification.Amount)
@@ -56,7 +64,8 @@ public sealed class PaymentSettlementService(
                 order.ProviderOrderCode,
                 order.Amount,
                 notification.Amount);
-            return new PaymentSettlementResult(PaymentSettlementStatus.AmountMismatch);
+            return new PaymentSettlementResult(PaymentSettlementStatus.AmountMismatch)
+            { TransitionReasonCode = "amount_mismatch" };
         }
 
         if (order.PlanVersionBinding == PlanVersionBinding.LegacyUnresolved)
@@ -99,7 +108,8 @@ public sealed class PaymentSettlementService(
         order.Status = PaymentOrderStatus.Paid;
         order.PaidAt = nowUtc;
         await EnqueueReceiptAsync(order, subscription, plan, version, nowUtc, cancellationToken);
-        return new PaymentSettlementResult(PaymentSettlementStatus.Settled);
+        return new PaymentSettlementResult(PaymentSettlementStatus.Settled)
+        { TransitionReasonCode = context.ReasonCode ?? "verified_success" };
     }
 
     // Xếp biên nhận vào outbox trong CÙNG transaction thanh toán: commit thì chắc chắn có mail chờ gửi.

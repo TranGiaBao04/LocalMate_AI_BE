@@ -1,5 +1,6 @@
 using LocalMateAI.Domain.Entities;
 using LocalMateAI.Domain.Enums;
+using LocalMateAI.Application.Payments;
 
 namespace LocalMateAI.Application.Interfaces.Repositories;
 
@@ -22,6 +23,12 @@ public interface IPaymentOrderRepository
         CancellationToken cancellationToken = default);
 
     Task AddAsync(PaymentOrder order, CancellationToken cancellationToken = default);
+
+    Task TransitionStatusAsync(PaymentOrder order, PaymentOrderStatus status, PaymentTransitionContext context,
+        DateTime nowUtc, CancellationToken cancellationToken = default);
+
+    Task<bool> MarkExpiredIfPendingAsync(Guid orderId, DateTime nowUtc, PaymentTransitionContext context,
+        CancellationToken cancellationToken = default);
 
     Task SaveChangesAsync(CancellationToken cancellationToken = default);
 }

@@ -74,7 +74,7 @@ public sealed class PaymentService(
 
         if (order.Status != PaymentOrderStatus.Paid && HasUsablePaymentLink(order))
         {
-            await ReconcileOrderAsync(order, cancellationToken);
+            await ReconcileOrderAsync(order, userId, cancellationToken);
             order = await paymentOrderRepository.GetOwnedByIdAsync(
                 orderId,
                 userId,
@@ -93,6 +93,7 @@ public sealed class PaymentService(
 
     private async Task ReconcileOrderAsync(
         PaymentOrder order,
+        Guid actorUserId,
         CancellationToken cancellationToken)
     {
         PaymentGatewayOrderResult providerOrder;
@@ -129,6 +130,7 @@ public sealed class PaymentService(
                         providerOrder.ProviderOrderCode,
                         providerOrder.Amount,
                         IsSuccessful: true),
+                    new(PaymentStatusChangeSource.ProviderLookup, actorUserId, ReasonCode: "provider_paid"),
                     cancellationToken);
                 break;
             case PaymentGatewayOrderStatus.Cancelled:
@@ -139,12 +141,15 @@ public sealed class PaymentService(
                         providerOrder.ProviderOrderCode,
                         providerOrder.Amount,
                         IsSuccessful: false),
+                    new(PaymentStatusChangeSource.ProviderLookup, actorUserId,
+                        ReasonCode: $"provider_{providerOrder.Status.ToString().ToLowerInvariant()}"),
                     cancellationToken);
                 break;
             case PaymentGatewayOrderStatus.Expired:
                 await paymentOrderRepository.MarkExpiredIfPendingAsync(
                     order.Id,
                     timeProvider.GetUtcNow().UtcDateTime,
+                    new(PaymentStatusChangeSource.ProviderLookup, actorUserId, ReasonCode: "provider_expired"),
                     cancellationToken);
                 break;
             case PaymentGatewayOrderStatus.Pending:
@@ -154,6 +159,7 @@ public sealed class PaymentService(
                     await paymentOrderRepository.MarkExpiredIfPendingAsync(
                         order.Id,
                         timeProvider.GetUtcNow().UtcDateTime,
+                        new(PaymentStatusChangeSource.LocalExpiration, actorUserId, ReasonCode: "local_expired"),
                         cancellationToken);
                 }
                 break;
@@ -243,8 +249,8 @@ public sealed class PaymentService(
             if (pending.ExpiresAt <= nowUtc)
             {
                 // A later verified webhook or owned-order lookup can still settle this order.
-                pending.Status = PaymentOrderStatus.Expired;
-                await paymentOrderRepository.SaveChangesAsync(cancellationToken);
+                await paymentOrderRepository.TransitionStatusAsync(pending, PaymentOrderStatus.Expired,
+                    new(PaymentStatusChangeSource.LocalExpiration, userId, ReasonCode: "local_expired"), nowUtc, cancellationToken);
             }
             else if (HasUsablePaymentLink(pending))
             {
@@ -254,8 +260,8 @@ public sealed class PaymentService(
             }
             else
             {
-                pending.Status = PaymentOrderStatus.Failed;
-                await paymentOrderRepository.SaveChangesAsync(cancellationToken);
+                await paymentOrderRepository.TransitionStatusAsync(pending, PaymentOrderStatus.Failed,
+                    new(PaymentStatusChangeSource.Checkout, userId, ReasonCode: "unusable_pending_payment_link"), nowUtc, cancellationToken);
             }
         }
 
@@ -301,8 +307,9 @@ public sealed class PaymentService(
             || string.IsNullOrWhiteSpace(link.CheckoutUrl)
             || string.IsNullOrWhiteSpace(link.QrCode))
         {
-            order.Status = PaymentOrderStatus.Failed;
-            await paymentOrderRepository.SaveChangesAsync(cancellationToken);
+            await paymentOrderRepository.TransitionStatusAsync(order, PaymentOrderStatus.Failed,
+                new(PaymentStatusChangeSource.Checkout, userId,
+                    ReasonCode: link.IsSuccess ? "unusable_payment_link" : "gateway_unavailable"), nowUtc, cancellationToken);
             return new PaymentIntentResult(PaymentIntentResultStatus.GatewayUnavailable);
         }
 

@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace LocalMateAI.Infrastructure.Persistence;
 
-public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
+public sealed class AppDbContext(DbContextOptions<AppDbContext> options, TimeProvider? timeProvider = null) : DbContext(options)
 {
     public DbSet<User> Users => Set<User>();
     public DbSet<Role> Roles => Set<Role>();
@@ -24,6 +24,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<SubscriptionPlanVersionFeature> SubscriptionPlanVersionFeatures => Set<SubscriptionPlanVersionFeature>();
     public DbSet<SubscriptionPeriod> SubscriptionPeriods => Set<SubscriptionPeriod>();
     public DbSet<PaymentOrder> PaymentOrders => Set<PaymentOrder>();
+    public DbSet<PaymentWebhookReceipt> PaymentWebhookReceipts => Set<PaymentWebhookReceipt>();
+    public DbSet<PaymentOrderStatusHistory> PaymentOrderStatusHistories => Set<PaymentOrderStatusHistory>();
     public DbSet<UsageEvent> UsageEvents => Set<UsageEvent>();
     public DbSet<ItineraryItem> ItineraryItems => Set<ItineraryItem>();
     public DbSet<Feedback> Feedbacks => Set<Feedback>();
@@ -61,6 +63,23 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
 
     private void ApplyAudit()
     {
+        if (ChangeTracker.Entries<PaymentOrderStatusHistory>().Any(e => e.State is EntityState.Modified or EntityState.Deleted))
+            throw new InvalidOperationException("Payment status history is insert-only.");
+        foreach (var entry in ChangeTracker.Entries<PaymentWebhookReceipt>())
+        {
+            if (entry.State == EntityState.Deleted)
+                throw new InvalidOperationException("Payment webhook receipts cannot be deleted.");
+            if (entry.State != EntityState.Modified) continue;
+            var allowed = new[] { nameof(PaymentWebhookReceipt.RawPayload), nameof(PaymentWebhookReceipt.RawPayloadPurgedAt) };
+            if (entry.Properties.Any(p => p.IsModified && !allowed.Contains(p.Metadata.Name))
+                || entry.OriginalValues.GetValue<string?>(nameof(PaymentWebhookReceipt.RawPayload)) is null
+                || entry.OriginalValues.GetValue<DateTime?>(nameof(PaymentWebhookReceipt.RawPayloadPurgedAt)) is not null
+                || entry.Entity.RawPayload is not null
+                || entry.Entity.RawPayloadPurgedAt is null
+                || entry.Entity.RawPayloadPurgedAt < entry.Entity.RawPayloadRetainUntil
+                || (timeProvider ?? TimeProvider.System).GetUtcNow().UtcDateTime < entry.Entity.RawPayloadRetainUntil)
+                throw new InvalidOperationException("Webhook metadata is immutable; only expired raw payload can be purged.");
+        }
         if (ChangeTracker.Entries().Any(e =>
             (e.Entity is SubscriptionPlanVersion or SubscriptionPeriod or SubscriptionPlanVersionFeature)
             && e.State is EntityState.Modified or EntityState.Deleted))
