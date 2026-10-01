@@ -3,7 +3,6 @@ using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Interfaces.Services;
 using LocalMateAI.Domain.Entities;
 using LocalMateAI.Domain.Enums;
-using Microsoft.EntityFrameworkCore;
 using NetTopologySuite.Geometries;
 
 namespace LocalMateAI.Application.Services;
@@ -101,11 +100,7 @@ public sealed class AdminPlaceService(
         place.EstimatedCostMax = request.EstimatedCostMax;
         place.ImageUrl = request.ImageUrl;
 
-        try
-        {
-            await placeRepository.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateConcurrencyException)
+        if (!await placeRepository.TrySaveChangesAsync(cancellationToken))
         {
             return AdminPlaceOperationResult.Conflict();
         }
@@ -158,11 +153,7 @@ public sealed class AdminPlaceService(
 
         place.Status = request.Status;
 
-        try
-        {
-            await placeRepository.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateConcurrencyException)
+        if (!await placeRepository.TrySaveChangesAsync(cancellationToken))
         {
             return AdminPlaceModerationResult.Conflict();
         }
@@ -196,11 +187,7 @@ public sealed class AdminPlaceService(
 
         place.IsVerified = request.IsVerified;
 
-        try
-        {
-            await placeRepository.SaveChangesAsync(cancellationToken);
-        }
-        catch (DbUpdateConcurrencyException)
+        if (!await placeRepository.TrySaveChangesAsync(cancellationToken))
         {
             return AdminPlaceModerationResult.Conflict();
         }

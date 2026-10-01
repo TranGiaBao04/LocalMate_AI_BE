@@ -169,6 +169,19 @@ public sealed class PlaceRepository(AppDbContext dbContext) : IPlaceRepository
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task<bool> TrySaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+            return true;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return false;
+        }
+    }
+
     public async Task<DeletePlacePersistenceResult> DeleteForAdminAsync(
         Guid placeId,
         CancellationToken cancellationToken = default)

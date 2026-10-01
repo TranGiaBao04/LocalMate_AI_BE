@@ -287,6 +287,9 @@ public sealed class TripAlternativesServiceTests
         public Task SaveChangesAsync(CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
+        public Task<bool> TrySaveChangesAsync(CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         public Task<DeletePlacePersistenceResult> DeleteForAdminAsync(
             Guid placeId,
             CancellationToken cancellationToken = default) =>
