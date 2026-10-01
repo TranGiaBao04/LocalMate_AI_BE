@@ -169,13 +169,15 @@ public sealed class AdminTransactionsHttpTests
     {
         private readonly WebApplication app;
         internal HttpClient Client { get; }
-        internal Host(IAdminTransactionService? service = null, IPaymentReconciliationService? reconciliation = null)
+        internal Host(IAdminTransactionService? service = null, IPaymentReconciliationService? reconciliation = null,
+            IEntitlementRepairService? repair = null)
         {
             var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "ContractTests" });
             builder.WebHost.UseTestServer();
             builder.Logging.ClearProviders();
             builder.Services.AddSingleton(service ?? AdminTransactionTests.Service(new AdminTransactionTests.RecordingRepository()));
             if (reconciliation is not null) builder.Services.AddSingleton(reconciliation);
+            if (repair is not null) builder.Services.AddSingleton(repair);
             builder.Services.AddSingleton<IUserAccessService, Access>();
             builder.Services.AddAuthentication("TransactionTest")
                 .AddScheme<AuthenticationSchemeOptions, Authentication>("TransactionTest", _ => { });
