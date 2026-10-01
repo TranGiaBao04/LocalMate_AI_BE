@@ -17,10 +17,8 @@ public sealed class AdminTransactionRepository(AppDbContext context) : IAdminTra
         .Add("status", r => r.Status).Add("operationType", r => r.OperationType)
         .Add("providerOrderCode", r => r.ProviderOrderCode).Add("userEmail", r => r.UserEmail).Add("planCode", r => r.PlanCode);
 
-    // This is the only projection/filter engine used by list, aggregate and export.
-    private IQueryable<TransactionRow> Filtered(AdminTransactionFilter filter)
-    {
-        var rows = from order in context.PaymentOrders.AsNoTracking()
+    private IQueryable<TransactionRow> Rows() =>
+        from order in context.PaymentOrders.AsNoTracking()
             join user in context.Users.AsNoTracking() on order.UserId equals user.Id
             join plan in context.SubscriptionPlans.AsNoTracking() on order.PlanId equals (Guid?)plan.Id into plans
             from plan in plans.DefaultIfEmpty()
@@ -33,8 +31,15 @@ public sealed class AdminTransactionRepository(AppDbContext context) : IAdminTra
                     : plan != null ? plan.Code : order.PlanCode.HasValue ? order.PlanCode.Value.ToString() : null,
                 CatalogPlanCode = plan != null ? plan.Code : null,
                 PlanName = plan != null ? plan.Name : null, OperationType = order.Type, Status = order.Status,
-                Amount = order.Amount, CreatedAt = order.CreatedAt, ExpiresAt = order.ExpiresAt, PaidAt = order.PaidAt
+                Amount = order.Amount, CreatedAt = order.CreatedAt, ExpiresAt = order.ExpiresAt, PaidAt = order.PaidAt,
+                PlanId = order.PlanId, PlanVersionId = order.PlanVersionId,
+                PlanVersionBinding = order.PlanVersionBinding, UpdatedAt = order.UpdatedAt
             };
+
+    // List, aggregate, export and detail share the same safe transaction projection.
+    private IQueryable<TransactionRow> Filtered(AdminTransactionFilter filter)
+    {
+        var rows = Rows();
         if (filter.Status is { } status) rows = rows.Where(r => r.Status == status);
         if (filter.OperationType is { } type) rows = rows.Where(r => r.OperationType == type);
         if (filter.CreatedFromUtc is { } from) rows = rows.Where(r => r.CreatedAt >= from);
@@ -51,6 +56,33 @@ public sealed class AdminTransactionRepository(AppDbContext context) : IAdminTra
                 || (r.PlanName != null && EF.Functions.ILike(r.PlanName, pattern, "\\")));
         }
         return rows;
+    }
+
+    public async Task<AdminTransactionDetailResponse?> GetDetailAsync(Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        await using var transaction = await context.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
+        await context.Database.ExecuteSqlRawAsync("SET TRANSACTION READ ONLY", cancellationToken);
+        var row = await Rows().SingleOrDefaultAsync(r => r.Id == id, cancellationToken);
+        if (row is null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return null;
+        }
+        var history = await context.PaymentOrderStatusHistories.AsNoTracking()
+            .Where(h => h.PaymentOrderId == id).OrderBy(h => h.OccurredAt).ThenBy(h => h.Id)
+            .Select(h => new AdminTransactionStatusHistoryResponse(h.Id,
+                h.FromStatus.HasValue ? h.FromStatus.Value.ToString() : null,
+                h.ToStatus.ToString(), h.Source.ToString(), h.ReasonCode, h.OccurredAt,
+                h.ActorUserId, h.WebhookReceiptId)).ToListAsync(cancellationToken);
+        var receipts = await context.PaymentWebhookReceipts.AsNoTracking()
+            .Where(r => r.PaymentOrderId == id).OrderByDescending(r => r.ReceivedAt).ThenByDescending(r => r.Id)
+            .Select(r => new AdminTransactionWebhookReceiptResponse(r.Id, r.ProviderOrderCode, r.Amount,
+                r.IsSuccessful, r.ReceivedAt, r.RawPayloadSha256, r.RawPayload != null,
+                r.RawPayloadRetainUntil, r.RawPayloadPurgedAt)).ToListAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return new(new(Response(row), row.PlanId, row.PlanVersionId, row.PlanVersionBinding.ToString(), row.UpdatedAt),
+            history, receipts);
     }
 
     public async Task<PagedResult<AdminTransactionResponse>> GetTransactionsAsync(AdminTransactionFilter filter, PagedQuery paging,
@@ -102,5 +134,9 @@ public sealed class AdminTransactionRepository(AppDbContext context) : IAdminTra
         public DateTime CreatedAt { get; init; }
         public DateTime ExpiresAt { get; init; }
         public DateTime? PaidAt { get; init; }
+        public Guid? PlanId { get; init; }
+        public Guid? PlanVersionId { get; init; }
+        public PlanVersionBinding PlanVersionBinding { get; init; }
+        public DateTime? UpdatedAt { get; init; }
     }
 }

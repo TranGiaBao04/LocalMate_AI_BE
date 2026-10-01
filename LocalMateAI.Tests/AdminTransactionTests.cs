@@ -191,6 +191,10 @@ public sealed class AdminTransactionTests
     {
         public List<AdminTransactionFilter> Filters { get; } = [];
         public long ExportCount { get; set; } = 1;
+        public AdminTransactionDetailResponse? Detail { get; set; }
+        public List<(Guid Id, CancellationToken CancellationToken)> DetailCalls { get; } = [];
+        public Task<AdminTransactionDetailResponse?> GetDetailAsync(Guid id, CancellationToken cancellationToken = default)
+        { DetailCalls.Add((id, cancellationToken)); return Task.FromResult(Detail); }
         public Task<PagedResult<AdminTransactionResponse>> GetTransactionsAsync(AdminTransactionFilter filter, PagedQuery paging,
             CancellationToken cancellationToken = default)
         { Filters.Add(filter); return Task.FromResult(PagedResult<AdminTransactionResponse>.Create([Row], paging.Page, paging.PageSize, 1)); }

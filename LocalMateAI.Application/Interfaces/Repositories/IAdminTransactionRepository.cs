@@ -5,6 +5,7 @@ namespace LocalMateAI.Application.Interfaces.Repositories;
 
 public interface IAdminTransactionRepository
 {
+    Task<AdminTransactionDetailResponse?> GetDetailAsync(Guid id, CancellationToken cancellationToken = default);
     Task<PagedResult<AdminTransactionResponse>> GetTransactionsAsync(AdminTransactionFilter filter, PagedQuery paging,
         CancellationToken cancellationToken = default);
     Task<AdminTransactionSummary> GetSummaryAsync(AdminTransactionFilter filter, CancellationToken cancellationToken = default);
