@@ -436,12 +436,15 @@ public sealed class PlanVersionFoundationPostgresTests
     }
     internal static PaymentSettlementService Settlement(AppDbContext c, TimeProvider clock) => new(
         new PaymentSettlementExecutor(c), new SubscriptionRepository(c), new UserRepository(c),
-        new EmailOutboxRepository(c), clock, NullLogger<PaymentSettlementService>.Instance);
+        new EmailOutboxRepository(c), clock, NullLogger<PaymentSettlementService>.Instance,
+        creditRepository: new PaymentCreditRepository(c, clock));
     private static PaymentService Payment(AppDbContext c, TimeProvider clock, Gateway gateway) => new(
         new UserRepository(c), new SubscriptionRepository(c), new PaymentOrderRepository(c),
         new PaymentOperationExecutor(c), gateway,
         new PaymentReconciliationService(new PaymentOrderRepository(c), gateway, Settlement(c, clock), clock,
-            NullLogger<PaymentReconciliationService>.Instance), clock, NullLogger<PaymentService>.Instance);
+            NullLogger<PaymentReconciliationService>.Instance), clock, NullLogger<PaymentService>.Instance,
+        new SubscriptionUpgradeReservationService(new SubscriptionRepository(c), new PaymentOrderRepository(c, clock),
+            new PaymentCreditRepository(c, clock), new PaymentOperationExecutor(c), gateway, clock), Settlement(c, clock));
     internal sealed class Clock(DateTime now) : TimeProvider
     {
         public DateTime Now { get; set; } = now;

@@ -20,6 +20,8 @@ public sealed class SubscriptionUpgradeReservationService(ISubscriptionRepositor
             if (target is null) return new UpgradePreparationResult(PaymentIntentResultStatus.InvalidPlanCode);
             var (plan, version) = target.Value;
             var now = timeProvider.GetUtcNow().UtcDateTime;
+            if (await orders.GetBlockingSubscriptionAsync(userId, ct) is { Status: PaymentOrderStatus.ReviewRequired } review)
+                return new(PaymentIntentResultStatus.PaymentReviewRequired, review.Id);
             var classification = await SubscriptionCheckoutContext.ClassifyAsync(subscriptions, userId, plan, now, ct);
             if (SubscriptionCheckoutContext.ClassificationError(classification) is { } error) return new(error);
             if (classification != SubscriptionCheckoutClassification.Upgrade) return new(PaymentIntentResultStatus.InvalidPlanCode);
@@ -76,7 +78,8 @@ public sealed class SubscriptionUpgradeReservationService(ISubscriptionRepositor
         // No User/Order transaction spans this provider lookup.
         if (provider.IsAvailable && provider.ProviderOrderCode == candidate.ProviderOrderCode
             && provider.Status == PaymentGatewayOrderStatus.Paid)
-            return new(UpgradeReleaseStatus.RequiresSettlement, orderId);
+            return new(UpgradeReleaseStatus.RequiresSettlement, orderId)
+            { VerifiedPayment = new(provider.ProviderOrderCode, provider.Amount, true) };
         var proof = UpgradeReleasePolicy.Assess(candidate, provider, timeProvider.GetUtcNow().UtcDateTime);
         if (proof is null) return new(UpgradeReleaseStatus.Blocked, orderId);
         return new(await credits.ReleaseAsync(candidate, proof, cancellationToken), orderId);

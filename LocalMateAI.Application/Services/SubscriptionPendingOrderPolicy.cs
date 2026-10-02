@@ -29,11 +29,13 @@ public static class SubscriptionPendingOrderPolicy
                     continue;
                 }
             }
-            return new(order.PlanId == planId && order.Type == type && order.Status == PaymentOrderStatus.Pending
+            return new(order.Status == PaymentOrderStatus.ReviewRequired ? PaymentIntentResultStatus.PaymentReviewRequired
+                : order.PlanId == planId && order.Type == type && order.Status == PaymentOrderStatus.Pending
                     && order.ExpiresAt > nowUtc && !string.IsNullOrWhiteSpace(order.CheckoutUrl) && !string.IsNullOrWhiteSpace(order.QrCode)
                     ? PaymentIntentResultStatus.PendingOrderExists : PaymentIntentResultStatus.AnotherPendingOrder,
                 new(order.Id, order.QrCode ?? "", order.CheckoutUrl ?? "", order.Amount, order.ExpiresAt)
-                { Type = order.Type.ToString(), ListPrice = order.Amount + order.CreditAmount, CreditAmount = order.CreditAmount });
+                { Type = order.Type.ToString(), ListPrice = order.Amount + order.CreditAmount, CreditAmount = order.CreditAmount,
+                    Status = order.Status.ToString() });
         }
         return null;
     }

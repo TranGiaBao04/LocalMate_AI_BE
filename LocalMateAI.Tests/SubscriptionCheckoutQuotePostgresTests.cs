@@ -24,7 +24,11 @@ public sealed class SubscriptionCheckoutQuotePostgresTests
         new PaymentReconciliationService(new PaymentOrderRepository(c), gateway,
             PlanVersionFoundationPostgresTests.Settlement(c, new PlanVersionFoundationPostgresTests.Clock(Now)),
             new PlanVersionFoundationPostgresTests.Clock(Now), NullLogger<PaymentReconciliationService>.Instance),
-        new PlanVersionFoundationPostgresTests.Clock(Now), NullLogger<PaymentService>.Instance);
+        new PlanVersionFoundationPostgresTests.Clock(Now), NullLogger<PaymentService>.Instance,
+        new SubscriptionUpgradeReservationService(new SubscriptionRepository(c), new PaymentOrderRepository(c),
+            new PaymentCreditRepository(c, new PlanVersionFoundationPostgresTests.Clock(Now)), new PaymentOperationExecutor(c),
+            gateway, new PlanVersionFoundationPostgresTests.Clock(Now)),
+        PlanVersionFoundationPostgresTests.Settlement(c, new PlanVersionFoundationPostgresTests.Clock(Now)));
 
     private static async Task<SubscriptionPeriod> PaidPeriod(AppDbContext c, Guid user,
         SubscriptionPlanVersion version, DateTime paidAt)

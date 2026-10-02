@@ -43,7 +43,8 @@ public sealed class AdminPlanRepository(AppDbContext context) : IAdminPlanReposi
 
     private IQueryable<PlanRow> Rows(IQueryable<SubscriptionPlan> plans, DateTime now) => plans.Select(p => new PlanRow(
         p.Id, p.Code, p.Name, p.EntitlementPriority, p.IsSystem, p.IsActive, p.CreatedAt, p.UpdatedAt,
-        p.CurrentVersionId, context.SubscriptionPeriods.Where(s => s.PlanId == p.Id && s.StartsAt <= now && now < s.EndsAt)
+        p.CurrentVersionId, context.SubscriptionPeriods.Where(s => s.PlanId == p.Id && s.StartsAt <= now && now < s.EndsAt
+            && (s.TerminatedAt == null || now < s.TerminatedAt))
             .Select(s => s.UserId).Distinct().Count()));
 
     private async Task<IReadOnlyList<AdminPlanResponse>> ResponsesAsync(IReadOnlyList<PlanRow> rows, CancellationToken ct)

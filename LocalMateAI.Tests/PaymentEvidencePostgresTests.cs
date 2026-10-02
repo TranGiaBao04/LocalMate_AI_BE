@@ -496,7 +496,10 @@ public sealed class PaymentEvidencePostgresTests
         new SubscriptionRepository(c), new PaymentOrderRepository(c, new PaymentEvidenceTestClock(Now)), new PaymentOperationExecutor(c),
         gateway, new PaymentReconciliationService(new PaymentOrderRepository(c, new PaymentEvidenceTestClock(Now)),
             gateway, Settlement(c), new PaymentEvidenceTestClock(Now), NullLogger<PaymentReconciliationService>.Instance),
-        new PaymentEvidenceTestClock(Now), NullLogger<PaymentService>.Instance);
+        new PaymentEvidenceTestClock(Now), NullLogger<PaymentService>.Instance,
+        new SubscriptionUpgradeReservationService(new SubscriptionRepository(c), new PaymentOrderRepository(c, new PaymentEvidenceTestClock(Now)),
+            new PaymentCreditRepository(c, new PaymentEvidenceTestClock(Now)), new PaymentOperationExecutor(c), gateway, new PaymentEvidenceTestClock(Now)),
+        Settlement(c));
     private static PaymentWebhookService Webhook(AppDbContext c, PaymentEvidenceTestGateway gateway) => new(gateway, Settlement(c),
         new PaymentEvidenceRepository(c), Options.Create(new PaymentEvidenceOptions()), new PaymentEvidenceTestClock(Now), NullLogger<PaymentWebhookService>.Instance);
 }

@@ -84,7 +84,7 @@ public sealed class AdminTransactionRepository(AppDbContext context, TimeProvide
                 r.RawPayloadRetainUntil, r.RawPayloadPurgedAt)).ToListAsync(cancellationToken);
         var evidence = await EntitlementRepairEvidenceReader.ReadAsync(context,
             new RepairOrderEvidence(row.Id, row.UserId, row.PlanId, row.PlanVersionId,
-                row.PlanVersionBinding, row.Status, row.Amount, row.PaidAt) { ProductKind = row.ProductKind }, cancellationToken);
+                row.PlanVersionBinding, row.Status, row.Amount, row.PaidAt) { ProductKind = row.ProductKind, Type = row.OperationType }, cancellationToken);
         var assessment = EntitlementRepairAssessmentPolicy.Assess(evidence, (timeProvider ?? TimeProvider.System).GetUtcNow().UtcDateTime);
         var repairs = await context.EntitlementRepairAudits.AsNoTracking().Where(a => a.PaymentOrderId == id)
             .OrderByDescending(a => a.OccurredAt).ThenByDescending(a => a.Id)

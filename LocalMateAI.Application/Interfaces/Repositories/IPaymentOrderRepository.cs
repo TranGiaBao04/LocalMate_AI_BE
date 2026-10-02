@@ -6,6 +6,8 @@ namespace LocalMateAI.Application.Interfaces.Repositories;
 
 public interface IPaymentOrderRepository
 {
+    Task<PaymentOrder?> CompleteUpgradeLinkAsync(Guid userId, Guid orderId, PaymentLinkResult link, DateTime nowUtc,
+        CancellationToken cancellationToken = default) => throw new NotSupportedException();
     Task<PaymentOrder?> GetBlockingSubscriptionAsync(Guid userId, CancellationToken cancellationToken = default);
     Task<PaymentOrder?> GetByIdAsync(Guid orderId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<Guid>> GetExpiredPendingIdsAsync(DateTime nowUtc, int batchSize,

@@ -13,6 +13,8 @@ public static class EntitlementRepairAssessmentPolicy
         var target = evidence.Target.Order;
         if (target.ProductKind != PaymentProductKind.SubscriptionPlan)
             return Reject("product_not_applicable", "Subscription repair does not apply to this product.", status: "NotApplicable");
+        if (target.Type == PaymentOrderType.Upgrade)
+            return Reject("upgrade_repair_not_supported", "Upgrade repair is not supported.", status: "NotApplicable");
         var linked = evidence.Periods.Where(p => p.SourcePaymentOrderId == target.Id).ToArray();
         if (linked.Length > 0)
         {
@@ -38,10 +40,12 @@ public static class EntitlementRepairAssessmentPolicy
         if (evidence.Periods.Any(p => p.UserId == target.UserId && p.PlanId == target.PlanId && p.LegacyUserSubscriptionId is not null))
             return Reject("legacy_entitlement_ambiguous", "A legacy aggregate prevents exact historical reconstruction.", status: "Unknown");
 
+        if (evidence.Periods.Any(p => p.UserId == target.UserId && p.PlanId == target.PlanId && p.TerminatedAt is not null))
+            return Reject("historical_window_unproven", "Terminated historical windows require manual review.", status: "Unknown");
         var relevant = evidence.Purchases.Where(p => p.Order.UserId == target.UserId
             && p.Order.PlanId == target.PlanId && p.Order.Status == PaymentOrderStatus.Paid).ToArray();
         if (relevant.All(p => p.Order.Id != target.Id)
-            || relevant.Any(p => p.Order.Binding != PlanVersionBinding.Native || p.Order.PaidAt is null
+            || relevant.Any(p => p.Order.Type == PaymentOrderType.Upgrade || p.Order.Binding != PlanVersionBinding.Native || p.Order.PaidAt is null
                 || p.Order.PaidAt.Value.Kind != DateTimeKind.Utc || !ValidPurchase(p))
             || relevant.GroupBy(p => p.Order.Id).Any(g => g.Count() != 1)
             || relevant.GroupBy(p => p.Order.PaidAt).Any(g => g.Count() > 1))

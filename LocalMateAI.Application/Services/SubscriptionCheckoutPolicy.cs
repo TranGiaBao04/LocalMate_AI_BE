@@ -1,4 +1,5 @@
 using LocalMateAI.Domain.Entities;
+using LocalMateAI.Domain.Services;
 
 namespace LocalMateAI.Application.Services;
 
@@ -27,7 +28,7 @@ public static class SubscriptionCheckoutPolicy
         if (target.EntitlementPriority == effective.Plan.EntitlementPriority)
             return SubscriptionCheckoutClassification.InvalidConfiguration;
         return ownedPeriods.Any(p => p.UserId == effective.Period.UserId && p.PlanId == target.Id
-            && p.StartsAt > nowUtc && p.TerminatedAt is null)
+            && p.StartsAt > nowUtc && SubscriptionPeriodLifecycle.HasEffectiveDuration(p))
             ? SubscriptionCheckoutClassification.TargetPlanAlreadyScheduled
             : SubscriptionCheckoutClassification.Upgrade;
     }

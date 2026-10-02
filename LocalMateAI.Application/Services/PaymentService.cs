@@ -17,7 +17,9 @@ public sealed class PaymentService(
     IPaymentGateway paymentGateway,
     IPaymentReconciliationService reconciliation,
     TimeProvider timeProvider,
-    ILogger<PaymentService> logger) : IPaymentService
+    ILogger<PaymentService> logger,
+    ISubscriptionUpgradeReservationService upgradeReservations,
+    IPaymentSettlementService settlement) : IPaymentService
 {
     private static readonly TimeSpan PaymentIntentLifetime = TimeSpan.FromMinutes(15);
 
@@ -54,17 +56,44 @@ public sealed class PaymentService(
         string? planCode,
         CancellationToken cancellationToken = default)
     {
-        var execution = await paymentOperationExecutor.ExecuteForUserAsync(
-            userId,
-            lockedCancellationToken => CheckoutLockedAsync(
-                userId,
-                planCode,
-                lockedCancellationToken),
-            cancellationToken);
-
-        return execution.PersistedUserExists
-            ? execution.Result!
-            : new PaymentIntentResult(PaymentIntentResultStatus.NonPersistedUser);
+        // At most one resolution followed by one fresh checkout attempt.
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            var execution = await paymentOperationExecutor.ExecuteForUserAsync(userId,
+                ct => CheckoutLockedAsync(userId, planCode, ct), cancellationToken);
+            if (!execution.PersistedUserExists) return new(PaymentIntentResultStatus.NonPersistedUser);
+            var result = execution.Result!;
+            if (result.Status == PaymentIntentResultStatus.UpgradeCheckoutNotReady)
+            {
+                // The routing result is advisory. Preparation owns a new, authoritative transaction.
+                var prepared = await upgradeReservations.PrepareAsync(userId, planCode!, cancellationToken);
+                if (prepared.Status == PaymentIntentResultStatus.Success && prepared.OrderId is { } id)
+                    return await CreateUpgradeLinkAsync(userId, id, cancellationToken);
+                var blocker = prepared.OrderId is { } blockedId
+                    ? await paymentOrderRepository.GetOwnedByIdAsync(blockedId, userId, cancellationToken) : null;
+                result = new(prepared.Status, blocker is null ? null : ToIntentResponse(blocker));
+            }
+            if (attempt != 0 || result.Status != PaymentIntentResultStatus.AnotherPendingOrder
+                || result.Response is null) return result;
+            var old = await paymentOrderRepository.GetOwnedByIdAsync(result.Response.OrderId, userId, cancellationToken);
+            if (old is null || old.Type != PaymentOrderType.Upgrade || old.ProductKind != PaymentProductKind.SubscriptionPlan
+                || (old.Status != PaymentOrderStatus.Failed && old.Status != PaymentOrderStatus.Expired
+                    && !(old.Status == PaymentOrderStatus.Pending && old.ExpiresAt <= timeProvider.GetUtcNow().UtcDateTime)))
+                return result;
+            var resolved = await upgradeReservations.ResolveForReplacementAsync(userId, old.Id, cancellationToken);
+            if (resolved.Status is UpgradeReleaseStatus.Released or UpgradeReleaseStatus.AlreadyReleased) continue;
+            if (resolved.Status == UpgradeReleaseStatus.RequiresSettlement)
+            {
+                if (resolved.VerifiedPayment is { } verified)
+                    await settlement.ApplyVerifiedPaymentAsync(verified,
+                        new(PaymentStatusChangeSource.ProviderLookup, userId, ReasonCode: "provider_paid"), cancellationToken);
+                else
+                    await reconciliation.ReconcileAsync(old.Id, new(PaymentStatusChangeSource.ProviderLookup, userId), cancellationToken);
+                continue;
+            }
+            return result;
+        }
+        throw new InvalidOperationException("Unreachable bounded checkout state.");
     }
 
     public async Task<PaymentIntentResult> RenewAsync(
@@ -130,12 +159,13 @@ public sealed class PaymentService(
         if (target is null) return new(PaymentIntentResultStatus.InvalidPlanCode);
         var (requestedPlan, version) = target.Value;
         var nowUtc = timeProvider.GetUtcNow().UtcDateTime;
+        if (await ReviewBlockerAsync(userId, nowUtc, cancellationToken) is { } review) return review;
         var classification = await ClassifyAsync(userId, requestedPlan, nowUtc, cancellationToken);
         if (ClassificationError(classification) is { } error) return new(error);
         var type = classification == SubscriptionCheckoutClassification.Upgrade ? PaymentOrderType.Upgrade : PaymentOrderType.Purchase;
         if (await SubscriptionPendingOrderPolicy.CheckAsync(paymentOrderRepository, userId, requestedPlan.Id,
                 type, nowUtc, cancellationToken) is { } blocker) return blocker;
-        // Phase safety gate: UP-S3 reservation and UP-S4 settlement must precede a payable Upgrade.
+        // Internal router marker only; the public orchestrator prepares Upgrade after this transaction ends.
         if (classification == SubscriptionCheckoutClassification.Upgrade)
             return new(PaymentIntentResultStatus.UpgradeCheckoutNotReady);
 
@@ -153,6 +183,7 @@ public sealed class PaymentService(
         CancellationToken cancellationToken)
     {
         var nowUtc = timeProvider.GetUtcNow().UtcDateTime;
+        if (await ReviewBlockerAsync(userId, nowUtc, cancellationToken) is { } review) return review;
         var effective = await EffectiveSubscriptionResolver.ResolveAsync(subscriptionRepository, userId, nowUtc, cancellationToken);
         if (effective.Period is null || !effective.Plan.IsActive)
         {
@@ -238,9 +269,38 @@ public sealed class PaymentService(
         !string.IsNullOrWhiteSpace(order.CheckoutUrl)
         && !string.IsNullOrWhiteSpace(order.QrCode);
 
+    private async Task<PaymentIntentResult?> ReviewBlockerAsync(Guid userId, DateTime now, CancellationToken ct)
+    {
+        var blocker = await paymentOrderRepository.GetBlockingSubscriptionAsync(userId, ct);
+        return blocker?.Status == PaymentOrderStatus.ReviewRequired
+            ? await SubscriptionPendingOrderPolicy.CheckAsync(paymentOrderRepository, userId, blocker.PlanId ?? Guid.Empty,
+                blocker.Type, now, ct) : null;
+    }
+
+    private async Task<PaymentIntentResult> CreateUpgradeLinkAsync(Guid userId, Guid orderId, CancellationToken ct)
+    {
+        var order = await paymentOrderRepository.GetOwnedByIdAsync(orderId, userId, ct)
+            ?? throw new InvalidOperationException("Prepared order is missing.");
+        PaymentLinkResult link;
+        try
+        {
+            link = await paymentGateway.CreatePaymentLinkAsync(new(order.Id, order.ProviderOrderCode,
+                PlanIdentity.PublicCode((await subscriptionRepository.GetPlanAsync(order.PlanId!.Value, ct))!.Code),
+                PaymentOrderType.Upgrade, order.Amount, order.ExpiresAt), ct);
+        }
+        catch (Exception ex) when (ex is PaymentGatewayUnavailableException or TimeoutException or HttpRequestException
+            || ex is OperationCanceledException && !ct.IsCancellationRequested)
+        { link = PaymentLinkResult.Unavailable(); }
+        var completed = await paymentOrderRepository.CompleteUpgradeLinkAsync(userId, orderId, link,
+            timeProvider.GetUtcNow().UtcDateTime, ct) ?? throw new InvalidOperationException("Prepared order is missing.");
+        return new(completed.Status == PaymentOrderStatus.ReviewRequired ? PaymentIntentResultStatus.PaymentReviewRequired
+            : completed.Status == PaymentOrderStatus.Paid || (completed.Status == PaymentOrderStatus.Pending && HasUsablePaymentLink(completed))
+                ? PaymentIntentResultStatus.Success : PaymentIntentResultStatus.GatewayUnavailable, ToIntentResponse(completed));
+    }
+
     private static PaymentIntentResponse ToIntentResponse(PaymentOrder order) =>
-        new(order.Id, order.QrCode!, order.CheckoutUrl!, order.Amount, order.ExpiresAt)
-        { Type = order.Type.ToString(), ListPrice = order.Amount + order.CreditAmount, CreditAmount = order.CreditAmount };
+        new(order.Id, order.QrCode ?? "", order.CheckoutUrl ?? "", order.Amount, order.ExpiresAt)
+        { Status = order.Status.ToString(), Type = order.Type.ToString(), ListPrice = order.Amount + order.CreditAmount, CreditAmount = order.CreditAmount };
 
     private static PaymentOrderResponse ToOrderResponse(PaymentOrder order, string? code) =>
         new(

@@ -105,10 +105,10 @@ public sealed class SubscriptionUpgradeFoundationPostgresTests
         var outbox = await c.EmailOutboxMessages.CountAsync();
         var result = await PlanVersionFoundationPostgresTests.Settlement(c,
             new PlanVersionFoundationPostgresTests.Clock(Now)).ApplyVerifiedPaymentAsync(new(order.ProviderOrderCode, order.Amount, true));
-        Assert.Equal(PaymentSettlementStatus.InvalidPaidPlan, result.Status);
-        Assert.Equal(PaymentOrderStatus.Pending, (await c.PaymentOrders.AsNoTracking().SingleAsync(o => o.Id == order.Id)).Status);
+        Assert.Equal(PaymentSettlementStatus.CreditConflict, result.Status);
+        Assert.Equal(PaymentOrderStatus.ReviewRequired, (await c.PaymentOrders.AsNoTracking().SingleAsync(o => o.Id == order.Id)).Status);
         Assert.Equal(periods, await c.SubscriptionPeriods.CountAsync());
-        Assert.Equal(history, await c.PaymentOrderStatusHistories.CountAsync());
+        Assert.Equal(history + 1, await c.PaymentOrderStatusHistories.CountAsync());
         Assert.Equal(outbox, await c.EmailOutboxMessages.CountAsync());
     }
 

@@ -248,7 +248,7 @@ public sealed class SubscriptionUpgradeReservationPostgresTests
         Assert.NotEqual(old.Amount, replacement.Amount);
         Assert.Equal(4, await c.PaymentOrderCredits.CountAsync()); Assert.Equal(2, await c.PaymentOrderCredits.CountAsync(r => r.ReleasedAt == null));
         var periods = await c.SubscriptionPeriods.CountAsync(); var outbox = await c.EmailOutboxMessages.CountAsync();
-        Assert.Equal(PaymentSettlementStatus.InvalidPaidPlan, (await PlanVersionFoundationPostgresTests.Settlement(c, Clock)
+        Assert.Equal(PaymentSettlementStatus.CreditConflict, (await PlanVersionFoundationPostgresTests.Settlement(c, Clock)
             .ApplyVerifiedPaymentAsync(new(old.ProviderOrderCode, old.Amount, true))).Status);
         Assert.Equal(periods, await c.SubscriptionPeriods.CountAsync()); Assert.Equal(outbox, await c.EmailOutboxMessages.CountAsync());
         Assert.All(await c.PaymentOrderCredits.AsNoTracking().Where(r => r.OrderId == old.Id).ToListAsync(), r => Assert.True(r.HasValidReleaseEvidence()));

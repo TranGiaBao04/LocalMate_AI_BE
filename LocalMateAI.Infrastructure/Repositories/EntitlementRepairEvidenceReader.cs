@@ -11,7 +11,7 @@ internal static class EntitlementRepairEvidenceReader
     {
         var order = await context.PaymentOrders.AsNoTracking().Where(o => o.Id == orderId)
             .Select(o => new RepairOrderEvidence(o.Id, o.UserId, o.PlanId, o.PlanVersionId,
-                o.PlanVersionBinding, o.Status, o.Amount, o.PaidAt) { ProductKind = o.ProductKind }).SingleOrDefaultAsync(ct);
+                o.PlanVersionBinding, o.Status, o.Amount, o.PaidAt) { ProductKind = o.ProductKind, Type = o.Type }).SingleOrDefaultAsync(ct);
         return order is null ? null : await ReadAsync(context, order, ct);
     }
 
@@ -29,7 +29,7 @@ internal static class EntitlementRepairEvidenceReader
             join p in context.SubscriptionPlans.AsNoTracking() on o.PlanId equals (Guid?)p.Id into plans
             from p in plans.DefaultIfEmpty()
             select new RepairPurchaseEvidence(
-                new(o.Id, o.UserId, o.PlanId, o.PlanVersionId, o.PlanVersionBinding, o.Status, o.Amount, o.PaidAt),
+                new(o.Id, o.UserId, o.PlanId, o.PlanVersionId, o.PlanVersionBinding, o.Status, o.Amount, o.PaidAt) { Type = o.Type },
                 v != null && p != null ? new RepairVersionEvidence(v.Id, v.PlanId, p.Code, v.Price, v.DurationDays) : null))
             .ToListAsync(ct);
         var periods = await context.SubscriptionPeriods.AsNoTracking()
