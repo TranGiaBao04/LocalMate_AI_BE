@@ -55,7 +55,19 @@ public sealed class AdminStationServiceTests
         var response = await new AdminStationService(repository, new FakeSystemSettingProvider()).GetStationsAsync();
 
         Assert.Equal([1, 2], response.Stations.Select(station => station.Order));
-        Assert.Equal(MetroClusterMatchingService.CandidateRadiusMeters, repository.LastRadius);
+        Assert.Equal(800, repository.LastRadius);
+    }
+
+    [Fact]
+    public async Task UsesClusterRadiusFromSettings()
+    {
+        var repository = new FakeRepository(new AdminStationSnapshot([Station(BenThanh, 1, "Bến Thành")], []));
+        var settings = new FakeSystemSettingProvider().Set(SystemSettingKeys.StationClusterRadiusMeters, 1_000);
+
+        var response = await new AdminStationService(repository, settings).GetStationsAsync();
+
+        Assert.Equal(1_000, repository.LastRadius);
+        Assert.Equal(1_000, response.RadiusMeters);
     }
 
     [Fact]
@@ -112,7 +124,7 @@ public sealed class AdminStationServiceTests
         Assert.True(station.IsUnderstocked);
         Assert.Equal(8, station.Shortfall);
         Assert.Equal(Enum.GetValues<PlaceCategory>(), station.MissingCategories);
-        Assert.Equal([SystemSettingKeys.MinActivePlacesPerStation], settings.RequestedKeys);
+        Assert.Contains(SystemSettingKeys.MinActivePlacesPerStation, settings.RequestedKeys);
     }
 
     private static AdminStationReadModel Station(Guid id, int order, string name) =>

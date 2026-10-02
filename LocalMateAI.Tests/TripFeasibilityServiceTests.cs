@@ -25,7 +25,6 @@ public sealed class TripFeasibilityServiceTests
         Assert.True(response.IsFeasible);
         Assert.Equal(2, response.CandidatePlaceCount);
         Assert.Equal(AnchorStationId, fixture.Matching.RequestedStationId);
-        Assert.Equal(MetroClusterMatchingService.CandidateRadiusMeters, fixture.Matching.RequestedRadius);
     }
 
     [Fact]
@@ -111,7 +110,7 @@ public sealed class TripFeasibilityServiceTests
                 new FakeOrigin(withinServiceArea),
                 new TripCriteriaNormalizationService(),
                 Matching,
-                new CandidateFilterService());
+                new CandidateFilterService(), new FakeSystemSettingProvider());
         }
 
         public TripFeasibilityService Service { get; }
@@ -122,14 +121,12 @@ public sealed class TripFeasibilityServiceTests
     {
         public int Calls { get; private set; }
         public Guid? RequestedStationId { get; private set; }
-        public double? RequestedRadius { get; private set; }
 
         public Task<IReadOnlyList<PlaceCandidateDto>> GetCandidatesAsync(
-            Guid originStationId, double radiusMeters, CancellationToken cancellationToken = default)
+            Guid originStationId, CancellationToken cancellationToken = default)
         {
             Calls++;
             RequestedStationId = originStationId;
-            RequestedRadius = radiusMeters;
             return Task.FromResult(candidates);
         }
     }

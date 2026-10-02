@@ -261,7 +261,6 @@ public sealed class TripAlternativesServiceTests
     {
         public Task<IReadOnlyList<PlaceCandidateDto>> GetCandidatesAsync(
             Guid originStationId,
-            double radiusMeters,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(candidates);
     }

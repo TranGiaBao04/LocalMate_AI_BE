@@ -18,7 +18,6 @@ public sealed class TripAlternativesService(
 {
     public const int DefaultLimit = 5;
     public const int MaxLimit = 10;
-    private const double CandidateSearchRadiusMeters = 800;
 
     public async Task<TripAlternativesResult> GetAlternativesAsync(
         Guid userId,
@@ -64,7 +63,6 @@ public sealed class TripAlternativesService(
 
         var candidates = await metroClusterMatchingService.GetCandidatesAsync(
             station.StationId,
-            CandidateSearchRadiusMeters,
             cancellationToken);
 
         // Địa điểm hiện tại nằm ngoài bán kính cụm ga thì không xác định được cụm để so sánh.

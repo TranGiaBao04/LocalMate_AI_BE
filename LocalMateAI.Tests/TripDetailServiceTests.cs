@@ -14,7 +14,7 @@ public sealed class TripDetailServiceTests
     public async Task Get_EmptyTripId_ReturnsInvalidWithoutRepositoryCall()
     {
         var repository = new FakeTripRepository(null);
-        var service = new TripDetailService(new FakeUserRepository(UserId), repository);
+        var service = new TripDetailService(new FakeUserRepository(UserId), repository, new FakeSystemSettingProvider());
 
         var result = await service.GetAsync(UserId, Guid.Empty);
 
@@ -26,7 +26,7 @@ public sealed class TripDetailServiceTests
     public async Task Get_NonPersistedUser_ReturnsUserNotFoundBeforeTripLookup()
     {
         var repository = new FakeTripRepository(null);
-        var service = new TripDetailService(new FakeUserRepository(), repository);
+        var service = new TripDetailService(new FakeUserRepository(), repository, new FakeSystemSettingProvider());
 
         var result = await service.GetAsync(Guid.NewGuid(), Guid.NewGuid());
 
@@ -38,7 +38,7 @@ public sealed class TripDetailServiceTests
     public async Task Get_MissingOrForeignOrDeletedTrip_ReturnsTripNotFound()
     {
         var repository = new FakeTripRepository(null);
-        var service = new TripDetailService(new FakeUserRepository(UserId), repository);
+        var service = new TripDetailService(new FakeUserRepository(UserId), repository, new FakeSystemSettingProvider());
 
         var result = await service.GetAsync(UserId, Guid.NewGuid());
 
@@ -68,7 +68,7 @@ public sealed class TripDetailServiceTests
             new DateTime(2026, 9, 24, 1, 0, 0, DateTimeKind.Utc),
             new DateTime(2026, 9, 24, 2, 0, 0, DateTimeKind.Utc),
             new DateTime(2026, 9, 24, 2, 0, 0, DateTimeKind.Utc));
-        var service = new TripDetailService(new FakeUserRepository(UserId), new FakeTripRepository(model));
+        var service = new TripDetailService(new FakeUserRepository(UserId), new FakeTripRepository(model), new FakeSystemSettingProvider());
 
         var result = await service.GetAsync(UserId, tripId);
 
@@ -108,7 +108,7 @@ public sealed class TripDetailServiceTests
             DateTime.UtcNow,
             null,
             TravelMode.Motorbike);
-        var service = new TripDetailService(new FakeUserRepository(UserId), new FakeTripRepository(model));
+        var service = new TripDetailService(new FakeUserRepository(UserId), new FakeTripRepository(model), new FakeSystemSettingProvider());
 
         var response = (await service.GetAsync(UserId, tripId)).Response!;
 
@@ -151,7 +151,7 @@ public sealed class TripDetailServiceTests
     {
         var tripId = Guid.NewGuid();
         var model = Model(tripId, new DateTime(2026, 10, 3, 8, 0, 0), new TimeOnly(8, 20));
-        var service = new TripDetailService(new FakeUserRepository(UserId), new FakeTripRepository(model));
+        var service = new TripDetailService(new FakeUserRepository(UserId), new FakeTripRepository(model), new FakeSystemSettingProvider());
 
         var response = (await service.GetAsync(UserId, tripId)).Response!;
 
@@ -169,7 +169,7 @@ public sealed class TripDetailServiceTests
     {
         var tripId = Guid.NewGuid();
         var model = Model(tripId, null, new TimeOnly(8, 20));
-        var service = new TripDetailService(new FakeUserRepository(UserId), new FakeTripRepository(model));
+        var service = new TripDetailService(new FakeUserRepository(UserId), new FakeTripRepository(model), new FakeSystemSettingProvider());
 
         var response = (await service.GetAsync(UserId, tripId)).Response!;
 
@@ -185,7 +185,7 @@ public sealed class TripDetailServiceTests
     {
         var tripId = Guid.NewGuid();
         var model = Model(tripId, new DateTime(2026, 10, 3, 9, 0, 0), new TimeOnly(8, 20));
-        var service = new TripDetailService(new FakeUserRepository(UserId), new FakeTripRepository(model));
+        var service = new TripDetailService(new FakeUserRepository(UserId), new FakeTripRepository(model), new FakeSystemSettingProvider());
 
         var response = (await service.GetAsync(UserId, tripId)).Response!;
 

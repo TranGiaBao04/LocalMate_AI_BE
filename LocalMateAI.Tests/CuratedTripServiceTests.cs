@@ -228,7 +228,7 @@ public sealed class CuratedTripServiceTests
                 Detail,
                 new CoordinatesValidationService(),
                 new FakeOrigin(withinServiceArea),
-                Clock);
+                Clock, new FakeSystemSettingProvider());
         }
 
         public CuratedTripService Service { get; }

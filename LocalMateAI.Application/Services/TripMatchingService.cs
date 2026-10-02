@@ -3,6 +3,7 @@ using LocalMateAI.Application.DTOs.Matching;
 using LocalMateAI.Application.DTOs.Trips;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Interfaces.Services;
+using LocalMateAI.Application.Settings;
 
 namespace LocalMateAI.Application.Services;
 
@@ -13,7 +14,8 @@ public sealed class TripMatchingService(
     IMetroClusterMatchingService metroClusterMatchingService,
     ICandidateFilterService candidateFilterService,
     ITagSimilarityScorer tagSimilarityScorer,
-    IPlaceRepository placeRepository) : ITripMatchingService
+    IPlaceRepository placeRepository,
+    ISystemSettingProvider settings) : ITripMatchingService
 {
     public async Task<TripMatchingResult> MatchAsync(
         TripRequestDto request,
@@ -53,7 +55,6 @@ public sealed class TripMatchingService(
         // BE-31: lọc địa điểm theo cụm ga Metro (PostGIS)
         var candidates = await metroClusterMatchingService.GetCandidatesAsync(
             origin.NearestStation.StationId,
-            MetroClusterMatchingService.CandidateRadiusMeters,
             cancellationToken);
 
         // BE-32: lọc ứng viên theo ngân sách
@@ -73,13 +74,15 @@ public sealed class TripMatchingService(
             .ToList();
 
         // ItineraryScheduler là nơi duy nhất quyết định số chặng: chọn theo thứ hạng tới khi hết thời lượng hoặc ngân sách.
+        var planning = await TripPlanningSettings.LoadAsync(settings, cancellationToken);
         var slots = ItineraryScheduler.Schedule(
-            ranked.Select(place => ItineraryScheduler.ToScheduleInput(place.Candidate)).ToList(),
+            ranked.Select(place => ItineraryScheduler.ToScheduleInput(place.Candidate, planning)).ToList(),
             request.StartTime ?? ItineraryScheduler.DefaultStartTime,
             request.DurationHours,
             request.TravelMode,
             request.BudgetMax,
-            new ScheduleOrigin(request.StartLatitude, request.StartLongitude));
+            new ScheduleOrigin(request.StartLatitude, request.StartLongitude),
+            planning);
 
         var selected = slots
             .Select(slot => slot.SourceIndex)

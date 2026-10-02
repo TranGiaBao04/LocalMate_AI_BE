@@ -14,13 +14,14 @@ public class RouteEstimateController(
     /// Tính toán khoảng cách và thời gian di chuyển ước tính giữa 2 địa điểm (BE-62)
     /// </summary>
     [HttpGet("estimate")]
-    public IActionResult EstimateRoute(
+    public async Task<IActionResult> EstimateRoute(
         [FromQuery] double originLat,
         [FromQuery] double originLng,
         [FromQuery] double destLat,
         [FromQuery] double destLng,
         [FromQuery] string? originName = null,
-        [FromQuery] string? destName = null)
+        [FromQuery] string? destName = null,
+        CancellationToken cancellationToken = default)
     {
         var originValidation = validationService.ValidateCoordinate(originLat, originLng);
         if (!originValidation.IsValid)
@@ -34,8 +35,8 @@ public class RouteEstimateController(
             return BadRequest(new { error = $"Destination invalid: {destValidation.Reason}" });
         }
 
-        var result = routeEstimateService.EstimateRoute(
-            originLat, originLng, destLat, destLng, originName, destName);
+        var result = await routeEstimateService.EstimateRouteAsync(
+            originLat, originLng, destLat, destLng, originName, destName, cancellationToken);
 
         return Ok(result);
     }

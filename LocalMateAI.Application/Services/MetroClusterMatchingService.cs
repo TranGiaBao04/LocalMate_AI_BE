@@ -1,21 +1,17 @@
 using LocalMateAI.Application.DTOs.Matching;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Interfaces.Services;
+using LocalMateAI.Application.Settings;
 
 namespace LocalMateAI.Application.Services;
 
 public sealed class MetroClusterMatchingService(
     IPlaceRepository placeRepository,
-    IMetroStationRepository stationRepository) : IMetroClusterMatchingService
+    IMetroStationRepository stationRepository,
+    ISystemSettingProvider settings) : IMetroClusterMatchingService
 {
-    /// <summary>Bán kính (mét) quanh ga để tìm địa điểm ứng viên; dùng chung cho matching và feasibility-check.</summary>
-    public const double CandidateRadiusMeters = 800;
-
-    private const int AdjacentStationWindow = 1; // ±1 ga dọc tuyến Metro số 1
-
     public async Task<IReadOnlyList<PlaceCandidateDto>> GetCandidatesAsync(
         Guid originStationId,
-        double radiusMeters,
         CancellationToken cancellationToken = default)
     {
         var stations = await stationRepository.GetAllAsync(cancellationToken);
@@ -26,10 +22,14 @@ public sealed class MetroClusterMatchingService(
             return [];
         }
 
+        // Bán kính cụm ga và số ga kề dọc tuyến Metro số 1 do admin chỉnh (mặc định 800 m, ±1 ga).
+        var radiusMeters = await settings.GetIntAsync(SystemSettingKeys.StationClusterRadiusMeters, cancellationToken);
+        var adjacentStationWindow = await settings.GetIntAsync(SystemSettingKeys.AdjacentStationWindow, cancellationToken);
+
         var rows = await placeRepository.GetMetroClusterPlacesAsync(radiusMeters, cancellationToken);
 
-        var minOrder = originStation.Order - AdjacentStationWindow;
-        var maxOrder = originStation.Order + AdjacentStationWindow;
+        var minOrder = originStation.Order - adjacentStationWindow;
+        var maxOrder = originStation.Order + adjacentStationWindow;
 
         return rows
             .Where(row => row.StationOrder >= minOrder && row.StationOrder <= maxOrder)
