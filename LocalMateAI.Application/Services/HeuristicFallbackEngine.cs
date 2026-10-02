@@ -1,6 +1,7 @@
 using LocalMateAI.Application.DTOs.Matching;
 using LocalMateAI.Application.DTOs.Trips;
 using LocalMateAI.Application.Interfaces.Services;
+using LocalMateAI.Application.Settings;
 
 namespace LocalMateAI.Application.Services;
 
@@ -10,7 +11,8 @@ namespace LocalMateAI.Application.Services;
 /// và dựng draft itinerary xác định, giải thích được — không tốn quota LLM.
 /// </summary>
 public sealed class HeuristicFallbackEngine(
-    ITripMatchingService tripMatchingService) : IHeuristicFallbackEngine
+    ITripMatchingService tripMatchingService,
+    ISystemSettingProvider settings) : IHeuristicFallbackEngine
 {
     public async Task<FallbackItineraryResult> GenerateFallbackAsync(
         TripRequestDto request,
@@ -43,9 +45,10 @@ public sealed class HeuristicFallbackEngine(
         }
 
         // matched.Candidates đã được xếp hạng (score desc, distance asc) & cắt đúng stopCount.
+        var planning = await TripPlanningSettings.LoadAsync(settings, cancellationToken);
         var stops = FallbackItineraryBuilder.BuildStops(
             matched.Candidates, request.DurationHours, request.BudgetMax, request.TravelMode,
-            request.StartTime, new ScheduleOrigin(request.StartLatitude, request.StartLongitude));
+            request.StartTime, new ScheduleOrigin(request.StartLatitude, request.StartLongitude), planning);
 
         return new FallbackItineraryResult(
             FallbackItineraryStatus.Success,

@@ -3,6 +3,7 @@ using LocalMateAI.Application.DTOs.Trips;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Interfaces.Services;
 using LocalMateAI.Domain.Enums;
+using LocalMateAI.Application.Settings;
 
 namespace LocalMateAI.Application.Services;
 
@@ -13,7 +14,8 @@ public sealed class CuratedTripService(
     ITripDetailService tripDetailService,
     ICoordinatesValidationService coordinatesValidationService,
     ITripOriginResolverService tripOriginResolverService,
-    TimeProvider timeProvider) : ICuratedTripService
+    TimeProvider timeProvider,
+    ISystemSettingProvider settings) : ICuratedTripService
 {
     public async Task<ApplyCuratedItineraryResult> ApplyAsync(
         Guid userId,
@@ -82,15 +84,16 @@ public sealed class CuratedTripService(
         }
 
         var scheduleOrigin = latitude.HasValue ? new ScheduleOrigin(latitude.Value, longitude!.Value) : null;
+        var planning = await TripPlanningSettings.LoadAsync(settings, cancellationToken);
         var windowError = TripTimingRules.ValidateWindow(
-            request?.StartTime, CuratedTripBuilder.TotalMinutes(source, travelMode, scheduleOrigin));
+            request?.StartTime, CuratedTripBuilder.TotalMinutes(source, travelMode, scheduleOrigin, planning));
         if (windowError is not null)
         {
             return ApplyCuratedItineraryResult.Invalid(new Dictionary<string, string[]> { ["StartTime"] = [windowError] });
         }
 
         var plannedStartAt = TripTimingRules.ResolveStart(request?.PlannedDate, request?.StartTime, vietnamNow);
-        var trip = CuratedTripBuilder.Build(userId, source, latitude, longitude, plannedStartAt, travelMode);
+        var trip = CuratedTripBuilder.Build(userId, source, latitude, longitude, plannedStartAt, travelMode, planning);
         await tripRepository.AddAsync(trip, cancellationToken);
 
         var detail = await tripDetailService.GetAsync(userId, trip.Id, cancellationToken);

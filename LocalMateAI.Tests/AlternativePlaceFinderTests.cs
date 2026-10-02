@@ -11,6 +11,9 @@ public sealed class AlternativePlaceFinderTests
     private static readonly IReadOnlyDictionary<Guid, IReadOnlyList<Guid>> NoTags =
         new Dictionary<Guid, IReadOnlyList<Guid>>();
 
+    // Mặc định của SystemSettings: được đắt hơn tối đa 25%.
+    private const int DefaultIncreasePercent = 25;
+
     private readonly AlternativePlaceFinder _sut = new(new TagSimilarityScorer());
 
     [Fact]
@@ -20,7 +23,7 @@ public sealed class AlternativePlaceFinderTests
         var sameStation = MakeCandidate(costMax: 100);
         var otherStation = MakeCandidate(costMax: 100, stationId: StationB);
 
-        var result = _sut.Find(current, [sameStation, otherStation], NoTags, [], limit: 5);
+        var result = _sut.Find(current, [sameStation, otherStation], NoTags, [], limit: 5, DefaultIncreasePercent);
 
         Assert.Equal(sameStation.PlaceId, Assert.Single(result).Candidate.PlaceId);
     }
@@ -33,7 +36,7 @@ public sealed class AlternativePlaceFinderTests
         var available = MakeCandidate(costMax: 100);
 
         var result = _sut.Find(
-            current, [current, inTrip, available], NoTags, [inTrip.PlaceId], limit: 5);
+            current, [current, inTrip, available], NoTags, [inTrip.PlaceId], limit: 5, DefaultIncreasePercent);
 
         Assert.Equal(available.PlaceId, Assert.Single(result).Candidate.PlaceId);
     }
@@ -47,7 +50,7 @@ public sealed class AlternativePlaceFinderTests
         var tooExpensive = MakeCandidate(costMax: 126);
 
         var ids = _sut
-            .Find(current, [cheaper, atLimit, tooExpensive], NoTags, [], limit: 5)
+            .Find(current, [cheaper, atLimit, tooExpensive], NoTags, [], limit: 5, DefaultIncreasePercent)
             .Select(scored => scored.Candidate.PlaceId)
             .ToHashSet();
 
@@ -63,7 +66,7 @@ public sealed class AlternativePlaceFinderTests
         var free = MakeCandidate(costMax: 0);
         var paid = MakeCandidate(costMax: 10);
 
-        var result = _sut.Find(current, [free, paid], NoTags, [], limit: 5);
+        var result = _sut.Find(current, [free, paid], NoTags, [], limit: 5, DefaultIncreasePercent);
 
         Assert.Equal(free.PlaceId, Assert.Single(result).Candidate.PlaceId);
     }
@@ -84,7 +87,7 @@ public sealed class AlternativePlaceFinderTests
             [half.PlaceId] = new List<Guid> { tagA }
         };
 
-        var result = _sut.Find(current, [none, half, full], tags, [], limit: 5);
+        var result = _sut.Find(current, [none, half, full], tags, [], limit: 5, DefaultIncreasePercent);
 
         Assert.Equal(
             new[] { full.PlaceId, half.PlaceId, none.PlaceId },
@@ -105,7 +108,7 @@ public sealed class AlternativePlaceFinderTests
             [otherCategory.PlaceId] = new List<Guid> { tag }
         };
 
-        var result = _sut.Find(current, [otherCategory, sameCategory], tags, [], limit: 5);
+        var result = _sut.Find(current, [otherCategory, sameCategory], tags, [], limit: 5, DefaultIncreasePercent);
 
         Assert.Equal(sameCategory.PlaceId, result[0].Candidate.PlaceId);
     }
@@ -117,7 +120,7 @@ public sealed class AlternativePlaceFinderTests
         var near = MakeCandidate(costMax: 100, distance: 100);
         var far = MakeCandidate(costMax: 100, distance: 300);
 
-        var result = _sut.Find(current, [far, near], NoTags, [], limit: 5);
+        var result = _sut.Find(current, [far, near], NoTags, [], limit: 5, DefaultIncreasePercent);
 
         Assert.Equal(near.PlaceId, result[0].Candidate.PlaceId);
     }
@@ -133,7 +136,7 @@ public sealed class AlternativePlaceFinderTests
             MakeCandidate(costMax: 100)
         };
 
-        var result = _sut.Find(current, candidates, NoTags, [], limit: 2);
+        var result = _sut.Find(current, candidates, NoTags, [], limit: 2, DefaultIncreasePercent);
 
         Assert.Equal(2, result.Count);
     }
@@ -146,7 +149,7 @@ public sealed class AlternativePlaceFinderTests
         var current = MakeCandidate(costMax: 100);
         var candidate = MakeCandidate(costMax: 100);
 
-        Assert.Empty(_sut.Find(current, [candidate], NoTags, [], limit));
+        Assert.Empty(_sut.Find(current, [candidate], NoTags, [], limit, DefaultIncreasePercent));
     }
 
     [Fact]
@@ -155,7 +158,7 @@ public sealed class AlternativePlaceFinderTests
         var current = MakeCandidate(costMax: 100);
         var otherStation = MakeCandidate(costMax: 100, stationId: StationB);
 
-        Assert.Empty(_sut.Find(current, [otherStation], NoTags, [], limit: 5));
+        Assert.Empty(_sut.Find(current, [otherStation], NoTags, [], limit: 5, DefaultIncreasePercent));
     }
 
     [Theory]
@@ -171,7 +174,33 @@ public sealed class AlternativePlaceFinderTests
     {
         Assert.Equal(
             expected,
-            AlternativePlaceFinder.IsWithinCostTolerance(currentCostMax, candidateCostMax));
+            AlternativePlaceFinder.IsWithinCostTolerance(currentCostMax, candidateCostMax, DefaultIncreasePercent));
+    }
+
+    [Theory]
+    [InlineData(0, 100, true)]
+    [InlineData(0, 101, false)]
+    [InlineData(0, 99, true)]
+    [InlineData(100, 200, true)]
+    [InlineData(100, 201, false)]
+    public void IsWithinCostTolerance_UsesConfiguredPercent(
+        int maxCostIncreasePercent,
+        decimal candidateCostMax,
+        bool expected)
+    {
+        Assert.Equal(
+            expected,
+            AlternativePlaceFinder.IsWithinCostTolerance(100, candidateCostMax, maxCostIncreasePercent));
+    }
+
+    [Fact]
+    public void Find_UsesGivenPercent()
+    {
+        var current = MakeCandidate(costMax: 100);
+        var plus40 = MakeCandidate(costMax: 140);
+
+        Assert.Empty(_sut.Find(current, [plus40], NoTags, [], limit: 5, DefaultIncreasePercent));
+        Assert.Single(_sut.Find(current, [plus40], NoTags, [], limit: 5, maxCostIncreasePercent: 50));
     }
 
     private static PlaceCandidateDto MakeCandidate(

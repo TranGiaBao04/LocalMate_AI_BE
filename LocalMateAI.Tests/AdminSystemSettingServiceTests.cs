@@ -118,10 +118,10 @@ public sealed class AdminSystemSettingServiceTests
         Assert.Null(setting.UpdatedBy);
     }
 
-    private static (AdminSystemSettingService Service, FakeRepository Repository, FakeProvider Provider) Create()
+    private static (AdminSystemSettingService Service, FakeRepository Repository, FakeSystemSettingProvider Provider) Create()
     {
         var repository = new FakeRepository();
-        var provider = new FakeProvider();
+        var provider = new FakeSystemSettingProvider();
         return (new AdminSystemSettingService(repository, provider, new FixedTimeProvider(Now)), repository, provider);
     }
 
@@ -151,16 +151,6 @@ public sealed class AdminSystemSettingServiceTests
             Values.Remove(key);
             return Task.CompletedTask;
         }
-    }
-
-    private sealed class FakeProvider : ISystemSettingProvider
-    {
-        public int Invalidations { get; private set; }
-
-        public Task<int> GetIntAsync(string key, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
-        public void Invalidate() => Invalidations++;
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider

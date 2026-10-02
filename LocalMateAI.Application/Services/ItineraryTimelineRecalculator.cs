@@ -1,11 +1,12 @@
 using LocalMateAI.Application.DTOs.Trips;
 using LocalMateAI.Application.Interfaces.Services;
+using LocalMateAI.Application.Settings;
 
 namespace LocalMateAI.Application.Services;
 
 public sealed class ItineraryTimelineRecalculator : IItineraryTimelineRecalculator
 {
-    public IReadOnlyList<TimelineItemUpdate> Recalculate(TimelineRecalculationInput input)
+    public IReadOnlyList<TimelineItemUpdate> Recalculate(TimelineRecalculationInput input, TripPlanningSettings settings)
     {
         var ordered = input.RemainingItems
             .OrderBy(item => item.OrderIndex)
@@ -18,7 +19,8 @@ public sealed class ItineraryTimelineRecalculator : IItineraryTimelineRecalculat
                 .Select(item => new ScheduleInput(item.Latitude, item.Longitude, item.EstimatedDurationMinutes))
                 .ToList(),
             input.TripStartTime,
-            input.TravelMode);
+            input.TravelMode,
+            settings: settings);
 
         var updates = new List<TimelineItemUpdate>();
         for (var index = 0; index < ordered.Count; index++)

@@ -16,17 +16,23 @@ public sealed class SystemSettingProvider(
 
     public async Task<int> GetIntAsync(string key, CancellationToken cancellationToken = default)
     {
-        var definition = SystemSettingDefinitions.Find(key)
-            ?? throw new ArgumentException($"System setting '{key}' is not defined.", nameof(key));
-        if (definition.ValueType != SystemSettingValueType.Integer)
+        var definition = FindDefinition(key);
+        if (definition.ValueType != SystemSettingValueType.Integer || definition.MaxValue > int.MaxValue)
         {
-            throw new ArgumentException($"System setting '{key}' is not an integer.", nameof(key));
+            throw new ArgumentException($"System setting '{key}' cannot be read as int.", nameof(key));
         }
 
         return (int)await GetValueAsync(definition, cancellationToken);
     }
 
+    public Task<decimal> GetDecimalAsync(string key, CancellationToken cancellationToken = default) =>
+        GetValueAsync(FindDefinition(key), cancellationToken);
+
     public void Invalidate() => cache.Remove(CacheKey);
+
+    private static SystemSettingDefinition FindDefinition(string key) =>
+        SystemSettingDefinitions.Find(key)
+        ?? throw new ArgumentException($"System setting '{key}' is not defined.", nameof(key));
 
     private async Task<decimal> GetValueAsync(SystemSettingDefinition definition, CancellationToken cancellationToken)
     {

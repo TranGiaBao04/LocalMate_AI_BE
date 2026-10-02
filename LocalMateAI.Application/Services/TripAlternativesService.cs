@@ -2,6 +2,7 @@ using LocalMateAI.Application.DTOs.Matching;
 using LocalMateAI.Application.DTOs.Trips;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Interfaces.Services;
+using LocalMateAI.Application.Settings;
 using LocalMateAI.Domain.Enums;
 
 namespace LocalMateAI.Application.Services;
@@ -12,11 +13,11 @@ public sealed class TripAlternativesService(
     IGeoService geoService,
     IMetroClusterMatchingService metroClusterMatchingService,
     IPlaceRepository placeRepository,
-    IAlternativePlaceFinder alternativePlaceFinder) : ITripAlternativesService
+    IAlternativePlaceFinder alternativePlaceFinder,
+    ISystemSettingProvider settings) : ITripAlternativesService
 {
     public const int DefaultLimit = 5;
     public const int MaxLimit = 10;
-    private const double CandidateSearchRadiusMeters = 800;
 
     public async Task<TripAlternativesResult> GetAlternativesAsync(
         Guid userId,
@@ -62,7 +63,6 @@ public sealed class TripAlternativesService(
 
         var candidates = await metroClusterMatchingService.GetCandidatesAsync(
             station.StationId,
-            CandidateSearchRadiusMeters,
             cancellationToken);
 
         // Địa điểm hiện tại nằm ngoài bán kính cụm ga thì không xác định được cụm để so sánh.
@@ -76,8 +76,12 @@ public sealed class TripAlternativesService(
             candidates.Select(candidate => candidate.PlaceId).ToList(),
             cancellationToken);
 
+        var maxCostIncreasePercent = await settings.GetIntAsync(
+            SystemSettingKeys.AlternativeMaxCostIncreasePercent,
+            cancellationToken);
+
         var alternatives = alternativePlaceFinder
-            .Find(current, candidates, placeTagIds, item.TripPlaceIds, effectiveLimit)
+            .Find(current, candidates, placeTagIds, item.TripPlaceIds, effectiveLimit, maxCostIncreasePercent)
             .Select(ToResponse)
             .ToList();
 

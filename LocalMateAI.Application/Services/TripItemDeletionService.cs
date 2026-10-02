@@ -1,13 +1,15 @@
 using LocalMateAI.Application.DTOs.Trips;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Interfaces.Services;
+using LocalMateAI.Application.Settings;
 
 namespace LocalMateAI.Application.Services;
 
 public sealed class TripItemDeletionService(
     IUserRepository userRepository,
     IItineraryItemRepository itineraryItemRepository,
-    IItineraryTimelineRecalculator timelineRecalculator) : ITripItemDeletionService
+    IItineraryTimelineRecalculator timelineRecalculator,
+    ISystemSettingProvider settings) : ITripItemDeletionService
 {
     public async Task<DeleteItineraryItemResult> DeleteAsync(
         Guid userId,
@@ -26,11 +28,13 @@ public sealed class TripItemDeletionService(
             return DeleteItineraryItemResult.MissingUser();
         }
 
+        // Đọc thông số trước khi mở transaction xoá; cả lần tính lại giờ dùng chung một bộ số.
+        var planning = await TripPlanningSettings.LoadAsync(settings, cancellationToken);
         var outcome = await itineraryItemRepository.DeleteItemAndRecalculateTimelineAsync(
             tripId,
             itemId,
             userId,
-            timelineRecalculator.Recalculate,
+            input => timelineRecalculator.Recalculate(input, planning),
             cancellationToken);
 
         return outcome.Status switch

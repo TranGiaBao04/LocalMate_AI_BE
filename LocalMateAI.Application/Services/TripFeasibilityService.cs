@@ -1,6 +1,7 @@
 using FluentValidation;
 using LocalMateAI.Application.DTOs.Trips;
 using LocalMateAI.Application.Interfaces.Services;
+using LocalMateAI.Application.Settings;
 
 namespace LocalMateAI.Application.Services;
 
@@ -9,7 +10,8 @@ public sealed class TripFeasibilityService(
     ITripOriginResolverService tripOriginResolverService,
     ITripCriteriaNormalizationService tripCriteriaNormalizationService,
     IMetroClusterMatchingService metroClusterMatchingService,
-    ICandidateFilterService candidateFilterService) : ITripFeasibilityService
+    ICandidateFilterService candidateFilterService,
+    ISystemSettingProvider settings) : ITripFeasibilityService
 {
     public async Task<TripFeasibilityResult> CheckFeasibilityAsync(
         TripRequestDto request,
@@ -41,23 +43,24 @@ public sealed class TripFeasibilityService(
         // Cùng nguồn ứng viên và cùng luật lọc ngân sách với /match và /generate.
         var candidates = await metroClusterMatchingService.GetCandidatesAsync(
             origin.NearestStation.StationId,
-            MetroClusterMatchingService.CandidateRadiusMeters,
             cancellationToken);
 
         var filtered = candidateFilterService.Filter(candidates, criteria);
 
         // Chưa chấm điểm theo tag nên xếp theo khoảng cách tới ga: đúng thứ tự của generate khi user không chọn tag
         // (mọi điểm 0,5, hoà thì gần ga trước). Có chọn tag thì số chặng chỉ gần đúng.
+        var planning = await TripPlanningSettings.LoadAsync(settings, cancellationToken);
         var planned = ItineraryScheduler.Schedule(
             filtered.Passed
                 .OrderBy(candidate => candidate.DistanceFromStationMeters)
-                .Select(ItineraryScheduler.ToScheduleInput)
+                .Select(candidate => ItineraryScheduler.ToScheduleInput(candidate, planning))
                 .ToList(),
             request.StartTime ?? ItineraryScheduler.DefaultStartTime,
             request.DurationHours,
             request.TravelMode,
             request.BudgetMax,
-            new ScheduleOrigin(request.StartLatitude, request.StartLongitude));
+            new ScheduleOrigin(request.StartLatitude, request.StartLongitude),
+            planning);
 
         var isFeasible = planned.Count >= 1;
 

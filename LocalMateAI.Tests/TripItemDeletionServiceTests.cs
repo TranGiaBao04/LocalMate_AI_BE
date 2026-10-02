@@ -102,7 +102,7 @@ public sealed class TripItemDeletionServiceTests
         var sut = new TripItemDeletionService(
             new FakeUserRepository(userId ?? UserId),
             items,
-            new ItineraryTimelineRecalculator());
+            new ItineraryTimelineRecalculator(), new FakeSystemSettingProvider());
 
         return (sut, items);
     }

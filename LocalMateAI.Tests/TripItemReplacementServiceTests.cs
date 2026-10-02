@@ -5,6 +5,7 @@ using LocalMateAI.Application.DTOs.Trips;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Interfaces.Services;
 using LocalMateAI.Application.Services;
+using LocalMateAI.Application.Settings;
 using LocalMateAI.Domain.Entities;
 using LocalMateAI.Domain.Enums;
 using NetTopologySuite.Geometries;
@@ -160,6 +161,19 @@ public sealed class TripItemReplacementServiceTests
     }
 
     [Fact]
+    public async Task ReplaceAsync_HigherPercentSetting_NoHigherCostWarning()
+    {
+        var settings = new FakeSystemSettingProvider()
+            .Set(SystemSettingKeys.AlternativeMaxCostIncreasePercent, 50);
+        var (sut, _) = Create(newPlace: MakeNewPlace(costMax: 140), currentCostMax: 100, settings: settings);
+
+        var result = await sut.ReplaceAsync(UserId, TripId, ItemId, NewPlaceId);
+
+        Assert.Empty(result.Response!.Warnings);
+        Assert.Contains(SystemSettingKeys.AlternativeMaxCostIncreasePercent, settings.RequestedKeys);
+    }
+
+    [Fact]
     public async Task ReplaceAsync_DifferentStationAndHigherCost_ReturnsBothWarnings()
     {
         var (sut, _) = Create(
@@ -213,7 +227,8 @@ public sealed class TripItemReplacementServiceTests
         bool hasNewPlace = true,
         decimal currentCostMax = 100,
         Guid? newStation = null,
-        bool replaceSucceeds = true)
+        bool replaceSucceeds = true,
+        FakeSystemSettingProvider? settings = null)
     {
         var items = new FakeItineraryItemRepository(contexts ?? [MakeContext(TripStatus.Draft)], replaceSucceeds);
         var resolvedNewPlace = hasNewPlace ? newPlace ?? MakeNewPlace(costMax: 100) : null;
@@ -221,7 +236,8 @@ public sealed class TripItemReplacementServiceTests
             new FakeUserRepository(userId ?? UserId),
             items,
             new FakePlaceRepository(resolvedNewPlace, currentCostMax),
-            new FakeGeoService(newStation ?? StationA));
+            new FakeGeoService(newStation ?? StationA),
+            settings ?? new FakeSystemSettingProvider());
 
         return (sut, items);
     }

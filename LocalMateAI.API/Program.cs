@@ -6,7 +6,6 @@ using LocalMateAI.API.Authorization;
 using LocalMateAI.API.BackgroundJobs;
 using LocalMateAI.API.Middlewares;
 using LocalMateAI.Application.Commands;
-using LocalMateAI.Application.Dashboard;
 using LocalMateAI.Application.Payments;
 using LocalMateAI.Application.Interfaces.Payments;
 using LocalMateAI.Application.Interfaces.Repositories;
@@ -14,7 +13,6 @@ using LocalMateAI.Application.Interfaces.Services;
 using LocalMateAI.Application.Services;
 using LocalMateAI.Application.Validators.Trips;
 using LocalMateAI.Domain.Enums;
-using LocalMateAI.Infrastructure.Dashboard;
 using LocalMateAI.Infrastructure.Email;
 using LocalMateAI.Infrastructure.Metro;
 using LocalMateAI.Infrastructure.Persistence;
@@ -153,9 +151,6 @@ builder.Services.AddScoped<IAdminTransactionRepository, AdminTransactionReposito
 builder.Services.AddScoped<IAdminTransactionService, AdminTransactionService>();
 builder.Services.AddScoped<IAdminDashboardRepository, AdminDashboardRepository>();
 builder.Services.AddScoped<IAdminDashboardService, AdminDashboardService>();
-builder.Services.AddOptions<DashboardOptions>().Bind(builder.Configuration.GetSection(DashboardOptions.SectionName))
-    .ValidateOnStart();
-builder.Services.AddSingleton<IValidateOptions<DashboardOptions>, DashboardOptionsValidator>();
 builder.Services.AddScoped<IAdminStationRepository, AdminStationRepository>();
 builder.Services.AddScoped<IAdminStationService, AdminStationService>();
 builder.Services.AddScoped<ISystemSettingRepository, SystemSettingRepository>();

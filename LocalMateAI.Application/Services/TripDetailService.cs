@@ -1,12 +1,14 @@
 using LocalMateAI.Application.DTOs.Trips;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Interfaces.Services;
+using LocalMateAI.Application.Settings;
 
 namespace LocalMateAI.Application.Services;
 
 public sealed class TripDetailService(
     IUserRepository userRepository,
-    ITripRepository tripRepository) : ITripDetailService
+    ITripRepository tripRepository,
+    ISystemSettingProvider settings) : ITripDetailService
 {
     public async Task<GetTripDetailResult> GetAsync(
         Guid userId,
@@ -30,11 +32,12 @@ public sealed class TripDetailService(
             return GetTripDetailResult.MissingTrip();
         }
 
-        return GetTripDetailResult.Succeeded(ToResponse(trip));
+        var planning = await TripPlanningSettings.LoadAsync(settings, cancellationToken);
+        return GetTripDetailResult.Succeeded(ToResponse(trip, planning));
     }
 
     // Dựng response từ read model (logic thuần). FinalizeTripCommand dùng lại để mail lịch trình khớp đúng số liệu API.
-    public static TripDetailResponse ToResponse(TripDetailReadModel trip)
+    public static TripDetailResponse ToResponse(TripDetailReadModel trip, TripPlanningSettings? settings = null)
     {
         var stops = trip.Items
             .Select(item => new TripStopSnapshot(item.ScheduledTime, item.EstimatedDurationMinutes, item.EstimatedBudget))
@@ -52,11 +55,11 @@ public sealed class TripDetailService(
                 {
                     var previous = trip.Items[index - 1];
                     var roadKm = TravelTimeEstimator.RoadDistanceKm(
-                        previous.Latitude, previous.Longitude, item.Latitude, item.Longitude);
+                        previous.Latitude, previous.Longitude, item.Latitude, item.Longitude, settings);
                     travelMinutes = TripTotalsCalculator.TravelGapMinutes(stops[index - 1], stops[index]);
                     distanceMeters = (int)Math.Round(roadKm * 1000);
-                    walkingMinutes = TravelTimeEstimator.WalkingMinutes(roadKm);
-                    motorbikeMinutes = TravelTimeEstimator.MotorbikeMinutes(roadKm);
+                    walkingMinutes = TravelTimeEstimator.WalkingMinutes(roadKm, settings);
+                    motorbikeMinutes = TravelTimeEstimator.MotorbikeMinutes(roadKm, settings);
                 }
 
                 return new TripItemResponse(

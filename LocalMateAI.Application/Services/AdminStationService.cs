@@ -10,14 +10,13 @@ public sealed class AdminStationService(
     IAdminStationRepository repository,
     ISystemSettingProvider settings) : IAdminStationService
 {
-    // Cùng bán kính với matching để số "active" của mỗi ga đúng bằng số địa điểm matching dùng được.
-    public const double RadiusMeters = MetroClusterMatchingService.CandidateRadiusMeters;
-
     // Không cache số đếm: admin vừa duyệt/xoá địa điểm phải thấy số mới ngay (ngưỡng thì provider tự cache).
     public async Task<AdminStationsResponse> GetStationsAsync(CancellationToken cancellationToken = default)
     {
+        // Cùng bán kính cụm ga với matching để số "active" của mỗi ga đúng bằng số địa điểm matching dùng được.
+        var radiusMeters = await settings.GetIntAsync(SystemSettingKeys.StationClusterRadiusMeters, cancellationToken);
         var minActive = await settings.GetIntAsync(SystemSettingKeys.MinActivePlacesPerStation, cancellationToken);
-        var snapshot = await repository.GetStationPlaceCountsAsync(RadiusMeters, cancellationToken);
+        var snapshot = await repository.GetStationPlaceCountsAsync(radiusMeters, cancellationToken);
 
         var stations = snapshot.Stations
             .OrderBy(station => station.Order)
@@ -29,7 +28,7 @@ public sealed class AdminStationService(
 
         var outsideCoverage = Sum(BuildCategories(snapshot.Counts.Where(count => count.StationId is null)));
 
-        return new AdminStationsResponse(RadiusMeters, minActive,
+        return new AdminStationsResponse(radiusMeters, minActive,
             stations.Count(station => station.IsUnderstocked), outsideCoverage, stations);
     }
 

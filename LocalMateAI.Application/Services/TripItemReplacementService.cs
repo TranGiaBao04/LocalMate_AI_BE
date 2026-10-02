@@ -2,6 +2,7 @@ using LocalMateAI.Application.DTOs.Places;
 using LocalMateAI.Application.DTOs.Trips;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Interfaces.Services;
+using LocalMateAI.Application.Settings;
 using LocalMateAI.Domain.Enums;
 
 namespace LocalMateAI.Application.Services;
@@ -10,7 +11,8 @@ public sealed class TripItemReplacementService(
     IUserRepository userRepository,
     IItineraryItemRepository itineraryItemRepository,
     IPlaceRepository placeRepository,
-    IGeoService geoService) : ITripItemReplacementService
+    IGeoService geoService,
+    ISystemSettingProvider settings) : ITripItemReplacementService
 {
     public const string DifferentStationWarning = "different_station";
     public const string HigherCostWarning = "higher_cost";
@@ -112,7 +114,11 @@ public sealed class TripItemReplacementService(
             warnings.Add(DifferentStationWarning);
         }
 
-        if (!AlternativePlaceFinder.IsWithinCostTolerance(currentPlace.EstimatedCostMax, newPlace.EstimatedCostMax))
+        var maxCostIncreasePercent = await settings.GetIntAsync(
+            SystemSettingKeys.AlternativeMaxCostIncreasePercent,
+            cancellationToken);
+        if (!AlternativePlaceFinder.IsWithinCostTolerance(
+                currentPlace.EstimatedCostMax, newPlace.EstimatedCostMax, maxCostIncreasePercent))
         {
             warnings.Add(HigherCostWarning);
         }

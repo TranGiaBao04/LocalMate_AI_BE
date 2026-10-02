@@ -18,7 +18,7 @@ public sealed class HeuristicFallbackEngineTests
             new FakeTripMatchingService(
                 new TripMatchingResult(
                     TripMatchingResultStatus.ValidationFailed,
-                    ValidationErrors: errors)));
+                    ValidationErrors: errors)), new FakeSystemSettingProvider());
 
         var result = await engine.GenerateFallbackAsync(Request(), "llm_timeout");
 
@@ -44,7 +44,7 @@ public sealed class HeuristicFallbackEngineTests
             Excluded: []);
         var engine = new HeuristicFallbackEngine(
             new FakeTripMatchingService(
-                new TripMatchingResult(TripMatchingResultStatus.Success, match)));
+                new TripMatchingResult(TripMatchingResultStatus.Success, match)), new FakeSystemSettingProvider());
 
         var result = await engine.GenerateFallbackAsync(Request(), "llm_timeout");
 
@@ -74,7 +74,7 @@ public sealed class HeuristicFallbackEngineTests
             Excluded: []);
         var engine = new HeuristicFallbackEngine(
             new FakeTripMatchingService(
-                new TripMatchingResult(TripMatchingResultStatus.Success, match)));
+                new TripMatchingResult(TripMatchingResultStatus.Success, match)), new FakeSystemSettingProvider());
 
         var result = await engine.GenerateFallbackAsync(Request(), "heuristic");
 

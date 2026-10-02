@@ -1,22 +1,22 @@
 using LocalMateAI.Application.DTOs.Places;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Interfaces.Services;
+using LocalMateAI.Application.Settings;
 using LocalMateAI.Domain.Enums;
 
 namespace LocalMateAI.Application.Services;
 
 public sealed class PlaceQueryService(
     IPlaceRepository placeRepository,
-    IGeoService geoService) : IPlaceQueryService
+    IGeoService geoService,
+    ISystemSettingProvider settings) : IPlaceQueryService
 {
-    private const double MetroClusterRadiusMeters = 800;
-    private const double NearbyRadiusMeters = 800;
-
     public async Task<IReadOnlyList<MetroExperienceClusterResponse>> GetMetroClustersAsync(
         CancellationToken cancellationToken = default)
     {
+        var radiusMeters = await settings.GetIntAsync(SystemSettingKeys.StationClusterRadiusMeters, cancellationToken);
         var rows = await placeRepository.GetMetroClusterPlacesAsync(
-            MetroClusterRadiusMeters,
+            radiusMeters,
             cancellationToken);
 
         return rows
@@ -65,10 +65,12 @@ public sealed class PlaceQueryService(
         var station = await geoService.FindNearestStationAsync(latitude, longitude, cancellationToken)
             ?? throw new InvalidOperationException("No metro stations found.");
 
+        // Cùng bán kính cụm ga, nhưng lấy mọi địa điểm trong bán kính quanh ga (kể cả địa điểm thuộc ga bên cạnh).
+        var radiusMeters = await settings.GetIntAsync(SystemSettingKeys.StationClusterRadiusMeters, cancellationToken);
         var places = await placeRepository.GetActiveWithinRadiusAsync(
             station.StationLatitude,
             station.StationLongitude,
-            NearbyRadiusMeters,
+            radiusMeters,
             category,
             cancellationToken);
 

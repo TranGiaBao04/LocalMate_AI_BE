@@ -1,6 +1,7 @@
 using LocalMateAI.Application.DTOs.Itineraries;
 using LocalMateAI.Domain.Entities;
 using LocalMateAI.Domain.Enums;
+using LocalMateAI.Application.Settings;
 
 namespace LocalMateAI.Application.Services;
 
@@ -13,8 +14,9 @@ public static class CuratedTripBuilder
 {
     /// <summary>Tổng số phút của lịch mẫu, dùng để kiểm tra không qua nửa đêm trước khi dựng Trip.</summary>
     public static int TotalMinutes(
-        CuratedItineraryForApplyReadModel source, TravelMode travelMode, ScheduleOrigin? origin) =>
-        ItineraryScheduler.TotalMinutes(ToInputs(source), travelMode, origin);
+        CuratedItineraryForApplyReadModel source, TravelMode travelMode, ScheduleOrigin? origin,
+        TripPlanningSettings? settings = null) =>
+        ItineraryScheduler.TotalMinutes(ToInputs(source, settings), travelMode, origin, settings);
 
     /// <param name="plannedStartAt">Ngày + giờ RỜI điểm xuất phát; phần giờ là mốc bắt đầu để xếp giờ.</param>
     public static Trip Build(
@@ -23,7 +25,8 @@ public static class CuratedTripBuilder
         double? startLatitude,
         double? startLongitude,
         DateTime plannedStartAt,
-        TravelMode travelMode)
+        TravelMode travelMode,
+        TripPlanningSettings? settings = null)
     {
         var places = source.Places.OrderBy(place => place.OrderIndex).ToList();
         if (places.Count == 0)
@@ -35,9 +38,10 @@ public static class CuratedTripBuilder
         var origin = startLatitude.HasValue && startLongitude.HasValue
             ? new ScheduleOrigin(startLatitude.Value, startLongitude.Value)
             : null;
-        var inputs = ToInputs(source);
-        var slots = ItineraryScheduler.Reschedule(inputs, TimeOnly.FromDateTime(plannedStartAt), travelMode, origin);
-        var totalMinutes = ItineraryScheduler.TotalMinutes(inputs, travelMode, origin);
+        var inputs = ToInputs(source, settings);
+        var slots = ItineraryScheduler.Reschedule(inputs, TimeOnly.FromDateTime(plannedStartAt), travelMode, origin,
+            settings);
+        var totalMinutes = ItineraryScheduler.TotalMinutes(inputs, travelMode, origin, settings);
 
         var first = places[0];
         var tripId = Guid.NewGuid();
@@ -75,13 +79,14 @@ public static class CuratedTripBuilder
         };
     }
 
-    private static List<ScheduleInput> ToInputs(CuratedItineraryForApplyReadModel source) =>
+    private static List<ScheduleInput> ToInputs(CuratedItineraryForApplyReadModel source,
+        TripPlanningSettings? settings) =>
         source.Places
             .OrderBy(place => place.OrderIndex)
             .Select(place => new ScheduleInput(
                 place.Latitude,
                 place.Longitude,
-                ItineraryScheduler.VisitMinutesFor(place.Category.ToString()),
+                ItineraryScheduler.VisitMinutesFor(place.Category.ToString(), settings),
                 place.EstimatedCostMax))
             .ToList();
 }

@@ -1,5 +1,6 @@
 using LocalMateAI.Application.DTOs.Trips;
 using LocalMateAI.Application.Services;
+using LocalMateAI.Application.Settings;
 using LocalMateAI.Domain.Enums;
 
 namespace LocalMateAI.Tests;
@@ -102,7 +103,8 @@ public sealed class ItineraryTimelineRecalculatorTests
         IReadOnlyList<TimelineItemSnapshot> remaining,
         TimeOnly? start = null,
         TravelMode mode = TravelMode.Auto) =>
-        _sut.Recalculate(new TimelineRecalculationInput(remaining, start ?? Start, mode));
+        _sut.Recalculate(new TimelineRecalculationInput(remaining, start ?? Start, mode),
+            TripPlanningSettings.Default);
 
     private static TimelineItemSnapshot Snap(
         int order, int hour, int minute, int duration = 60, double latitude = 10.770) =>

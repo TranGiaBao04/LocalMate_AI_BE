@@ -1,21 +1,27 @@
 using LocalMateAI.Application.DTOs.Maps;
 using LocalMateAI.Application.Interfaces.Services;
+using LocalMateAI.Application.Settings;
 
 namespace LocalMateAI.Application.Services;
 
-public sealed class RouteEstimateService(IGoogleMapsUrlBuilderService mapsUrlBuilder) : IRouteEstimateService
+public sealed class RouteEstimateService(
+    IGoogleMapsUrlBuilderService mapsUrlBuilder,
+    ISystemSettingProvider settings) : IRouteEstimateService
 {
-    public RouteEstimateResult EstimateRoute(
+    public async Task<RouteEstimateResult> EstimateRouteAsync(
         double originLat, double originLng,
         double destLat, double destLng,
-        string? originName = null, string? destName = null)
+        string? originName = null, string? destName = null,
+        CancellationToken cancellationToken = default)
     {
-        // Đã gồm hệ số đường bộ thực tế (route detour factor ~1.3)
-        var estimatedRoadDistanceKm = TravelTimeEstimator.RoadDistanceKm(originLat, originLng, destLat, destLng);
+        // Hệ số đường vòng và tốc độ do admin chỉnh (SystemSettings), cùng bộ số với xếp lịch.
+        var planning = await TripPlanningSettings.LoadAsync(settings, cancellationToken);
+        var estimatedRoadDistanceKm = TravelTimeEstimator.RoadDistanceKm(
+            originLat, originLng, destLat, destLng, planning);
         var distanceMeters = Math.Round(estimatedRoadDistanceKm * 1000, 0);
 
-        var walkingMinutes = TravelTimeEstimator.WalkingMinutes(estimatedRoadDistanceKm);
-        var drivingMinutes = TravelTimeEstimator.MotorbikeMinutes(estimatedRoadDistanceKm);
+        var walkingMinutes = TravelTimeEstimator.WalkingMinutes(estimatedRoadDistanceKm, planning);
+        var drivingMinutes = TravelTimeEstimator.MotorbikeMinutes(estimatedRoadDistanceKm, planning);
 
         var mapsUrl = mapsUrlBuilder.BuildDirectionsUrl(
             originLat, originLng, destLat, destLng, originName, destName, "walking");
@@ -31,5 +37,4 @@ public sealed class RouteEstimateService(IGoogleMapsUrlBuilderService mapsUrlBui
             MapsDirectionsUrl: mapsUrl
         );
     }
-
 }

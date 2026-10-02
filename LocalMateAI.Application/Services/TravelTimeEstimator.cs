@@ -1,14 +1,14 @@
+using LocalMateAI.Application.Settings;
 using LocalMateAI.Domain.Enums;
 
 namespace LocalMateAI.Application.Services;
 
-/// <summary>Ước tính khoảng cách/thời gian di chuyển giữa 2 toạ độ. Thuần, không phụ thuộc DI.</summary>
+/// <summary>
+/// Ước tính khoảng cách/thời gian di chuyển giữa 2 toạ độ. Thuần. Tốc độ, hệ số đường vòng và ngưỡng đi bộ lấy từ
+/// TripPlanningSettings (admin chỉnh); bỏ trống ⇒ TripPlanningSettings.Default.
+/// </summary>
 public static class TravelTimeEstimator
 {
-    public const double RoadDetourFactor = 1.3;
-    public const double WalkingSpeedKmH = 4.8; // ~80 m/phút
-    public const double MotorbikeSpeedKmH = 24.0; // tốc độ trung bình nội thành TP.HCM
-    public const double MaxAutoWalkingMeters = 700;
     private const double EarthRadiusKm = 6371.0;
 
     public static double HaversineKm(double lat1, double lng1, double lat2, double lng2)
@@ -22,19 +22,28 @@ public static class TravelTimeEstimator
     }
 
     /// <summary>Quãng đường bộ ước tính (km, làm tròn 2 số lẻ) = đường chim bay × hệ số đường vòng.</summary>
-    public static double RoadDistanceKm(double lat1, double lng1, double lat2, double lng2) =>
-        Math.Round(HaversineKm(lat1, lng1, lat2, lng2) * RoadDetourFactor, 2);
+    public static double RoadDistanceKm(double lat1, double lng1, double lat2, double lng2,
+        TripPlanningSettings? settings = null) =>
+        Math.Round(HaversineKm(lat1, lng1, lat2, lng2) * (settings ?? TripPlanningSettings.Default).RoadDetourFactor, 2);
 
-    public static int WalkingMinutes(double roadKm) => MinutesAt(roadKm, WalkingSpeedKmH);
+    public static int WalkingMinutes(double roadKm, TripPlanningSettings? settings = null) =>
+        MinutesAt(roadKm, (settings ?? TripPlanningSettings.Default).WalkingSpeedKmH);
 
-    public static int MotorbikeMinutes(double roadKm) => MinutesAt(roadKm, MotorbikeSpeedKmH);
+    public static int MotorbikeMinutes(double roadKm, TripPlanningSettings? settings = null) =>
+        MinutesAt(roadKm, (settings ?? TripPlanningSettings.Default).MotorbikeSpeedKmH);
 
-    public static int EstimateMinutes(double roadKm, TravelMode mode) => mode switch
+    public static int EstimateMinutes(double roadKm, TravelMode mode, TripPlanningSettings? settings = null)
     {
-        TravelMode.Walking => WalkingMinutes(roadKm),
-        TravelMode.Motorbike => MotorbikeMinutes(roadKm),
-        _ => roadKm * 1000 <= MaxAutoWalkingMeters ? WalkingMinutes(roadKm) : MotorbikeMinutes(roadKm)
-    };
+        var resolved = settings ?? TripPlanningSettings.Default;
+        return mode switch
+        {
+            TravelMode.Walking => WalkingMinutes(roadKm, resolved),
+            TravelMode.Motorbike => MotorbikeMinutes(roadKm, resolved),
+            _ => roadKm * 1000 <= resolved.AutoWalkingMaxMeters
+                ? WalkingMinutes(roadKm, resolved)
+                : MotorbikeMinutes(roadKm, resolved)
+        };
+    }
 
     private static int MinutesAt(double roadKm, double speedKmH) =>
         (int)Math.Max(1, Math.Ceiling(roadKm / speedKmH * 60));

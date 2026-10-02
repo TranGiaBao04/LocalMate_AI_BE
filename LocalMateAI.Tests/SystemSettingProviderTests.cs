@@ -72,6 +72,26 @@ public sealed class SystemSettingProviderTests
         var provider = CreateProvider(new FakeRepository());
 
         await Assert.ThrowsAsync<ArgumentException>(() => provider.GetIntAsync("Stations.Unknown"));
+        await Assert.ThrowsAsync<ArgumentException>(() => provider.GetDecimalAsync("Stations.Unknown"));
+    }
+
+    [Fact]
+    public async Task GetDecimalAsync_ReadsValuesBeyondIntRange()
+    {
+        var provider = CreateProvider(new FakeRepository(
+            (SystemSettingKeys.BreakEvenMonthlyRevenue, "10000000000")));
+
+        Assert.Equal(10_000_000_000m, await provider.GetDecimalAsync(SystemSettingKeys.BreakEvenMonthlyRevenue));
+        Assert.Equal(5m, await provider.GetDecimalAsync(Key));
+    }
+
+    [Fact]
+    public async Task GetIntAsync_RejectsKeyWhoseRangeExceedsInt()
+    {
+        var provider = CreateProvider(new FakeRepository());
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            provider.GetIntAsync(SystemSettingKeys.BreakEvenMonthlyRevenue));
     }
 
     private static SystemSettingProvider CreateProvider(FakeRepository repository) =>

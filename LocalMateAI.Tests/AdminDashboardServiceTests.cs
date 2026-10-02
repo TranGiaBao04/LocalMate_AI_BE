@@ -1,10 +1,9 @@
-using LocalMateAI.Application.Dashboard;
 using LocalMateAI.Application.DTOs.Dashboard;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Services;
+using LocalMateAI.Application.Settings;
 using LocalMateAI.Application.Validators.Dashboard;
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Options;
 
 namespace LocalMateAI.Tests;
 
@@ -138,6 +137,25 @@ public sealed class AdminDashboardServiceTests
     }
 
     [Fact]
+    public async Task BreakEven_TargetChange_IsVisibleImmediately_DespiteCache()
+    {
+        var repository = new FakeRepository { Totals = new PaidRevenueTotals(1, 1_000_000m) };
+        var settings = new FakeSystemSettingProvider();
+        var service = CreateService(repository, settings);
+
+        var before = await service.GetBreakEvenAsync(new DashboardBreakEvenQuery());
+        settings.Set(SystemSettingKeys.BreakEvenMonthlyRevenue, 2_000_000m);
+        var after = await service.GetBreakEvenAsync(new DashboardBreakEvenQuery());
+        var again = await service.GetBreakEvenAsync(new DashboardBreakEvenQuery());
+
+        Assert.Equal(5_000_000m, before.Response!.Target);
+        Assert.Equal(2_000_000m, after.Response!.Target);
+        Assert.Equal(1_000_000m, after.Response.Remaining);
+        Assert.Equal(2_000_000m, again.Response!.Target);
+        Assert.Equal(2, repository.Calls);
+    }
+
+    [Fact]
     public async Task BreakEven_InvalidMonth_DoesNotQuery()
     {
         var repository = new FakeRepository();
@@ -233,14 +251,17 @@ public sealed class AdminDashboardServiceTests
         Assert.Equal(["To"], result.ValidationErrors!.Keys);
     }
 
-    private static AdminDashboardService CreateService(FakeRepository repository, decimal target = 5_000_000m)
+    private static AdminDashboardService CreateService(FakeRepository repository, decimal target = 5_000_000m) =>
+        CreateService(repository, new FakeSystemSettingProvider().Set(SystemSettingKeys.BreakEvenMonthlyRevenue, target));
+
+    private static AdminDashboardService CreateService(FakeRepository repository, FakeSystemSettingProvider settings)
     {
         var clock = new FixedTimeProvider(Noon);
         return new AdminDashboardService(repository,
             new DashboardDateRangeQueryValidator(clock),
             new DashboardTopStationsQueryValidator(clock),
             new DashboardBreakEvenQueryValidator(clock),
-            Options.Create(new DashboardOptions { BreakEvenMonthlyRevenue = target }),
+            settings,
             new MemoryCache(new MemoryCacheOptions()),
             clock);
     }

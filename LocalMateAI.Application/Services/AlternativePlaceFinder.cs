@@ -5,19 +5,19 @@ namespace LocalMateAI.Application.Services;
 
 public sealed class AlternativePlaceFinder(ITagSimilarityScorer tagSimilarityScorer) : IAlternativePlaceFinder
 {
-    // Địa điểm thay thế được đắt hơn địa điểm hiện tại tối đa 25%.
-    public const decimal CostTolerance = 1.25m;
-
-    // Địa điểm miễn phí (0) chỉ khớp với địa điểm miễn phí vì 0 × 1.25 = 0.
-    public static bool IsWithinCostTolerance(decimal currentCostMax, decimal candidateCostMax) =>
-        candidateCostMax <= currentCostMax * CostTolerance;
+    // Ứng viên được đắt hơn địa điểm hiện tại tối đa maxCostIncreasePercent % (SystemSettings, mặc định 25).
+    // So bằng phép nhân chéo, chỉ dùng số nguyên. Miễn phí (0) chỉ khớp miễn phí.
+    public static bool IsWithinCostTolerance(decimal currentCostMax, decimal candidateCostMax,
+        int maxCostIncreasePercent) =>
+        candidateCostMax * 100 <= currentCostMax * (100 + maxCostIncreasePercent);
 
     public IReadOnlyList<ScoredPlaceDto> Find(
         PlaceCandidateDto current,
         IReadOnlyList<PlaceCandidateDto> candidates,
         IReadOnlyDictionary<Guid, IReadOnlyList<Guid>> placeTagIdsByPlaceId,
         IReadOnlyCollection<Guid> excludedPlaceIds,
-        int limit)
+        int limit,
+        int maxCostIncreasePercent)
     {
         if (limit <= 0)
         {
@@ -30,7 +30,7 @@ public sealed class AlternativePlaceFinder(ITagSimilarityScorer tagSimilaritySco
         var pool = candidates
             .Where(candidate => candidate.StationId == current.StationId
                 && !excluded.Contains(candidate.PlaceId)
-                && IsWithinCostTolerance(current.EstimatedCostMax, candidate.EstimatedCostMax))
+                && IsWithinCostTolerance(current.EstimatedCostMax, candidate.EstimatedCostMax, maxCostIncreasePercent))
             .ToList();
 
         var currentTagIds = placeTagIdsByPlaceId.GetValueOrDefault(current.PlaceId) ?? [];

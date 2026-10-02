@@ -1,16 +1,13 @@
 using LocalMateAI.Application.DTOs.Trips;
 using LocalMateAI.Application.Interfaces.Services;
+using LocalMateAI.Application.Settings;
 
 namespace LocalMateAI.Application.Services;
 
-public sealed class TripOriginResolverService(IGeoService geoService) : ITripOriginResolverService
+public sealed class TripOriginResolverService(
+    IGeoService geoService,
+    ISystemSettingProvider settings) : ITripOriginResolverService
 {
-    // Khoảng cách tối đa (mét, đường chim bay) từ điểm xuất phát tới ga gần nhất để còn được phục vụ.
-    // 12 km ≈ 39 phút di chuyển (×1,3 hệ số đường vòng, 24 km/h) — phủ toàn bộ các quận nội thành,
-    // TP Thủ Đức và Nhà Bè; không phủ Bình Chánh, Hóc Môn, Củ Chi, Cần Giờ.
-    // Đây là cổng lọc thô, không phải quãng đường thật; nếu sau này có API chỉ đường, đổi sang tính theo phút.
-    private const double MaxServiceAreaDistanceMeters = 12000;
-
     public Task<TripOriginResolution?> ResolveAsync(
         TripRequestDto request,
         CancellationToken cancellationToken = default) =>
@@ -31,8 +28,14 @@ public sealed class TripOriginResolverService(IGeoService geoService) : ITripOri
             return null;
         }
 
+        // Ngưỡng đường chim bay tới ga gần nhất, admin chỉnh trong SystemSettings (mặc định 12 km).
+        // Đây là cổng lọc thô, không phải quãng đường thật; nếu sau này có API chỉ đường, đổi sang tính theo phút.
+        var maxDistanceMeters = await settings.GetIntAsync(
+            SystemSettingKeys.MaxServiceAreaDistanceMeters,
+            cancellationToken);
+
         return new TripOriginResolution(
             nearestStation,
-            nearestStation.DistanceMeters <= MaxServiceAreaDistanceMeters);
+            nearestStation.DistanceMeters <= maxDistanceMeters);
     }
 }

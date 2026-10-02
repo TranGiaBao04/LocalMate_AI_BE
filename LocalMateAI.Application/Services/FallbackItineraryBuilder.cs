@@ -1,5 +1,6 @@
 using LocalMateAI.Application.DTOs.Matching;
 using LocalMateAI.Domain.Enums;
+using LocalMateAI.Application.Settings;
 
 namespace LocalMateAI.Application.Services;
 
@@ -15,14 +16,16 @@ public static class FallbackItineraryBuilder
         decimal budgetMax,
         TravelMode travelMode = TravelMode.Auto,
         TimeOnly? startTime = null,
-        ScheduleOrigin? origin = null)
+        ScheduleOrigin? origin = null,
+        TripPlanningSettings? settings = null)
     {
         var inputs = rankedCandidates
-            .Select(scored => ItineraryScheduler.ToScheduleInput(scored.Candidate))
+            .Select(scored => ItineraryScheduler.ToScheduleInput(scored.Candidate, settings))
             .ToList();
 
         return ItineraryScheduler
-            .Schedule(inputs, startTime ?? ItineraryScheduler.DefaultStartTime, durationHours, travelMode, budgetMax, origin)
+            .Schedule(inputs, startTime ?? ItineraryScheduler.DefaultStartTime, durationHours, travelMode, budgetMax,
+                origin, settings)
             .Select((slot, index) =>
             {
                 var scored = rankedCandidates[slot.SourceIndex];
