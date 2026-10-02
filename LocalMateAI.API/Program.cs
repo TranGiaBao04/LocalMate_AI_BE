@@ -156,6 +156,11 @@ builder.Services.AddScoped<IAdminDashboardService, AdminDashboardService>();
 builder.Services.AddOptions<DashboardOptions>().Bind(builder.Configuration.GetSection(DashboardOptions.SectionName))
     .ValidateOnStart();
 builder.Services.AddSingleton<IValidateOptions<DashboardOptions>, DashboardOptionsValidator>();
+builder.Services.AddScoped<IAdminStationRepository, AdminStationRepository>();
+builder.Services.AddScoped<IAdminStationService, AdminStationService>();
+builder.Services.AddScoped<ISystemSettingRepository, SystemSettingRepository>();
+builder.Services.AddScoped<ISystemSettingProvider, SystemSettingProvider>();
+builder.Services.AddScoped<IAdminSystemSettingService, AdminSystemSettingService>();
 builder.Services.AddScoped<IEntitlementRepairExecutor, EntitlementRepairExecutor>();
 builder.Services.AddScoped<IEntitlementRepairService, EntitlementRepairService>();
 builder.Services.AddScoped<IExternalLoginRepository, ExternalLoginRepository>();
