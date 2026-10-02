@@ -119,13 +119,14 @@ public sealed class PaymentSettlementConcurrencyPostgresTests
             Email = $"settlement-concurrency-{userId:N}@localmate.test",
             RoleId = userRoleId
         });
-        var orders = Enumerable.Range(0, orderCount).Select(_ => new PaymentOrder
+        var orders = Enumerable.Range(0, orderCount).Select(i => new PaymentOrder
         {
             UserId = userId,
             PlanCode = PlanCode.Membership,
             Type = PaymentOrderType.Purchase,
             Amount = 59000,
-            Status = PaymentOrderStatus.Pending,
+            // A late expired order can settle alongside the one currently pending order.
+            Status = i < orderCount - 1 ? PaymentOrderStatus.Expired : PaymentOrderStatus.Pending,
             ExpiresAt = Now.AddMinutes(15)
         }).ToArray();
         foreach (var order in orders) TestSubscriptionRepository.Bind(order);

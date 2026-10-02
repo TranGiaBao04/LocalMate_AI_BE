@@ -170,8 +170,9 @@ public sealed class UpgradeCreditCalculatorTests
     public void ReleaseIsOneWayUtc()
     {
         var row = new PaymentOrderCredit();
-        Assert.Throws<InvalidOperationException>(() => row.Release(DateTime.SpecifyKind(Start, DateTimeKind.Unspecified)));
-        row.Release(Start);
-        Assert.Throws<InvalidOperationException>(() => row.Release(Start.AddDays(1)));
+        var proof = new CreditReleaseEvidence(Start, "Cancelled", 10000, 0, 10000, CreditReleaseEvidence.SafeReason);
+        Assert.Throws<InvalidOperationException>(() => row.Release(DateTime.SpecifyKind(Start, DateTimeKind.Unspecified), proof));
+        row.Release(Start, proof);
+        Assert.Throws<InvalidOperationException>(() => row.Release(Start.AddDays(1), proof));
     }
 }

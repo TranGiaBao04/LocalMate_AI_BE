@@ -131,9 +131,14 @@ public sealed class PaymentReconciliationPostgresTests
         await using var db = await IsolatedPlanDatabase.CreateAsync();
         await using var c = db.Context();
         var first = await Seed(c);
+        var roleId = await TestRoles.GetUserRoleIdAsync(c);
+        var users = Enumerable.Range(1, 6).Select(i => new User { RoleId = roleId,
+            FullName = "Worker candidate", Email = $"candidate-{i}-{Guid.NewGuid():N}@test.local" }).ToArray();
+        c.Users.AddRange(users);
+        await c.SaveChangesAsync();
         var others = Enumerable.Range(1, 6).Select(i => new PaymentOrder
         {
-            Id = Guid.Parse($"00000000-0000-0000-0000-{i:D12}"), UserId = first.UserId,
+            Id = Guid.Parse($"00000000-0000-0000-0000-{i:D12}"), UserId = users[i - 1].Id,
             ProviderOrderCode = first.ProviderOrderCode + i, Amount = 19000, PlanCode = PlanCode.TripPass,
             PlanVersionBinding = PlanVersionBinding.LegacyUnresolved,
             Status = i == 3 ? PaymentOrderStatus.Failed : i == 4 ? PaymentOrderStatus.Expired : i == 5 ? PaymentOrderStatus.Paid : PaymentOrderStatus.Pending,

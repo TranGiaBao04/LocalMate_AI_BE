@@ -36,6 +36,9 @@ public sealed record PaymentGatewayOrderResult(
     decimal Amount,
     PaymentGatewayOrderStatus Status)
 {
+    public decimal? RequestedAmount { get; init; }
+    public decimal? AmountPaid { get; init; }
+    public decimal? AmountRemaining { get; init; }
     public static PaymentGatewayOrderResult Unavailable(long providerOrderCode) =>
         new(false, providerOrderCode, 0, PaymentGatewayOrderStatus.Unknown);
 }

@@ -221,18 +221,17 @@ public sealed class PaymentServiceTests
     }
 
     [Fact]
-    public async Task Renew_ReusesPendingRenewalOnly()
+    public async Task Renew_AnotherPendingPurchaseBlocksGlobally()
     {
         var purchase = Pending(PlanCode.TripPass, PaymentOrderType.Purchase, Now.AddMinutes(10));
-        var renewal = Pending(PlanCode.TripPass, PaymentOrderType.Renewal, Now.AddMinutes(10));
         var fixture = new Fixture(
             subscriptions: [Active(PlanCode.TripPass)],
-            existingOrders: [purchase, renewal]);
+            existingOrders: [purchase]);
 
         var result = await fixture.Service.RenewAsync(UserId);
 
-        Assert.Equal(PaymentIntentResultStatus.PendingOrderExists, result.Status);
-        Assert.Equal(renewal.Id, result.Response!.OrderId);
+        Assert.Equal(PaymentIntentResultStatus.AnotherPendingOrder, result.Status);
+        Assert.Equal(purchase.Id, result.Response!.OrderId);
         Assert.Empty(fixture.Gateway.Requests);
     }
 
@@ -449,6 +448,14 @@ public sealed class PaymentServiceTests
         public List<PaymentOrderStatusHistory> Histories { get; } = [];
         public List<PaymentOrder> Items { get; } = [.. existing];
         public int LookupCalls { get; private set; }
+        public HashSet<Guid> ReservedOrders { get; } = [];
+        public Task<PaymentOrder?> GetBlockingSubscriptionAsync(Guid userId, CancellationToken cancellationToken = default)
+        {
+            var order = Items.FirstOrDefault(o => o.UserId == userId && o.ProductKind == PaymentProductKind.SubscriptionPlan
+                && (o.Status == PaymentOrderStatus.Pending || ReservedOrders.Contains(o.Id)));
+            if (order is { PlanId: null, PlanCode: { } code }) order.PlanId = LocalMateAI.Infrastructure.Persistence.SubscriptionBaseline.PlanId(code);
+            return Task.FromResult(order);
+        }
 
         public Task<PaymentOrder?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
             Task.FromResult(Items.SingleOrDefault(o => o.Id == id));

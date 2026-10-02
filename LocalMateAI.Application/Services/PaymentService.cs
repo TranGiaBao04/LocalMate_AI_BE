@@ -132,6 +132,9 @@ public sealed class PaymentService(
         var nowUtc = timeProvider.GetUtcNow().UtcDateTime;
         var classification = await ClassifyAsync(userId, requestedPlan, nowUtc, cancellationToken);
         if (ClassificationError(classification) is { } error) return new(error);
+        var type = classification == SubscriptionCheckoutClassification.Upgrade ? PaymentOrderType.Upgrade : PaymentOrderType.Purchase;
+        if (await SubscriptionPendingOrderPolicy.CheckAsync(paymentOrderRepository, userId, requestedPlan.Id,
+                type, nowUtc, cancellationToken) is { } blocker) return blocker;
         // Phase safety gate: UP-S3 reservation and UP-S4 settlement must precede a payable Upgrade.
         if (classification == SubscriptionCheckoutClassification.Upgrade)
             return new(PaymentIntentResultStatus.UpgradeCheckoutNotReady);
@@ -175,31 +178,8 @@ public sealed class PaymentService(
         DateTime nowUtc,
         CancellationToken cancellationToken)
     {
-        var pending = await paymentOrderRepository.GetPendingAsync(
-            userId,
-            plan.Id,
-            type,
-            cancellationToken);
-        if (pending is not null)
-        {
-            if (pending.ExpiresAt <= nowUtc)
-            {
-                // A later verified webhook or owned-order lookup can still settle this order.
-                await paymentOrderRepository.TransitionStatusAsync(pending, PaymentOrderStatus.Expired,
-                    new(PaymentStatusChangeSource.LocalExpiration, userId, ReasonCode: "local_expired"), nowUtc, cancellationToken);
-            }
-            else if (HasUsablePaymentLink(pending))
-            {
-                return new PaymentIntentResult(
-                    PaymentIntentResultStatus.PendingOrderExists,
-                    ToIntentResponse(pending));
-            }
-            else
-            {
-                await paymentOrderRepository.TransitionStatusAsync(pending, PaymentOrderStatus.Failed,
-                    new(PaymentStatusChangeSource.Checkout, userId, ReasonCode: "unusable_pending_payment_link"), nowUtc, cancellationToken);
-            }
-        }
+        if (await SubscriptionPendingOrderPolicy.CheckAsync(paymentOrderRepository, userId, plan.Id,
+                type, nowUtc, cancellationToken) is { } blocker) return blocker;
 
         var order = new PaymentOrder
         {
@@ -275,33 +255,15 @@ public sealed class PaymentService(
     private async Task<(SubscriptionPlan Plan, SubscriptionPlanVersion Version)?> GetTargetAsync(
         string? planCode, CancellationToken cancellationToken)
     {
-        var code = PlanIdentity.Canonical(planCode);
-        if (string.IsNullOrWhiteSpace(code)) return null;
-        var plan = await subscriptionRepository.GetPlanByCodeAsync(code, cancellationToken);
-        if (plan is null || !plan.IsActive || plan.Code == PlanIdentity.Free
-            || plan.CurrentVersionId is not { } id) return null;
-        var version = await subscriptionRepository.GetVersionAsync(id, cancellationToken);
-        return version is null || version.PlanId != plan.Id || version.DurationDays is not > 0
-            || version.Price <= 0 || decimal.Truncate(version.Price) != version.Price
-            ? null : (plan, version);
+        return await SubscriptionCheckoutContext.GetTargetAsync(subscriptionRepository, planCode, cancellationToken);
     }
 
     private async Task<SubscriptionCheckoutClassification> ClassifyAsync(
         Guid userId, SubscriptionPlan target, DateTime nowUtc, CancellationToken cancellationToken)
     {
-        var effective = await EffectiveSubscriptionResolver.ResolveAsync(
-            subscriptionRepository, userId, nowUtc, cancellationToken);
-        var periods = await subscriptionRepository.GetPeriodsAsync(userId, cancellationToken);
-        return SubscriptionCheckoutPolicy.Classify(effective, target, nowUtc, periods);
+        return await SubscriptionCheckoutContext.ClassifyAsync(subscriptionRepository, userId, target, nowUtc, cancellationToken);
     }
 
     private static PaymentIntentResultStatus? ClassificationError(SubscriptionCheckoutClassification classification) =>
-        classification switch
-        {
-            SubscriptionCheckoutClassification.SamePlan => PaymentIntentResultStatus.PlanAlreadyActive,
-            SubscriptionCheckoutClassification.CoveredByHigherPlan => PaymentIntentResultStatus.CoveredByHigherPlan,
-            SubscriptionCheckoutClassification.TargetPlanAlreadyScheduled => PaymentIntentResultStatus.TargetPlanAlreadyScheduled,
-            SubscriptionCheckoutClassification.InvalidConfiguration => PaymentIntentResultStatus.InvalidPlanCode,
-            _ => null
-        };
+        SubscriptionCheckoutContext.ClassificationError(classification);
 }

@@ -53,6 +53,8 @@ public sealed class SubscriptionCheckoutQuotePostgresTests
         var pending = await PlanVersionFoundationPostgresTests.BoundOrderAsync(seed, user.Id,
             SubscriptionBaseline.PlanId(PlanCode.Membership),
             await seed.SubscriptionPlanVersions.SingleAsync(v => v.Id == SubscriptionBaseline.VersionId(PlanCode.Membership)));
+        pending.ExpiresAt = Now.AddMinutes(15);
+        await seed.SaveChangesAsync();
         var before = await Counts(seed);
         var capture = new Capture();
         await using var c = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
@@ -65,7 +67,7 @@ public sealed class SubscriptionCheckoutQuotePostgresTests
         Assert.All(capture.Sql, sql => { Assert.DoesNotContain("FOR UPDATE", sql); Assert.StartsWith("SELECT", sql); });
         var joined = Assert.Single(capture.Sql, s => s.Contains("LEFT JOIN \"PaymentOrders\""));
         Assert.DoesNotContain("CheckoutUrl", joined); Assert.DoesNotContain("QrCode", joined);
-        Assert.Equal(PaymentIntentResultStatus.UpgradeCheckoutNotReady,
+        Assert.Equal(PaymentIntentResultStatus.AnotherPendingOrder,
             (await Service(c, gateway).CheckoutAsync(user.Id, "Membership")).Status);
         Assert.Equal(before, await Counts(c));
         Assert.Equal(PaymentOrderStatus.Pending, (await c.PaymentOrders.AsNoTracking().SingleAsync(o => o.Id == pending.Id)).Status);

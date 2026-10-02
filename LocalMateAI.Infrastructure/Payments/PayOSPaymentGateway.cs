@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using LocalMateAI.Application.Interfaces.Payments;
 using LocalMateAI.Application.Payments;
 using PayOS;
@@ -67,18 +68,26 @@ public sealed class PayOSPaymentGateway(
     {
         try
         {
-            var payment = await client.PaymentRequests.GetAsync(
-                providerOrderCode,
-                new RequestOptions { CancellationToken = cancellationToken });
+            // SDK 2.1.0's PaymentLink uses non-nullable longs (absent JSON becomes zero).
+            // Use the same SDK endpoint/signature verification with presence-preserving fields.
+            var data = await client.GetAsync<JsonElement>(
+                $"/v2/payment-requests/{providerOrderCode}",
+                new RequestOptions<object> { CancellationToken = cancellationToken,
+                    Signature = new SignatureOptions { Response = ResponseSignatureTypes.Body } });
+            var payment = data.Deserialize<PaymentLookupEvidence>();
+            if (payment is null) return PaymentGatewayOrderResult.Unavailable(providerOrderCode);
+            if (payment.OrderCode is not { } code || payment.Amount is not { } amount || payment.Status is not { } status)
+                return PaymentGatewayOrderResult.Unavailable(providerOrderCode);
+            if (status is PaymentLinkStatus.Paid or PaymentLinkStatus.Underpaid && payment.AmountPaid is null)
+                return PaymentGatewayOrderResult.Unavailable(providerOrderCode);
             return new PaymentGatewayOrderResult(
                 true,
-                payment.OrderCode,
-                payment.Status is PaymentLinkStatus.Paid or PaymentLinkStatus.Underpaid
-                    ? payment.AmountPaid
-                    : payment.Amount,
-                MapStatus(payment.Status));
+                code,
+                status is PaymentLinkStatus.Paid or PaymentLinkStatus.Underpaid ? payment.AmountPaid!.Value : amount,
+                MapStatus(status))
+            { RequestedAmount = amount, AmountPaid = payment.AmountPaid, AmountRemaining = payment.AmountRemaining };
         }
-        catch (Exception exception) when (IsProviderFailure(exception, cancellationToken))
+        catch (Exception exception) when (exception is JsonException || IsProviderFailure(exception, cancellationToken))
         {
             return PaymentGatewayOrderResult.Unavailable(providerOrderCode);
         }
@@ -178,6 +187,15 @@ public sealed class PayOSPaymentGateway(
         PaymentLinkStatus.Failed => PaymentGatewayOrderStatus.Failed,
         _ => PaymentGatewayOrderStatus.Unknown
     };
+
+    private sealed class PaymentLookupEvidence
+    {
+        [JsonPropertyName("orderCode")] public long? OrderCode { get; set; }
+        [JsonPropertyName("amount")] public long? Amount { get; set; }
+        [JsonPropertyName("amountPaid")] public long? AmountPaid { get; set; }
+        [JsonPropertyName("amountRemaining")] public long? AmountRemaining { get; set; }
+        [JsonPropertyName("status")] public PaymentLinkStatus? Status { get; set; }
+    }
 
     private static bool IsProviderFailure(
         Exception exception,
