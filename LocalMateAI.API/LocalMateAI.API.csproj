@@ -8,6 +8,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="DotNetEnv" Version="3.1.1" />
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="12.1.1" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.11" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.11">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -20,6 +22,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\LocalMateAI.Application\LocalMateAI.Application.csproj" />
+    <ProjectReference Include="..\LocalMateAI.Infrastructure\LocalMateAI.Infrastructure.csproj" />
   </ItemGroup>
 
   <ItemGroup>

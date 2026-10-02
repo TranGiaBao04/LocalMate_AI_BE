@@ -247,6 +247,16 @@ cd LocalMateAI.API
 dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Host=localhost;Port=5433;Database=localmateai;Username=localmate;Password=<mật_khẩu_.env>"
 ```
 
+#### Cấu hình PayOS
+
+Payment gateway chỉ được kích hoạt khi đủ `PayOS:ClientId`, `PayOS:ApiKey`,
+`PayOS:ChecksumKey`, `PayOS:ReturnUrl` và `PayOS:CancelUrl`. Có thể cấu hình bằng
+User Secrets hoặc biến môi trường tương ứng `PayOS__*` trong `.env`; không commit
+giá trị thật. Nếu cấu hình thiếu, API vẫn khởi động và checkout trả
+`payment_gateway_unavailable`. `ReturnUrl`/`CancelUrl` chỉ dùng để điều hướng trình
+duyệt; chỉ webhook PayOS đã xác minh hoặc reconciliation với provider mới được
+phép cập nhật quyền subscription.
+
 ### 5.6. Chạy migration để tạo database
 
 ```bash
@@ -277,6 +287,24 @@ Trong môi trường Development, truy cập `https://localhost:7144/swagger` đ
   ```bash
   dotnet tool run dotnet-ef migrations add <TênMôTảThayĐổi> --project LocalMateAI.Infrastructure --startup-project LocalMateAI.API --context AppDbContext
   ```
+
+### 5.9. Tài khoản mẫu môi trường phát triển (Development Seed Accounts)
+
+> [!WARNING]
+> **DEVELOPMENT ONLY — CHỈ DÀNH CHO MÔI TRƯỜNG PHÁT TRIỂN / LOCAL TEST.**
+> Tuyệt đối không sử dụng các tài khoản hoặc mật khẩu này trên môi trường Staging hay Production!
+
+Khi khởi động backend ở môi trường `Development` (`ASPNETCORE_ENVIRONMENT=Development`), hệ thống sẽ tự động nạp (idempotent seed) các tài khoản kiểm thử sau vào bảng `Users` nếu chưa tồn tại:
+
+| Email | Họ tên (FullName) | Vai trò (Role) | Mật khẩu mẫu (Development Password) |
+| :--- | :--- | :--- | :--- |
+| `admin@localmate.dev` | LocalMate Admin | `Admin` | `LocalMate@123` |
+| `user1@localmate.dev` | LocalMate User 1 | `User` | `LocalMate@123` |
+| `user2@localmate.dev` | LocalMate User 2 | `User` | `LocalMate@123` |
+| `user3@localmate.dev` | LocalMate User 3 | `User` | `LocalMate@123` |
+
+- Mật khẩu được băm tự động bằng chuẩn `IPasswordHashService` (PBKDF2 / ASP.NET Core Identity v3 với 100.000 vòng lặp) trước khi lưu vào DB; không lưu plaintext.
+- Frontend có thể dùng trực tiếp các tài khoản này để kiểm thử các luồng Đăng nhập thật, khôi phục phiên, gọi `/users/me` và phân quyền `Admin`/`User`.
 
 ---
 

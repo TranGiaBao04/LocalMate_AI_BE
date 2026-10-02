@@ -1,0 +1,303 @@
+using LocalMateAI.Application.DTOs.Common;
+using LocalMateAI.Application.DTOs.Places;
+using LocalMateAI.Application.Interfaces.Repositories;
+using LocalMateAI.Application.Interfaces.Services;
+using LocalMateAI.Domain.Entities;
+using LocalMateAI.Domain.Enums;
+using NetTopologySuite.Geometries;
+
+namespace LocalMateAI.Application.Services;
+
+public sealed class AdminPlaceService(
+    IPlaceRepository placeRepository,
+    ICoordinatesValidationService coordinatesValidationService) : IAdminPlaceService
+{
+    private const int MaxNameLength = 200;
+    private const int MaxAddressLength = 300;
+    private const decimal MaxStoredCost = 999_999_999_999m;
+
+    public async Task<AdminPlaceOperationResult> CreateAsync(
+        CreateAdminPlaceRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var validationErrors = Validate(
+            request.Name,
+            request.Address,
+            request.Latitude,
+            request.Longitude,
+            request.Category,
+            request.EstimatedCostMin,
+            request.EstimatedCostMax);
+
+        if (validationErrors.Count > 0)
+        {
+            return AdminPlaceOperationResult.ValidationFailed(validationErrors);
+        }
+
+        var place = new Place
+        {
+            Name = request.Name!.Trim(),
+            Description = request.Description,
+            Address = request.Address!.Trim(),
+            Location = CreatePoint(request.Latitude, request.Longitude),
+            Category = request.Category,
+            Status = PlaceStatus.Pending,
+            EstimatedCostMin = request.EstimatedCostMin,
+            EstimatedCostMax = request.EstimatedCostMax,
+            ImageUrl = request.ImageUrl
+        };
+
+        await placeRepository.AddAsync(place, cancellationToken);
+        await placeRepository.SaveChangesAsync(cancellationToken);
+
+        return AdminPlaceOperationResult.Succeeded(Map(place));
+    }
+
+    public Task<IReadOnlyList<AdminPlaceResponse>> GetAllAsync(
+        CancellationToken cancellationToken = default) =>
+        placeRepository.GetAllForAdminAsync(cancellationToken);
+
+    public Task<PagedResult<AdminPlaceResponse>> GetPagedAsync(
+        AdminPlaceQuery query,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        return placeRepository.GetPagedForAdminAsync(query, cancellationToken);
+    }
+
+    public Task<AdminPlaceResponse?> GetByIdAsync(
+        Guid placeId,
+        CancellationToken cancellationToken = default) =>
+        placeRepository.GetAdminByIdAsync(placeId, cancellationToken);
+
+    public async Task<AdminPlaceOperationResult> UpdateAsync(
+        Guid placeId,
+        UpdateAdminPlaceRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var validationErrors = Validate(
+            request.Name,
+            request.Address,
+            request.Latitude,
+            request.Longitude,
+            request.Category,
+            request.EstimatedCostMin,
+            request.EstimatedCostMax);
+
+        if (validationErrors.Count > 0)
+        {
+            return AdminPlaceOperationResult.ValidationFailed(validationErrors);
+        }
+
+        var place = await placeRepository.GetByIdAsync(placeId, cancellationToken);
+        // Địa điểm đã xoá mềm coi như không tồn tại.
+        if (place is null || place.DeletedAt is not null)
+        {
+            return AdminPlaceOperationResult.Missing();
+        }
+
+        place.Name = request.Name!.Trim();
+        place.Description = request.Description;
+        place.Address = request.Address!.Trim();
+        place.Location = CreatePoint(request.Latitude, request.Longitude);
+        place.Category = request.Category;
+        place.EstimatedCostMin = request.EstimatedCostMin;
+        place.EstimatedCostMax = request.EstimatedCostMax;
+        place.ImageUrl = request.ImageUrl;
+
+        if (!await placeRepository.TrySaveChangesAsync(cancellationToken))
+        {
+            return AdminPlaceOperationResult.Conflict();
+        }
+
+        return AdminPlaceOperationResult.Succeeded(Map(place));
+    }
+
+    public async Task<DeleteAdminPlaceResult> DeleteAsync(
+        Guid placeId,
+        CancellationToken cancellationToken = default)
+    {
+        var persistenceResult = await placeRepository.DeleteForAdminAsync(placeId, cancellationToken);
+
+        return persistenceResult switch
+        {
+            DeletePlacePersistenceResult.Deleted => DeleteAdminPlaceResult.Succeeded(),
+            DeletePlacePersistenceResult.NotFound => DeleteAdminPlaceResult.Missing(),
+            _ => throw new InvalidOperationException("Unknown Place delete result.")
+        };
+    }
+
+    public async Task<AdminPlaceModerationResult> UpdateStatusAsync(
+        Guid placeId,
+        UpdatePlaceStatusRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (!Enum.IsDefined(request.Status))
+        {
+            return AdminPlaceModerationResult.InvalidStatus();
+        }
+
+        var place = await placeRepository.GetByIdAsync(placeId, cancellationToken);
+        // Địa điểm đã xoá mềm coi như không tồn tại, để Admin không kích hoạt lại hay sửa nó.
+        if (place is null || place.DeletedAt is not null)
+        {
+            return AdminPlaceModerationResult.Missing();
+        }
+
+        if (place.Status == request.Status)
+        {
+            return AdminPlaceModerationResult.Succeeded(Map(place));
+        }
+
+        if (!IsAllowedStatusTransition(place.Status, request.Status))
+        {
+            return AdminPlaceModerationResult.InvalidTransition();
+        }
+
+        place.Status = request.Status;
+
+        if (!await placeRepository.TrySaveChangesAsync(cancellationToken))
+        {
+            return AdminPlaceModerationResult.Conflict();
+        }
+
+        return AdminPlaceModerationResult.Succeeded(Map(place));
+    }
+
+    public async Task<AdminPlaceModerationResult> UpdateVerificationAsync(
+        Guid placeId,
+        UpdatePlaceVerificationRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var place = await placeRepository.GetByIdAsync(placeId, cancellationToken);
+        // Địa điểm đã xoá mềm coi như không tồn tại, để Admin không kích hoạt lại hay sửa nó.
+        if (place is null || place.DeletedAt is not null)
+        {
+            return AdminPlaceModerationResult.Missing();
+        }
+
+        if (place.IsVerified == request.IsVerified)
+        {
+            return AdminPlaceModerationResult.Succeeded(Map(place));
+        }
+
+        if (request.IsVerified && place.Status != PlaceStatus.Active)
+        {
+            return AdminPlaceModerationResult.RequiresActive();
+        }
+
+        place.IsVerified = request.IsVerified;
+
+        if (!await placeRepository.TrySaveChangesAsync(cancellationToken))
+        {
+            return AdminPlaceModerationResult.Conflict();
+        }
+
+        return AdminPlaceModerationResult.Succeeded(Map(place));
+    }
+
+    private static bool IsAllowedStatusTransition(PlaceStatus current, PlaceStatus requested) =>
+        (current, requested) is
+            (PlaceStatus.Pending, PlaceStatus.Active)
+            or (PlaceStatus.Active, PlaceStatus.Inactive)
+            or (PlaceStatus.Inactive, PlaceStatus.Active);
+
+    private IReadOnlyDictionary<string, string[]> Validate(
+        string? name,
+        string? address,
+        double latitude,
+        double longitude,
+        PlaceCategory category,
+        decimal estimatedCostMin,
+        decimal estimatedCostMax)
+    {
+        var errors = new Dictionary<string, string[]>();
+
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            errors[nameof(CreateAdminPlaceRequest.Name)] = ["Name is required."];
+        }
+        else if (name.Trim().Length > MaxNameLength)
+        {
+            errors[nameof(CreateAdminPlaceRequest.Name)] = [$"Name must not exceed {MaxNameLength} characters."];
+        }
+
+        if (string.IsNullOrWhiteSpace(address))
+        {
+            errors[nameof(CreateAdminPlaceRequest.Address)] = ["Address is required."];
+        }
+        else if (address.Trim().Length > MaxAddressLength)
+        {
+            errors[nameof(CreateAdminPlaceRequest.Address)] = [$"Address must not exceed {MaxAddressLength} characters."];
+        }
+
+        if (!double.IsFinite(latitude) || !double.IsFinite(longitude))
+        {
+            errors[nameof(CreateAdminPlaceRequest.Latitude)] = ["Coordinates must be finite numbers."];
+        }
+        else
+        {
+            var coordinateValidation = coordinatesValidationService.ValidateCoordinate(latitude, longitude);
+            if (!coordinateValidation.IsValid)
+            {
+                errors[nameof(CreateAdminPlaceRequest.Latitude)] = [coordinateValidation.Reason];
+            }
+        }
+
+        if (!Enum.IsDefined(category))
+        {
+            errors[nameof(CreateAdminPlaceRequest.Category)] = ["Category is invalid."];
+        }
+
+        if (!IsValidStoredCost(estimatedCostMin))
+        {
+            errors[nameof(CreateAdminPlaceRequest.EstimatedCostMin)] =
+                ["EstimatedCostMin must be a non-negative whole number with at most 12 digits."];
+        }
+
+        if (!IsValidStoredCost(estimatedCostMax))
+        {
+            errors[nameof(CreateAdminPlaceRequest.EstimatedCostMax)] =
+                ["EstimatedCostMax must be a non-negative whole number with at most 12 digits."];
+        }
+
+        if (estimatedCostMin > estimatedCostMax)
+        {
+            errors[nameof(CreateAdminPlaceRequest.EstimatedCostMax)] =
+                ["EstimatedCostMax must be greater than or equal to EstimatedCostMin."];
+        }
+
+        return errors;
+    }
+
+    private static bool IsValidStoredCost(decimal value) =>
+        value >= 0 && value <= MaxStoredCost && decimal.Truncate(value) == value;
+
+    private static Point CreatePoint(double latitude, double longitude) =>
+        new(longitude, latitude) { SRID = 4326 };
+
+    private static AdminPlaceResponse Map(Place place) =>
+        new(
+            place.Id,
+            place.Name,
+            place.Description,
+            place.Address,
+            place.Location.Y,
+            place.Location.X,
+            place.Category.ToString(),
+            place.Status.ToString(),
+            place.IsVerified,
+            place.EstimatedCostMin,
+            place.EstimatedCostMax,
+            place.ImageUrl,
+            place.CreatedAt,
+            place.UpdatedAt);
+}

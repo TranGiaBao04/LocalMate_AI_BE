@@ -1,0 +1,200 @@
+using System.Data;
+using System.Globalization;
+using LocalMateAI.Application.DTOs.Common;
+using LocalMateAI.Application.DTOs.Payments;
+using LocalMateAI.Application.Interfaces.Repositories;
+using LocalMateAI.Application.Payments;
+using LocalMateAI.Application.Services;
+using LocalMateAI.Domain.Enums;
+using LocalMateAI.Infrastructure.Persistence;
+using LocalMateAI.Infrastructure.Persistence.Querying;
+using Microsoft.EntityFrameworkCore;
+
+namespace LocalMateAI.Infrastructure.Repositories;
+
+public sealed class AdminTransactionRepository(AppDbContext context, TimeProvider? timeProvider = null) : IAdminTransactionRepository
+{
+    private static readonly SortMap<TransactionRow> Sort = new SortMap<TransactionRow>("createdAt", true, r => r.Id)
+        .Add("createdAt", r => r.CreatedAt).Add("paidAt", r => r.PaidAt).Add("amount", r => r.Amount)
+        .Add("status", r => r.Status).Add("operationType", r => r.OperationType)
+        .Add("providerOrderCode", r => r.ProviderOrderCode).Add("userEmail", r => r.UserEmail).Add("planCode", r => r.PlanCode);
+
+    private IQueryable<TransactionRow> Rows() =>
+        from order in context.PaymentOrders.AsNoTracking()
+            join user in context.Users.AsNoTracking() on order.UserId equals user.Id
+            join plan in context.SubscriptionPlans.AsNoTracking() on order.PlanId equals (Guid?)plan.Id into plans
+            from plan in plans.DefaultIfEmpty()
+            select new TransactionRow
+            {
+                Id = order.Id, ProviderOrderCode = order.ProviderOrderCode, UserId = order.UserId,
+                UserFullName = user.FullName, UserEmail = user.Email,
+                PlanCode = order.PlanVersionBinding != PlanVersionBinding.Native && order.PlanCode.HasValue
+                    ? order.PlanCode.Value.ToString()
+                    : plan != null ? plan.Code : order.PlanCode.HasValue ? order.PlanCode.Value.ToString() : null,
+                CatalogPlanCode = plan != null ? plan.Code : null,
+                PlanName = plan != null ? plan.Name : null, OperationType = order.Type, Status = order.Status,
+                Amount = order.Amount, CreatedAt = order.CreatedAt, ExpiresAt = order.ExpiresAt, PaidAt = order.PaidAt,
+                CreditAmount = order.CreditAmount,
+                PlanId = order.PlanId, PlanVersionId = order.PlanVersionId,
+                PlanVersionBinding = order.PlanVersionBinding, UpdatedAt = order.UpdatedAt, ProductKind = order.ProductKind
+            };
+
+    // List, aggregate, export and detail share the same safe transaction projection.
+    private IQueryable<TransactionRow> Filtered(AdminTransactionFilter filter)
+    {
+        var rows = Rows();
+        if (filter.Status is { } status) rows = rows.Where(r => r.Status == status);
+        if (filter.OperationType is { } type) rows = rows.Where(r => r.OperationType == type);
+        if (filter.CreatedFromUtc is { } from) rows = rows.Where(r => r.CreatedAt >= from);
+        if (filter.CreatedToUtc is { } to) rows = rows.Where(r => r.CreatedAt < to);
+        if (filter.Search is { } search)
+        {
+            Guid? id = Guid.TryParse(search, out var parsedId) ? parsedId : null;
+            long? code = long.TryParse(search, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedCode) ? parsedCode : null;
+            var pattern = "%" + search.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_") + "%";
+            rows = rows.Where(r => (id.HasValue && r.Id == id.Value) || (code.HasValue && r.ProviderOrderCode == code.Value)
+                || EF.Functions.ILike(r.UserEmail, pattern, "\\") || EF.Functions.ILike(r.UserFullName, pattern, "\\")
+                || (r.PlanCode != null && EF.Functions.ILike(r.PlanCode, pattern, "\\"))
+                || (r.CatalogPlanCode != null && EF.Functions.ILike(r.CatalogPlanCode, pattern, "\\"))
+                || (r.PlanName != null && EF.Functions.ILike(r.PlanName, pattern, "\\")));
+        }
+        return rows;
+    }
+
+    public async Task<AdminTransactionDetailResponse?> GetDetailAsync(Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        await using var transaction = await context.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
+        await context.Database.ExecuteSqlRawAsync("SET TRANSACTION READ ONLY", cancellationToken);
+        var row = await Rows().SingleOrDefaultAsync(r => r.Id == id, cancellationToken);
+        if (row is null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return null;
+        }
+        var history = await context.PaymentOrderStatusHistories.AsNoTracking()
+            .Where(h => h.PaymentOrderId == id).OrderBy(h => h.OccurredAt).ThenBy(h => h.Id)
+            .Select(h => new AdminTransactionStatusHistoryResponse(h.Id,
+                h.FromStatus.HasValue ? h.FromStatus.Value.ToString() : null,
+                h.ToStatus.ToString(), h.Source.ToString(), h.ReasonCode, h.OccurredAt,
+                h.ActorUserId, h.WebhookReceiptId)).ToListAsync(cancellationToken);
+        var receipts = await context.PaymentWebhookReceipts.AsNoTracking()
+            .Where(r => r.PaymentOrderId == id).OrderByDescending(r => r.ReceivedAt).ThenByDescending(r => r.Id)
+            .Select(r => new AdminTransactionWebhookReceiptResponse(r.Id, r.ProviderOrderCode, r.Amount,
+                r.IsSuccessful, r.ReceivedAt, r.RawPayloadSha256, r.RawPayload != null,
+                r.RawPayloadRetainUntil, r.RawPayloadPurgedAt)).ToListAsync(cancellationToken);
+        var evidence = await EntitlementRepairEvidenceReader.ReadAsync(context,
+            new RepairOrderEvidence(row.Id, row.UserId, row.PlanId, row.PlanVersionId,
+                row.PlanVersionBinding, row.Status, row.Amount, row.PaidAt)
+                { ProductKind = row.ProductKind, Type = row.OperationType, CreditAmount = row.CreditAmount }, cancellationToken);
+        var assessment = EntitlementRepairAssessmentPolicy.Assess(evidence, (timeProvider ?? TimeProvider.System).GetUtcNow().UtcDateTime);
+        var creditSources = row.OperationType == PaymentOrderType.Upgrade
+            ? await GetCreditSourcesAsync(row, cancellationToken) : [];
+        var repairs = await context.EntitlementRepairAudits.AsNoTracking().Where(a => a.PaymentOrderId == id)
+            .OrderByDescending(a => a.OccurredAt).ThenByDescending(a => a.Id)
+            .Select(a => new EntitlementRepairHistoryResponse(a.Id, a.SubscriptionPeriodId, a.ActorUserId,
+                a.Reason, a.Outcome.ToString(), a.DecisionCode, a.ReconstructionMode, a.OccurredAt)).ToListAsync(cancellationToken);
+        var single = row.ProductKind == PaymentProductKind.SingleItinerary
+            ? await context.SingleItineraryEntitlements.AsNoTracking().Where(e => e.SourcePaymentOrderId == id)
+            .Select(e => new LocalMateAI.Application.DTOs.ItineraryPurchases.SingleItineraryEntitlementResponse(
+                e.Id, e.GrantedAt, e.ConsumedAt, e.ConsumedTripId, e.ConsumedAt == null)).SingleOrDefaultAsync(cancellationToken)
+            : null;
+        await transaction.CommitAsync(cancellationToken);
+        return new(new(Response(row), row.PlanId, row.PlanVersionId, row.PlanVersionBinding?.ToString(), row.UpdatedAt),
+            history, receipts)
+        {
+            Entitlement = assessment.Entitlement, RepairEligibility = assessment.Eligibility, RepairHistory = repairs,
+            SingleItineraryEntitlement = single, CreditSources = creditSources
+        };
+    }
+
+    public async Task<PagedResult<AdminTransactionResponse>> GetTransactionsAsync(AdminTransactionFilter filter, PagedQuery paging,
+        CancellationToken cancellationToken = default)
+    {
+        var page = await Filtered(filter).ApplySort(paging, Sort).ToPagedResultAsync(paging, cancellationToken);
+        return PagedResult<AdminTransactionResponse>.Create(page.Items.Select(Response).ToArray(),
+            page.Page, page.PageSize, page.TotalCount);
+    }
+
+    public async Task<AdminTransactionSummary> GetSummaryAsync(AdminTransactionFilter filter,
+        CancellationToken cancellationToken = default) =>
+        await Filtered(filter).GroupBy(_ => 1).Select(g => new AdminTransactionSummary(g.LongCount(),
+            g.LongCount(r => r.Status == PaymentOrderStatus.Paid), g.LongCount(r => r.Status == PaymentOrderStatus.Pending),
+            g.LongCount(r => r.Status == PaymentOrderStatus.Failed), g.LongCount(r => r.Status == PaymentOrderStatus.Expired),
+            g.Sum(r => r.Status == PaymentOrderStatus.Paid ? r.Amount : 0m), "VND")
+            { ReviewRequiredCount = g.LongCount(r => r.Status == PaymentOrderStatus.ReviewRequired) })
+            .SingleOrDefaultAsync(cancellationToken) ?? new(0, 0, 0, 0, 0, 0m, "VND");
+
+    public async Task<AdminTransactionExportRows> GetExportRowsAsync(AdminTransactionFilter filter, int maxRows,
+        CancellationToken cancellationToken = default)
+    {
+        // Count and rows share a read-only snapshot; concurrent checkout/settlement cannot bypass the cap.
+        await using var transaction = await context.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
+        var query = Filtered(filter);
+        var count = await query.LongCountAsync(cancellationToken);
+        IReadOnlyList<AdminTransactionResponse> rows = count > maxRows ? [] :
+            (await Sort.Apply(query, null, null).ToListAsync(cancellationToken)).Select(Response).ToArray();
+        await transaction.CommitAsync(cancellationToken);
+        return new(count, rows);
+    }
+
+    private static AdminTransactionResponse Response(TransactionRow r) => new(r.Id, r.ProviderOrderCode,
+        r.UserId, r.UserFullName, r.UserEmail, r.ProductKind.ToString(), r.PlanCode, r.PlanName,
+        r.OperationType.ToString(), r.Status.ToString(), r.Amount, "VND", r.CreatedAt, r.ExpiresAt, r.PaidAt)
+        { CreditAmount = r.CreditAmount };
+
+    private async Task<IReadOnlyList<AdminTransactionCreditSourceResponse>> GetCreditSourcesAsync(TransactionRow order, CancellationToken ct)
+    {
+        var sources = await (from c in context.PaymentOrderCredits.AsNoTracking()
+            where c.OrderId == order.Id
+            join p in context.SubscriptionPeriods.AsNoTracking() on c.PeriodId equals p.Id into periods
+            from p in periods.DefaultIfEmpty()
+            join plan in context.SubscriptionPlans.AsNoTracking() on p.PlanId equals plan.Id into plans
+            from plan in plans.DefaultIfEmpty()
+            orderby c.PeriodId
+            select new { Claim = c, Period = p, Code = plan != null ? plan.Code : null, Name = plan != null ? plan.Name : null })
+            .ToListAsync(ct);
+        return sources.Select(s =>
+        {
+            var c = s.Claim;
+            var consistent = c.UserId == order.UserId && s.Period is { } p
+                && p.UserId == order.UserId && p.EndsAt == c.OriginalEndsAt;
+            var released = c.HasValidReleaseEvidence() && c.ReleaseProviderRequestedAmount == order.Amount;
+            var consumed = consistent && c.ReleasedAt is null && !c.HasAnyReleaseEvidence()
+                && order.Status == PaymentOrderStatus.Paid && order.PaidAt is not null
+                && s.Period!.TerminatedAt == order.PaidAt && s.Period.TerminatedByOrderId == order.Id;
+            var reserved = consistent && c.ReleasedAt is null && !c.HasAnyReleaseEvidence()
+                && order.Status is PaymentOrderStatus.Pending or PaymentOrderStatus.Failed or PaymentOrderStatus.Expired
+                && s.Period!.TerminatedAt is null && s.Period.TerminatedByOrderId is null;
+            var state = consistent && released ? "Released" : consumed ? "Consumed" : reserved ? "Reserved" : "Conflict";
+            return new AdminTransactionCreditSourceResponse(s.Code, s.Name, c.OriginalEndsAt, c.RemainingDays,
+                c.CalculatedCreditAmount, state, s.Period?.TerminatedAt, c.ReleasedAt,
+                released ? new(c.ReleaseProviderCheckedAt!.Value, c.ReleaseProviderStatus!, c.ReleaseProviderRequestedAmount!.Value,
+                    c.ReleaseProviderAmountPaid!.Value, c.ReleaseProviderAmountRemaining!.Value, c.ReleaseReasonCode!) : null);
+        }).ToArray();
+    }
+
+    private sealed class TransactionRow
+    {
+        public Guid Id { get; init; }
+        public long ProviderOrderCode { get; init; }
+        public Guid UserId { get; init; }
+        public string UserFullName { get; init; } = "";
+        public string UserEmail { get; init; } = "";
+        public string? PlanCode { get; init; }
+        public string? CatalogPlanCode { get; init; }
+        public string? PlanName { get; init; }
+        public PaymentOrderType OperationType { get; init; }
+        public PaymentOrderStatus Status { get; init; }
+        public decimal Amount { get; init; }
+        public decimal CreditAmount { get; init; }
+        public DateTime CreatedAt { get; init; }
+        public DateTime ExpiresAt { get; init; }
+        public DateTime? PaidAt { get; init; }
+        public Guid? PlanId { get; init; }
+        public Guid? PlanVersionId { get; init; }
+        public PlanVersionBinding? PlanVersionBinding { get; init; }
+        public PaymentProductKind ProductKind { get; init; }
+        public DateTime? UpdatedAt { get; init; }
+    }
+}

@@ -1,0 +1,333 @@
+using LocalMateAI.Application.DTOs.Common;
+using LocalMateAI.Application.DTOs.Places;
+using LocalMateAI.Application.DTOs.Tags;
+using LocalMateAI.Application.Interfaces.Repositories;
+using LocalMateAI.Domain.Entities;
+using LocalMateAI.Infrastructure.Persistence;
+using LocalMateAI.Infrastructure.Persistence.Querying;
+using LocalMateAI.Domain.Enums;
+using Microsoft.EntityFrameworkCore;
+using NetTopologySuite.Geometries;
+
+namespace LocalMateAI.Infrastructure.Repositories;
+
+public sealed class PlaceRepository(AppDbContext dbContext) : IPlaceRepository
+{
+    private static readonly SortMap<Place> AdminPlaceSortMap = new SortMap<Place>("name", false, p => p.Id)
+        .Add("name", p => p.Name)
+        .Add("address", p => p.Address)
+        .Add("category", p => p.Category)
+        .Add("status", p => p.Status)
+        .Add("isVerified", p => p.IsVerified)
+        .Add("estimatedCostMin", p => p.EstimatedCostMin)
+        .Add("estimatedCostMax", p => p.EstimatedCostMax)
+        .Add("createdAt", p => p.CreatedAt)
+        .Add("updatedAt", p => p.UpdatedAt);
+    public async Task<IReadOnlyList<MetroClusterPlaceReadModel>> GetMetroClusterPlacesAsync(
+        double radiusMeters,
+        CancellationToken cancellationToken = default)
+    {
+        return await dbContext.Database.SqlQuery<MetroClusterPlaceReadModel>(
+            $"""
+             SELECT nearest."StationId", nearest."StationName", nearest."StationOrder",
+                    nearest."StationLatitude", nearest."StationLongitude",
+                    p."Id" AS "PlaceId", p."Name" AS "PlaceName", p."Address" AS "PlaceAddress",
+                    ST_Y(p."Location") AS "PlaceLatitude",
+                    ST_X(p."Location") AS "PlaceLongitude",
+                    p."Category" AS "PlaceCategory",
+                    p."EstimatedCostMin", p."EstimatedCostMax", p."ImageUrl",
+                    nearest."DistanceFromStationMeters"
+             FROM "Places" p
+             CROSS JOIN LATERAL (
+                 SELECT ms."Id" AS "StationId", ms."Name" AS "StationName",
+                        ms."Order" AS "StationOrder",
+                        ST_Y(ms."Location") AS "StationLatitude",
+                        ST_X(ms."Location") AS "StationLongitude",
+                        ST_Distance(
+                            p."Location"::geography,
+                            ms."Location"::geography
+                        ) AS "DistanceFromStationMeters"
+                 FROM "MetroStations" ms
+                 ORDER BY "DistanceFromStationMeters", ms."Order", ms."Name", ms."Id"
+                 LIMIT 1
+             ) nearest
+             WHERE p."Status" = 'Active'
+               AND nearest."DistanceFromStationMeters" <= {radiusMeters}
+             """)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<Point?> GetLocationAsync(
+        Guid placeId,
+        CancellationToken cancellationToken = default)
+    {
+        return await dbContext.Places
+            .Where(place => place.Id == placeId)
+            .Select(place => place.Location)
+            .SingleOrDefaultAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<PlaceSummaryResponse>> GetActiveWithinRadiusAsync(
+        double latitude,
+        double longitude,
+        double radiusMeters,
+        PlaceCategory? category,
+        CancellationToken cancellationToken = default)
+    {
+        var categoryFilter = category?.ToString();
+
+        return await dbContext.Database.SqlQuery<PlaceSummaryResponse>(
+            $"""
+             SELECT p."Id", p."Name", p."Address",
+                    ST_Y(p."Location") AS "Latitude", ST_X(p."Location") AS "Longitude",
+                    p."Category", p."EstimatedCostMin", p."EstimatedCostMax", p."ImageUrl"
+             FROM "Places" p
+             WHERE p."Status" = 'Active'
+               AND ST_DWithin(
+                   p."Location"::geography,
+                   ST_SetSRID(ST_MakePoint({longitude}, {latitude}), 4326)::geography,
+                   {radiusMeters}
+               )
+               AND ({categoryFilter}::text IS NULL OR p."Category" = {categoryFilter})
+             ORDER BY p."Name"
+             """)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyDictionary<Guid, IReadOnlyList<Guid>>> GetPlaceTagIdsByPlaceIdsAsync(
+        IReadOnlyList<Guid> placeIds,
+        CancellationToken cancellationToken = default)
+    {
+        if (placeIds.Count == 0)
+        {
+            return new Dictionary<Guid, IReadOnlyList<Guid>>();
+        }
+
+        return (await dbContext.PlaceTags
+                .Where(placeTag => placeIds.Contains(placeTag.PlaceId))
+                .Select(placeTag => new { placeTag.PlaceId, placeTag.TagId })
+                .ToListAsync(cancellationToken))
+            .GroupBy(row => row.PlaceId)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<Guid>)group.Select(row => row.TagId).ToList());
+    }
+
+    public async Task<IReadOnlyList<AdminPlaceResponse>> GetAllForAdminAsync(
+        CancellationToken cancellationToken = default)
+    {
+        return await dbContext.Places
+            .AsNoTracking()
+            .Where(place => place.DeletedAt == null)
+            .OrderBy(place => place.Name)
+            .ThenBy(place => place.Id)
+            .Select(place => new AdminPlaceResponse(
+                place.Id,
+                place.Name,
+                place.Description,
+                place.Address,
+                place.Location.Y,
+                place.Location.X,
+                place.Category.ToString(),
+                place.Status.ToString(),
+                place.IsVerified,
+                place.EstimatedCostMin,
+                place.EstimatedCostMax,
+                place.ImageUrl,
+                place.CreatedAt,
+                place.UpdatedAt))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<PagedResult<AdminPlaceResponse>> GetPagedForAdminAsync(
+        AdminPlaceQuery query,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        var places = dbContext.Places.AsNoTracking().Where(place => place.DeletedAt == null);
+
+        if (query.NormalizedSearch is { } search)
+        {
+            var upper = search.ToUpperInvariant();
+            places = places.Where(place => place.Name.ToUpper().Contains(upper) || place.Address.ToUpper().Contains(upper));
+        }
+
+        if (query.Category is { } category)
+        {
+            places = places.Where(place => place.Category == category);
+        }
+
+        if (query.Status is { } status)
+        {
+            places = places.Where(place => place.Status == status);
+        }
+
+        if (query.IsVerified is { } isVerified)
+        {
+            places = places.Where(place => place.IsVerified == isVerified);
+        }
+
+        if (query.StationId is { } stationId)
+        {
+            var stationLocation = await dbContext.MetroStations
+                .Where(s => s.Id == stationId)
+                .Select(s => s.Location)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (stationLocation is not null)
+            {
+                places = places.Where(place => place.Location.IsWithinDistance(stationLocation, 1500));
+            }
+        }
+
+        return await places
+            .ApplySort(query, AdminPlaceSortMap)
+            .Select(place => new AdminPlaceResponse(
+                place.Id,
+                place.Name,
+                place.Description,
+                place.Address,
+                place.Location.Y,
+                place.Location.X,
+                place.Category.ToString(),
+                place.Status.ToString(),
+                place.IsVerified,
+                place.EstimatedCostMin,
+                place.EstimatedCostMax,
+                place.ImageUrl,
+                place.CreatedAt,
+                place.UpdatedAt))
+            .ToPagedResultAsync(query, cancellationToken);
+    }
+
+    public async Task<AdminPlaceResponse?> GetAdminByIdAsync(
+        Guid placeId,
+        CancellationToken cancellationToken = default)
+    {
+        return await dbContext.Places
+            .AsNoTracking()
+            .Where(place => place.Id == placeId && place.DeletedAt == null)
+            .Select(place => new AdminPlaceResponse(
+                place.Id,
+                place.Name,
+                place.Description,
+                place.Address,
+                place.Location.Y,
+                place.Location.X,
+                place.Category.ToString(),
+                place.Status.ToString(),
+                place.IsVerified,
+                place.EstimatedCostMin,
+                place.EstimatedCostMax,
+                place.ImageUrl,
+                place.CreatedAt,
+                place.UpdatedAt))
+            .SingleOrDefaultAsync(cancellationToken);
+    }
+
+    public Task<Place?> GetByIdAsync(
+        Guid placeId,
+        CancellationToken cancellationToken = default) =>
+        dbContext.Places.SingleOrDefaultAsync(place => place.Id == placeId, cancellationToken);
+
+    public async Task AddAsync(
+        Place place,
+        CancellationToken cancellationToken = default)
+    {
+        await dbContext.Places.AddAsync(place, cancellationToken);
+    }
+
+    public async Task SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<bool> TrySaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+            return true;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return false;
+        }
+    }
+
+    public async Task<DeletePlacePersistenceResult> DeleteForAdminAsync(
+        Guid placeId,
+        CancellationToken cancellationToken = default)
+    {
+        var now = DateTime.UtcNow;
+
+        // Xoá mềm: đặt Status = Inactive để mọi truy vấn "Status = 'Active'" hiện có tự loại địa điểm này,
+        // còn DeletedAt để ẩn khỏi Admin và chặn kích hoạt lại. Không xoá dòng hay PlaceTags.
+        var rowsChanged = await dbContext.Places
+            .Where(place => place.Id == placeId && place.DeletedAt == null)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(place => place.DeletedAt, (DateTime?)now)
+                .SetProperty(place => place.Status, PlaceStatus.Inactive)
+                .SetProperty(place => place.UpdatedAt, now), cancellationToken);
+
+        return rowsChanged == 1
+            ? DeletePlacePersistenceResult.Deleted
+            : DeletePlacePersistenceResult.NotFound;
+    }
+
+    public async Task<PlaceReadModel?> GetActiveByIdAsync(
+        Guid id,
+        CancellationToken cancellationToken = default)
+    {
+        var place = await dbContext.Places
+            .AsNoTracking()
+            .Where(candidate => candidate.Id == id && candidate.Status == PlaceStatus.Active)
+            .Select(candidate => new
+            {
+                candidate.Id,
+                candidate.Name,
+                candidate.Description,
+                candidate.Address,
+                Latitude = candidate.Location.Y,
+                Longitude = candidate.Location.X,
+                candidate.Category,
+                candidate.Status,
+                candidate.IsVerified,
+                candidate.EstimatedCostMin,
+                candidate.EstimatedCostMax,
+                candidate.ImageUrl
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (place is null)
+        {
+            return null;
+        }
+
+        var tags = await dbContext.PlaceTags
+            .AsNoTracking()
+            .Where(placeTag => placeTag.PlaceId == id && placeTag.Tag.IsActive)
+            .OrderBy(placeTag => placeTag.Tag.Name)
+            .Select(placeTag => new TagResponse(
+                placeTag.Tag.Id,
+                placeTag.Tag.Name,
+                placeTag.Tag.Type.ToString()))
+            .ToListAsync(cancellationToken);
+
+        return new PlaceReadModel(
+            place.Id,
+            place.Name,
+            place.Description,
+            place.Address,
+            place.Latitude,
+            place.Longitude,
+            place.Category.ToString(),
+            place.Status.ToString(),
+            place.IsVerified,
+            place.EstimatedCostMin,
+            place.EstimatedCostMax,
+            place.ImageUrl,
+            tags);
+    }
+}

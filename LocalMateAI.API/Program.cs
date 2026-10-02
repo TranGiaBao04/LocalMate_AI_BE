@@ -1,7 +1,40 @@
+using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
+using FluentValidation;
+using LocalMateAI.API;
+using LocalMateAI.API.Authorization;
+using LocalMateAI.API.BackgroundJobs;
 using LocalMateAI.API.Middlewares;
-using LocalMateAI.Application.Persistence;
+using LocalMateAI.Application.Commands;
+using LocalMateAI.Application.Payments;
+using LocalMateAI.Application.Interfaces.Payments;
+using LocalMateAI.Application.Interfaces.Repositories;
+using LocalMateAI.Application.Interfaces.Services;
+using LocalMateAI.Application.Services;
+using LocalMateAI.Application.Validators.Trips;
+using LocalMateAI.Domain.Enums;
+using LocalMateAI.Infrastructure.Email;
+using LocalMateAI.Infrastructure.Metro;
+using LocalMateAI.Infrastructure.Persistence;
+using LocalMateAI.Infrastructure.Payments;
+using LocalMateAI.Infrastructure.Repositories;
+using LocalMateAI.Infrastructure.Security;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi;
+using PayOS;
 using Serilog;
+
+try
+{
+    DotNetEnv.Env.TraversePath().Load();
+}
+catch (FileNotFoundException)
+{
+}
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -23,13 +56,246 @@ if (allowedOrigins.Length == 0)
     throw new InvalidOperationException("At least one CORS allowed origin must be configured.");
 }
 
-builder.Services.AddControllers();
+var jwtConfiguration = builder.Configuration.GetSection(JwtOptions.SectionName);
+var configuredJwtOptions = jwtConfiguration.Get<JwtOptions>() ?? new JwtOptions();
+var jwtValidationResult = new JwtOptionsValidator().Validate(
+    Options.DefaultName,
+    configuredJwtOptions);
+
+if (jwtValidationResult.Failed)
+{
+    throw new OptionsValidationException(
+        JwtOptions.SectionName,
+        typeof(JwtOptions),
+        jwtValidationResult.Failures);
+}
+
+JwtOptionsValidator.TryDecodeSigningKey(
+    configuredJwtOptions.SigningKey,
+    out var jwtSigningKeyBytes);
+var jwtSigningKey = new SymmetricSecurityKey(jwtSigningKeyBytes);
+
+var googleAuthConfiguration = builder.Configuration.GetSection(GoogleAuthOptions.SectionName);
+var configuredGoogleAuthOptions =
+    googleAuthConfiguration.Get<GoogleAuthOptions>() ?? new GoogleAuthOptions();
+var googleAuthValidationResult = new GoogleAuthOptionsValidator().Validate(
+    Options.DefaultName,
+    configuredGoogleAuthOptions);
+
+if (googleAuthValidationResult.Failed)
+{
+    throw new OptionsValidationException(
+        GoogleAuthOptions.SectionName,
+        typeof(GoogleAuthOptions),
+        googleAuthValidationResult.Failures);
+}
+
+var payOSConfiguration = builder.Configuration.GetSection(PayOSGatewayOptions.SectionName);
+var configuredPayOSOptions =
+    payOSConfiguration.Get<PayOSGatewayOptions>() ?? new PayOSGatewayOptions();
+
+builder.Services.AddControllers().AddJsonOptions(options =>
+    options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        Description = "Enter a JWT access token using the Bearer scheme."
+    });
+    options.OperationFilter<TripLibraryAuthorizationOperationFilter>();
+    options.MapType<FeedbackQuickTag>(() => new OpenApiSchema
+    {
+        Type = JsonSchemaType.String,
+        Enum =
+        [
+            JsonValue.Create(nameof(FeedbackQuickTag.Suitable)),
+            JsonValue.Create(nameof(FeedbackQuickTag.NotSuitable)),
+            JsonValue.Create(nameof(FeedbackQuickTag.TooDense)),
+            JsonValue.Create(nameof(FeedbackQuickTag.TooFewStops)),
+            JsonValue.Create(nameof(FeedbackQuickTag.TooExpensive)),
+            JsonValue.Create(nameof(FeedbackQuickTag.TooFar)),
+            JsonValue.Create(nameof(FeedbackQuickTag.PreferenceMismatch))
+        ]
+    });
+});
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+builder.Services.Configure<JwtOptions>(jwtConfiguration);
+builder.Services.Configure<GoogleAuthOptions>(googleAuthConfiguration);
+builder.Services.Configure<PayOSGatewayOptions>(payOSConfiguration);
+// Cấu hình OTP/SMTP được kiểm tra lúc dùng (không chặn khởi động) để ai chưa có App Password vẫn chạy được API.
+builder.Services.Configure<OtpOptions>(builder.Configuration.GetSection(OtpOptions.SectionName));
+builder.Services.AddSingleton<IValidateOptions<OtpOptions>, OtpOptionsValidator>();
+builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection(SmtpOptions.SectionName));
+builder.Services.AddSingleton<IValidateOptions<SmtpOptions>, SmtpOptionsValidator>();
+builder.Services.Configure<PasswordHasherOptions>(options =>
+{
+    options.CompatibilityMode = PasswordHasherCompatibilityMode.IdentityV3;
+    options.IterationCount = 220_000;
+});
+builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<IRoleRepository, RoleRepository>();
+builder.Services.AddScoped<ISystemRoleProvider, SystemRoleProvider>();
+builder.Services.AddScoped<IUserAccessRepository, UserAccessRepository>();
+builder.Services.AddScoped<IUserAccessService, UserAccessService>();
+builder.Services.AddScoped<IAdminOperationExecutor, AdminOperationExecutor>();
+builder.Services.AddScoped<IAdminRoleRepository, AdminRoleRepository>();
+builder.Services.AddScoped<IAdminRoleService, AdminRoleService>();
+builder.Services.AddScoped<IAdminPlanRepository, AdminPlanRepository>();
+builder.Services.AddScoped<IAdminPlanService, AdminPlanService>();
+builder.Services.AddScoped<IAdminTransactionRepository, AdminTransactionRepository>();
+builder.Services.AddScoped<IAdminTransactionService, AdminTransactionService>();
+builder.Services.AddScoped<IAdminDashboardRepository, AdminDashboardRepository>();
+builder.Services.AddScoped<IAdminDashboardService, AdminDashboardService>();
+builder.Services.AddScoped<IAdminStationRepository, AdminStationRepository>();
+builder.Services.AddScoped<IAdminStationService, AdminStationService>();
+builder.Services.AddScoped<ISystemSettingRepository, SystemSettingRepository>();
+builder.Services.AddScoped<ISystemSettingProvider, SystemSettingProvider>();
+builder.Services.AddScoped<IAdminSystemSettingService, AdminSystemSettingService>();
+builder.Services.AddScoped<IEntitlementRepairExecutor, EntitlementRepairExecutor>();
+builder.Services.AddScoped<IEntitlementRepairService, EntitlementRepairService>();
+builder.Services.AddScoped<IExternalLoginRepository, ExternalLoginRepository>();
+builder.Services.AddScoped<IPendingRegistrationRepository, PendingRegistrationRepository>();
+builder.Services.AddScoped<ITagRepository, TagRepository>();
+builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddScoped<ITagService, TagService>();
+builder.Services.AddScoped<IPasswordHashService, AspNetCorePasswordHashService>();
+builder.Services.AddScoped<IAccessTokenService, JwtAccessTokenService>();
+builder.Services.AddScoped<IGoogleIdentityTokenValidator, GoogleIdentityTokenValidator>();
+builder.Services.AddScoped<IEmailOtpCodeRepository, EmailOtpCodeRepository>();
+builder.Services.AddScoped<IEmailOutboxRepository, EmailOutboxRepository>();
+builder.Services.AddSingleton<IOtpCodeHasher, HmacOtpCodeHasher>();
+builder.Services.AddSingleton<IEmailTemplateRenderer, FluidEmailTemplateRenderer>();
+builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
+builder.Services.AddScoped<IEmailOtpService, EmailOtpService>();
+builder.Services.AddSingleton(EmailOutboxModelRegistry.Default);
+builder.Services.AddScoped<IEmailOutboxProcessor, EmailOutboxProcessor>();
+builder.Services.AddHostedService<EmailOutboxDispatcher>();
+builder.Services.AddScoped<IMetroStationRepository, MetroStationRepository>();
+builder.Services.AddScoped<IPlaceRepository, PlaceRepository>();
+builder.Services.AddScoped<ITripRepository, TripRepository>();
+builder.Services.AddScoped<ISubscriptionRepository, SubscriptionRepository>();
+builder.Services.AddScoped<IUsageEventRepository, UsageEventRepository>();
+builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
+builder.Services.AddScoped<IPaymentOrderRepository, PaymentOrderRepository>();
+builder.Services.AddScoped<ISingleItineraryRepository, SingleItineraryRepository>();
+builder.Services.AddScoped<IItineraryPurchaseService, ItineraryPurchaseService>();
+builder.Services.AddScoped<IPaymentEvidenceRepository, PaymentEvidenceRepository>();
+builder.Services.AddOptions<PaymentEvidenceOptions>().Bind(builder.Configuration.GetSection(PaymentEvidenceOptions.SectionName))
+    .ValidateOnStart();
+builder.Services.AddSingleton<IValidateOptions<PaymentEvidenceOptions>, PaymentEvidenceOptionsValidator>();
+builder.Services.AddHostedService<PaymentEvidenceRetentionWorker>();
+builder.Services.AddScoped<IPaymentOperationExecutor, PaymentOperationExecutor>();
+builder.Services.AddScoped<IPaymentSettlementExecutor, PaymentSettlementExecutor>();
+builder.Services.AddScoped<ITripFinalizeQuotaExecutor, TripFinalizeQuotaExecutor>();
+builder.Services.AddScoped<ITripGenerationQuotaExecutor, TripGenerationQuotaExecutor>();
+builder.Services.AddScoped<IPaymentService, PaymentService>();
+builder.Services.AddScoped<IPaymentCreditRepository, PaymentCreditRepository>();
+builder.Services.AddScoped<ISubscriptionUpgradeReservationService, SubscriptionUpgradeReservationService>();
+builder.Services.AddScoped<IPaymentSettlementService, PaymentSettlementService>();
+builder.Services.AddScoped<IPaymentReconciliationService, PaymentReconciliationService>();
+builder.Services.AddScoped<IPaymentReconciliationLeaseProvider, PaymentReconciliationLeaseProvider>();
+builder.Services.AddOptions<PaymentReconciliationOptions>()
+    .Bind(builder.Configuration.GetSection(PaymentReconciliationOptions.SectionName)).ValidateOnStart();
+builder.Services.AddSingleton<IValidateOptions<PaymentReconciliationOptions>, PaymentReconciliationOptionsValidator>();
+builder.Services.AddHostedService<PaymentReconciliationWorker>();
+builder.Services.AddScoped<IPaymentWebhookService, PaymentWebhookService>();
+if (configuredPayOSOptions.IsComplete())
+{
+    builder.Services.AddSingleton(configuredPayOSOptions);
+    builder.Services.AddSingleton(new PayOSClient(new PayOSOptions
+    {
+        ClientId = configuredPayOSOptions.ClientId,
+        ApiKey = configuredPayOSOptions.ApiKey,
+        ChecksumKey = configuredPayOSOptions.ChecksumKey,
+        LogLevel = LogLevel.None
+    }));
+    builder.Services.AddScoped<IPaymentGateway, PayOSPaymentGateway>();
+}
+else
+{
+    builder.Services.AddScoped<IPaymentGateway, UnavailablePaymentGateway>();
+}
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddScoped<IItineraryItemRepository, ItineraryItemRepository>();
+builder.Services.AddScoped<IFeedbackRepository, FeedbackRepository>();
+builder.Services.AddScoped<IPlaceReviewRepository, PlaceReviewRepository>();
+builder.Services.AddScoped<IGeoService, GeoService>();
+builder.Services.AddScoped<IPlaceQueryService, PlaceQueryService>();
+builder.Services.AddScoped<IAdminPlaceService, AdminPlaceService>();
+builder.Services.AddMemoryCache();
+builder.Services.AddScoped<IMasterDataService, MasterDataService>();
+// Đọc + kiểm tra metro-timetable.json ngay lúc khởi động: file sai thì app không chạy.
+builder.Services.AddSingleton<IMetroTimetableSource>(EmbeddedMetroTimetableSource.Load());
+builder.Services.AddScoped<IMetroTimetableService, MetroTimetableService>();
+builder.Services.AddScoped<ICuratedItineraryRepository, CuratedItineraryRepository>();
+builder.Services.AddScoped<ICuratedItineraryService, CuratedItineraryService>();
+builder.Services.AddValidatorsFromAssemblyContaining<TripRequestValidator>();
+builder.Services.AddScoped<ITripCriteriaNormalizationService, TripCriteriaNormalizationService>();
+builder.Services.AddScoped<ITripOriginResolverService, TripOriginResolverService>();
+builder.Services.AddScoped<ITripFeasibilityService, TripFeasibilityService>();
+builder.Services.AddScoped<IMetroClusterMatchingService, MetroClusterMatchingService>();
+builder.Services.AddScoped<ICandidateFilterService, CandidateFilterService>();
+builder.Services.AddScoped<ITagSimilarityScorer, TagSimilarityScorer>();
+builder.Services.AddScoped<IAlternativePlaceFinder, AlternativePlaceFinder>();
+builder.Services.AddScoped<IItineraryTimelineRecalculator, ItineraryTimelineRecalculator>();
+builder.Services.AddScoped<ITripMatchingService, TripMatchingService>();
+builder.Services.AddScoped<IHeuristicFallbackEngine, HeuristicFallbackEngine>();
+builder.Services.AddScoped<ITripService, TripService>();
+builder.Services.AddScoped<ITripAlternativesService, TripAlternativesService>();
+builder.Services.AddScoped<ITripItemReplacementService, TripItemReplacementService>();
+builder.Services.AddScoped<ITripItemDeletionService, TripItemDeletionService>();
+builder.Services.AddScoped<ITripDetailService, TripDetailService>();
+builder.Services.AddScoped<ITripDeletionService, TripDeletionService>();
+builder.Services.AddScoped<ICuratedTripService, CuratedTripService>();
+builder.Services.AddScoped<ITripGenerationService, TripGenerationService>();
+builder.Services.AddScoped<IFinalizeTripCommand, FinalizeTripCommand>();
+builder.Services.AddScoped<IForkTripCommand, ForkTripCommand>();
+builder.Services.AddScoped<IFeedbackService, FeedbackService>();
+builder.Services.AddScoped<IPlaceReviewService, PlaceReviewService>();
+
+// Register Application Services for Google Maps & Navigation (BE-60, BE-61, BE-62, BE-63)
+builder.Services.AddSingleton<IGoogleMapsUrlBuilderService, GoogleMapsUrlBuilderService>();
+builder.Services.AddSingleton<ICoordinatesValidationService, CoordinatesValidationService>();
+builder.Services.AddScoped<IRouteEstimateService, RouteEstimateService>();
+builder.Services.AddScoped<IMetroWalkingRouter, MetroWalkingRouter>();
+
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connectionString, npgsqlOptions => npgsqlOptions.UseNetTopologySuite()));
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.MapInboundClaims = false;
+        options.IncludeErrorDetails = false;
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = jwtSigningKey,
+            ValidateIssuer = true,
+            ValidIssuer = configuredJwtOptions.Issuer,
+            ValidateAudience = true,
+            ValidAudience = configuredJwtOptions.Audience,
+            ValidateLifetime = true,
+            RequireSignedTokens = true,
+            RequireExpirationTime = true,
+            ValidAlgorithms = [SecurityAlgorithms.HmacSha256],
+            ValidTypes = ["JWT"],
+            ClockSkew = TimeSpan.FromMinutes(1),
+            NameClaimType = "sub",
+            RoleClaimType = "role"
+        };
+    });
+builder.Services.AddLocalMateAuthorization();
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddPolicy(OtpRateLimitPolicy.Name, OtpRateLimitPolicy.Partition);
+    options.OnRejected = OtpRateLimitPolicy.OnRejectedAsync;
+});
 builder.Services.AddCors(options =>
     options.AddPolicy(frontendClientPolicy, policy =>
         policy.WithOrigins(allowedOrigins)
@@ -37,6 +303,26 @@ builder.Services.AddCors(options =>
             .AllowAnyMethod()));
 
 var app = builder.Build();
+
+using (var seedScope = app.Services.CreateScope())
+{
+    var seedDbContext = seedScope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await seedDbContext.Database.MigrateAsync();
+    await DataSeeder.SeedAsync(seedDbContext);
+
+    // BE-81: admin đầu tiên từ biến môi trường, chạy ở mọi môi trường (bỏ trống biến = không tạo).
+    var passwordHashService = seedScope.ServiceProvider.GetRequiredService<IPasswordHashService>();
+    await AdminAccountSeeder.SeedAsync(
+        seedDbContext,
+        passwordHashService,
+        app.Configuration.GetSection(AdminSeedOptions.SectionName).Get<AdminSeedOptions>() ?? new AdminSeedOptions(),
+        seedScope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("AdminSeed"));
+
+    if (app.Environment.IsDevelopment())
+    {
+        await DataSeeder.SeedDevelopmentUsersAsync(seedDbContext, passwordHashService);
+    }
+}
 
 if (app.Environment.IsDevelopment())
 {
@@ -48,7 +334,11 @@ app.UseSerilogRequestLogging();
 app.UseExceptionHandler();
 app.UseHttpsRedirection();
 app.UseCors(frontendClientPolicy);
+app.UseRateLimiter();
+app.UseAuthentication();
+app.UseMiddleware<AccountAccessMiddleware>();
 app.UseAuthorization();
+app.UseMiddleware<TripActionGuardMiddleware>();
 app.MapControllers();
 
 app.Run();

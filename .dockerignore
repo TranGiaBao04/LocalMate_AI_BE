@@ -1,0 +1,24 @@
+# .NET build artifacts
+**/bin/
+**/obj/
+
+# Git & tooling
+.git/
+.gitignore
+.hermes/
+
+# Secrets — KHÔNG bao giờ đưa .env vào image (chỉ compose đọc trên host để interpolate)
+.env
+.env.*
+!*.env.example
+
+# IDE / OS
+.vs/
+.idea/
+*.user
+Thumbs.db
+Desktop.ini
+
+# Logs
+*.log
+artifacts/
