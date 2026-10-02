@@ -9,6 +9,14 @@ namespace LocalMateAI.Infrastructure.Repositories;
 
 public sealed class TripRepository(AppDbContext dbContext) : ITripRepository
 {
+    public Task<int> CountNormalFinalizedByUserAsync(Guid userId, CancellationToken cancellationToken = default) =>
+        dbContext.Trips.AsNoTracking().CountAsync(t => t.UserId == userId && t.Status == TripStatus.Finalized
+            && t.DeletedAt == null && !dbContext.SingleItineraryEntitlements.Any(e =>
+                e.UserId == userId && e.ConsumedTripId == t.Id && e.ConsumedAt != null), cancellationToken);
+    public Task<Trip?> LockOwnedForFinalizeAsync(Guid tripId, Guid userId, CancellationToken ct = default) =>
+        dbContext.Trips.FromSqlInterpolated(
+            $"""SELECT * FROM "Trips" WHERE "Id" = {tripId} AND "UserId" = {userId} AND "DeletedAt" IS NULL FOR UPDATE""")
+            .AsNoTracking().SingleOrDefaultAsync(ct);
     public Task<int> CountFinalizedByUserAsync(
         Guid userId,
         CancellationToken cancellationToken = default) =>

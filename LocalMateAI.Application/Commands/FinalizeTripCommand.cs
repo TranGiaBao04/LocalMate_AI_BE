@@ -16,13 +16,18 @@ public sealed class FinalizeTripCommand(
     ITripFinalizeQuotaExecutor quotaExecutor,
     IUserRepository userRepository,
     IEmailOutboxRepository emailOutboxRepository,
-    TimeProvider timeProvider) : IFinalizeTripCommand
+    TimeProvider timeProvider,
+    ISingleItineraryRepository? singleRepository = null) : IFinalizeTripCommand
 {
-    public async Task<FinalizeTripResult> ExecuteAsync(
+    public Task<FinalizeTripResult> ExecuteAsync(
         Guid userId,
         Guid tripId,
+        CancellationToken cancellationToken = default) => ExecuteAsync(userId, tripId, new FinalizeTripRequest(), cancellationToken);
+
+    public async Task<FinalizeTripResult> ExecuteAsync(Guid userId, Guid tripId, FinalizeTripRequest request,
         CancellationToken cancellationToken = default)
     {
+        if (!request.IsValid) return new(FinalizeTripResultStatus.InvalidFunding);
         if (tripId == Guid.Empty)
         {
             return FinalizeTripResult.InvalidTrip();
@@ -32,30 +37,43 @@ public sealed class FinalizeTripCommand(
             userId,
             async transactionCancellationToken =>
             {
-                var trip = await tripRepository.GetByIdAsync(tripId, transactionCancellationToken);
+                var trip = await tripRepository.LockOwnedForFinalizeAsync(tripId, userId, transactionCancellationToken);
                 if (trip is null || trip.UserId != userId)
                 {
                     return FinalizeTripResult.MissingTrip();
                 }
 
+                LocalMateAI.Domain.Entities.SingleItineraryEntitlement? entitlement = null;
+                if (request.FundingSource == "SingleEntitlement")
+                {
+                    entitlement = singleRepository is null ? null :
+                        await singleRepository.LockOwnedAsync(request.EntitlementId!.Value, userId, transactionCancellationToken);
+                    if (entitlement is null) return new FinalizeTripResult(FinalizeTripResultStatus.EntitlementNotFound);
+                    if (entitlement.ConsumedAt is not null)
+                    {
+                        if (entitlement.ConsumedTripId == tripId && trip.Status == TripStatus.Finalized)
+                            return FinalizeTripResult.Succeeded(new(tripId, "Finalized")
+                            { FundingSource = "SingleEntitlement", EntitlementId = entitlement.Id, ConsumedAt = entitlement.ConsumedAt });
+                        return new FinalizeTripResult(FinalizeTripResultStatus.EntitlementConsumed);
+                    }
+                }
                 if (trip.Status == TripStatus.Finalized)
                 {
                     return FinalizeTripResult.AlreadyFinalized();
                 }
 
                 var nowUtc = timeProvider.GetUtcNow().UtcDateTime;
-                var effective = await EffectiveSubscriptionResolver.ResolveAsync(
-                    subscriptionRepository, userId, nowUtc, transactionCancellationToken);
-                var plan = effective.Version;
-
-                if (plan.SavedTripLimit is { } limit)
+                var limit = entitlement is null
+                    ? (await EffectiveSubscriptionResolver.ResolveAsync(subscriptionRepository, userId, nowUtc,
+                        transactionCancellationToken)).Version.SavedTripLimit : null;
+                if (limit is { } finiteLimit)
                 {
-                    var used = await tripRepository.CountFinalizedByUserAsync(
+                    var used = await tripRepository.CountNormalFinalizedByUserAsync(
                         userId,
                         transactionCancellationToken);
-                    if (used >= limit)
+                    if (used >= finiteLimit)
                     {
-                        return FinalizeTripResult.QuotaExceeded(used, limit);
+                        return FinalizeTripResult.QuotaExceeded(used, finiteLimit);
                     }
                 }
 
@@ -68,9 +86,15 @@ public sealed class FinalizeTripCommand(
                     return FinalizeTripResult.MissingTrip();
                 }
 
+                if (entitlement is not null)
+                {
+                    entitlement.Consume(tripId, nowUtc);
+                    await singleRepository!.SaveChangesAsync(transactionCancellationToken);
+                }
                 await EnqueueItineraryEmailAsync(userId, tripId, nowUtc, transactionCancellationToken);
                 return FinalizeTripResult.Succeeded(
-                    new FinalizeTripResponse(tripId, TripStatus.Finalized.ToString()));
+                    new FinalizeTripResponse(tripId, TripStatus.Finalized.ToString())
+                    { FundingSource = request.FundingSource, EntitlementId = entitlement?.Id, ConsumedAt = entitlement?.ConsumedAt });
             },
             cancellationToken);
 

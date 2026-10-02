@@ -195,7 +195,9 @@ public sealed class TripsController(
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<FinalizeTripResponse>> FinalizeTripAsync(
         Guid tripId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)]
+        FinalizeTripRequest? request = null)
     {
         var subject = User.FindFirst("sub")?.Value;
         if (!Guid.TryParse(subject, out var userId) || userId == Guid.Empty)
@@ -206,10 +208,16 @@ public sealed class TripsController(
                 "invalid_identity"));
         }
 
-        var result = await tripService.FinalizeTripAsync(userId, tripId, cancellationToken);
+        var result = await tripService.FinalizeTripAsync(userId, tripId, request ?? new FinalizeTripRequest(), cancellationToken);
         return result.Status switch
         {
             FinalizeTripResultStatus.Success => Ok(result.Response),
+            FinalizeTripResultStatus.InvalidFunding => BadRequest(CreateProblem(400,
+                "Finalize funding is invalid.", "invalid_finalize_funding")),
+            FinalizeTripResultStatus.EntitlementNotFound => NotFound(CreateProblem(404,
+                "Entitlement was not found.", "entitlement_not_found")),
+            FinalizeTripResultStatus.EntitlementConsumed => Conflict(CreateProblem(409,
+                "Entitlement has already been consumed.", "entitlement_consumed")),
             FinalizeTripResultStatus.InvalidTripId =>
                 BadRequest(CreateProblem(
                     StatusCodes.Status400BadRequest,

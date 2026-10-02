@@ -266,13 +266,14 @@ public sealed class EntitlementRepairPostgresTests
             Assert.Empty(await c.EntitlementRepairAudits.ToListAsync());
             Assert.Equal(3, await c.SubscriptionPlans.CountAsync());
             Assert.False(c.Database.HasPendingModelChanges());
-            Assert.Equal("20261001041525_AddEntitlementRepairAudits", (await c.Database.GetAppliedMigrationsAsync()).Last());
+            Assert.Contains("20261001041525_AddEntitlementRepairAudits", await c.Database.GetAppliedMigrationsAsync());
         }
         await using var db = await IsolatedPlanDatabase.CreateAsync(targetMigration: "20260930174809_AddPaymentEvidenceHistory");
+        await using var previous = db.ContextBeforeSingleItinerary();
+        var orders = await AdminTransactionPostgresTests.SeedAsync(previous);
+        var before = JsonSerializer.Serialize(await previous.PaymentOrders.AsNoTracking().OrderBy(o => o.Id).ToArrayAsync());
+        var periods = JsonSerializer.Serialize(await previous.SubscriptionPeriods.AsNoTracking().OrderBy(p => p.Id).ToArrayAsync());
         await using var upgrade = db.Context();
-        var orders = await AdminTransactionPostgresTests.SeedAsync(upgrade);
-        var before = JsonSerializer.Serialize(await upgrade.PaymentOrders.AsNoTracking().OrderBy(o => o.Id).ToArrayAsync());
-        var periods = JsonSerializer.Serialize(await upgrade.SubscriptionPeriods.AsNoTracking().OrderBy(p => p.Id).ToArrayAsync());
         await upgrade.GetService<IMigrator>().MigrateAsync();
         Assert.Equal(before, JsonSerializer.Serialize(await upgrade.PaymentOrders.AsNoTracking().OrderBy(o => o.Id).ToArrayAsync()));
         Assert.Equal(periods, JsonSerializer.Serialize(await upgrade.SubscriptionPeriods.AsNoTracking().OrderBy(p => p.Id).ToArrayAsync()));

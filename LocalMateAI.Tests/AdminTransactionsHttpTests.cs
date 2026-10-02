@@ -170,7 +170,9 @@ public sealed class AdminTransactionsHttpTests
         private readonly WebApplication app;
         internal HttpClient Client { get; }
         internal Host(IAdminTransactionService? service = null, IPaymentReconciliationService? reconciliation = null,
-            IEntitlementRepairService? repair = null)
+            IEntitlementRepairService? repair = null,
+            LocalMateAI.Application.Interfaces.Services.IItineraryPurchaseService? purchases = null,
+            LocalMateAI.Application.Interfaces.Services.ITripService? trips = null)
         {
             var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "ContractTests" });
             builder.WebHost.UseTestServer();
@@ -178,6 +180,13 @@ public sealed class AdminTransactionsHttpTests
             builder.Services.AddSingleton(service ?? AdminTransactionTests.Service(new AdminTransactionTests.RecordingRepository()));
             if (reconciliation is not null) builder.Services.AddSingleton(reconciliation);
             if (repair is not null) builder.Services.AddSingleton(repair);
+            if (purchases is not null) builder.Services.AddSingleton(purchases);
+            if (trips is not null)
+            {
+                foreach (var p in typeof(LocalMateAI.API.Controllers.TripsController).GetConstructors().Single().GetParameters())
+                    builder.Services.AddSingleton(p.ParameterType, p.ParameterType == typeof(ITripService) ? trips :
+                        System.Reflection.DispatchProxy.Create(p.ParameterType, typeof(SingleItineraryFinalizeHttpTests.Unused)));
+            }
             builder.Services.AddSingleton<IUserAccessService, Access>();
             builder.Services.AddAuthentication("TransactionTest")
                 .AddScheme<AuthenticationSchemeOptions, Authentication>("TransactionTest", _ => { });

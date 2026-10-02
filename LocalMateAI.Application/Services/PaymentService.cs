@@ -67,7 +67,7 @@ public sealed class PaymentService(
             orderId,
             userId,
             cancellationToken);
-        if (order is null)
+        if (order is null || order.ProductKind != PaymentProductKind.SubscriptionPlan)
         {
             return new PaymentOrderLookupResult(PaymentOrderLookupStatus.NotFound);
         }

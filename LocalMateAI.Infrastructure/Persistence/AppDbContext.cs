@@ -24,6 +24,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, TimePro
     public DbSet<SubscriptionPlanVersionFeature> SubscriptionPlanVersionFeatures => Set<SubscriptionPlanVersionFeature>();
     public DbSet<SubscriptionPeriod> SubscriptionPeriods => Set<SubscriptionPeriod>();
     public DbSet<PaymentOrder> PaymentOrders => Set<PaymentOrder>();
+    public DbSet<SingleItineraryProductVersion> SingleItineraryProductVersions => Set<SingleItineraryProductVersion>();
+    public DbSet<SingleItineraryEntitlement> SingleItineraryEntitlements => Set<SingleItineraryEntitlement>();
     public DbSet<PaymentWebhookReceipt> PaymentWebhookReceipts => Set<PaymentWebhookReceipt>();
     public DbSet<PaymentOrderStatusHistory> PaymentOrderStatusHistories => Set<PaymentOrderStatusHistory>();
     public DbSet<EntitlementRepairAudit> EntitlementRepairAudits => Set<EntitlementRepairAudit>();
@@ -64,6 +66,33 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, TimePro
 
     private void ApplyAudit()
     {
+        if (ChangeTracker.Entries<SingleItineraryProductVersion>().Any(e => e.State is EntityState.Modified or EntityState.Deleted)
+            || ChangeTracker.Entries<SingleItineraryProductVersion>().Any(e => e.State == EntityState.Added &&
+                (e.Entity.Price <= 0 || e.Entity.Price != decimal.Truncate(e.Entity.Price) || e.Entity.VersionNumber <= 0)))
+            throw new InvalidOperationException("Single itinerary contracts are immutable positive whole-VND versions.");
+        foreach (var entry in ChangeTracker.Entries<SingleItineraryEntitlement>())
+        {
+            if (entry.State == EntityState.Deleted) throw new InvalidOperationException("Entitlement evidence cannot be deleted.");
+            if (entry.State != EntityState.Modified) continue;
+            if (entry.Properties.Any(p => p.IsModified && p.Metadata.Name is not
+                    (nameof(SingleItineraryEntitlement.ConsumedAt) or nameof(SingleItineraryEntitlement.ConsumedTripId)))
+                || entry.OriginalValues.GetValue<DateTime?>(nameof(SingleItineraryEntitlement.ConsumedAt)) is not null
+                || entry.OriginalValues.GetValue<Guid?>(nameof(SingleItineraryEntitlement.ConsumedTripId)) is not null
+                || entry.Entity.ConsumedAt is null || entry.Entity.ConsumedTripId is null
+                || entry.Entity.ConsumedAt < entry.Entity.GrantedAt)
+                throw new InvalidOperationException("Entitlement provenance is immutable and consumption is one-way.");
+        }
+        foreach (var entry in ChangeTracker.Entries<PaymentOrder>().Where(e => e.State == EntityState.Modified))
+        {
+            if (entry.Properties.Any(p => p.IsModified && p.Metadata.Name == nameof(PaymentOrder.ProductKind)) ||
+                (entry.Entity.ProductKind == LocalMateAI.Domain.Enums.PaymentProductKind.SingleItinerary &&
+                entry.Properties.Any(p => p.IsModified && p.Metadata.Name is
+                    nameof(PaymentOrder.UserId) or nameof(PaymentOrder.Amount) or nameof(PaymentOrder.ProviderOrderCode)
+                    or nameof(PaymentOrder.SingleItineraryProductVersionId) or nameof(PaymentOrder.CheckoutAttemptId)
+                    or nameof(PaymentOrder.Type) or nameof(PaymentOrder.PlanCode) or nameof(PaymentOrder.PlanId)
+                    or nameof(PaymentOrder.PlanVersionId) or nameof(PaymentOrder.PlanVersionBinding))))
+                throw new InvalidOperationException("Purchased product snapshot is immutable.");
+        }
         if (ChangeTracker.Entries<EntitlementRepairAudit>().Any(e => e.State is EntityState.Modified or EntityState.Deleted))
             throw new InvalidOperationException("Entitlement repair audits are insert-only.");
         if (ChangeTracker.Entries<PaymentOrderStatusHistory>().Any(e => e.State is EntityState.Modified or EntityState.Deleted))

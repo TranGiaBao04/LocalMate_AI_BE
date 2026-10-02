@@ -22,7 +22,10 @@ public sealed record EntitlementRepairServiceResult(bool InvalidRequest, Entitle
 
 // Safe server-side projections shared by the detail snapshot and the repair executor.
 public sealed record RepairOrderEvidence(Guid Id, Guid UserId, Guid? PlanId, Guid? PlanVersionId,
-    PlanVersionBinding Binding, PaymentOrderStatus Status, decimal Amount, DateTime? PaidAt);
+    PlanVersionBinding? Binding, PaymentOrderStatus Status, decimal Amount, DateTime? PaidAt)
+{
+    public PaymentProductKind ProductKind { get; init; } = PaymentProductKind.SubscriptionPlan;
+}
 public sealed record RepairVersionEvidence(Guid Id, Guid PlanId, string PlanCode, decimal Price, int? DurationDays);
 public sealed record RepairPurchaseEvidence(RepairOrderEvidence Order, RepairVersionEvidence? Version);
 public sealed record EntitlementRepairEvidence(bool UserExists, RepairPurchaseEvidence Target,

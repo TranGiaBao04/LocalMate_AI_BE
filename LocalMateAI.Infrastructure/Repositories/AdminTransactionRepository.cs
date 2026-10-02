@@ -35,7 +35,7 @@ public sealed class AdminTransactionRepository(AppDbContext context, TimeProvide
                 PlanName = plan != null ? plan.Name : null, OperationType = order.Type, Status = order.Status,
                 Amount = order.Amount, CreatedAt = order.CreatedAt, ExpiresAt = order.ExpiresAt, PaidAt = order.PaidAt,
                 PlanId = order.PlanId, PlanVersionId = order.PlanVersionId,
-                PlanVersionBinding = order.PlanVersionBinding, UpdatedAt = order.UpdatedAt
+                PlanVersionBinding = order.PlanVersionBinding, UpdatedAt = order.UpdatedAt, ProductKind = order.ProductKind
             };
 
     // List, aggregate, export and detail share the same safe transaction projection.
@@ -84,17 +84,23 @@ public sealed class AdminTransactionRepository(AppDbContext context, TimeProvide
                 r.RawPayloadRetainUntil, r.RawPayloadPurgedAt)).ToListAsync(cancellationToken);
         var evidence = await EntitlementRepairEvidenceReader.ReadAsync(context,
             new RepairOrderEvidence(row.Id, row.UserId, row.PlanId, row.PlanVersionId,
-                row.PlanVersionBinding, row.Status, row.Amount, row.PaidAt), cancellationToken);
+                row.PlanVersionBinding, row.Status, row.Amount, row.PaidAt) { ProductKind = row.ProductKind }, cancellationToken);
         var assessment = EntitlementRepairAssessmentPolicy.Assess(evidence, (timeProvider ?? TimeProvider.System).GetUtcNow().UtcDateTime);
         var repairs = await context.EntitlementRepairAudits.AsNoTracking().Where(a => a.PaymentOrderId == id)
             .OrderByDescending(a => a.OccurredAt).ThenByDescending(a => a.Id)
             .Select(a => new EntitlementRepairHistoryResponse(a.Id, a.SubscriptionPeriodId, a.ActorUserId,
                 a.Reason, a.Outcome.ToString(), a.DecisionCode, a.ReconstructionMode, a.OccurredAt)).ToListAsync(cancellationToken);
+        var single = row.ProductKind == PaymentProductKind.SingleItinerary
+            ? await context.SingleItineraryEntitlements.AsNoTracking().Where(e => e.SourcePaymentOrderId == id)
+            .Select(e => new LocalMateAI.Application.DTOs.ItineraryPurchases.SingleItineraryEntitlementResponse(
+                e.Id, e.GrantedAt, e.ConsumedAt, e.ConsumedTripId, e.ConsumedAt == null)).SingleOrDefaultAsync(cancellationToken)
+            : null;
         await transaction.CommitAsync(cancellationToken);
-        return new(new(Response(row), row.PlanId, row.PlanVersionId, row.PlanVersionBinding.ToString(), row.UpdatedAt),
+        return new(new(Response(row), row.PlanId, row.PlanVersionId, row.PlanVersionBinding?.ToString(), row.UpdatedAt),
             history, receipts)
         {
-            Entitlement = assessment.Entitlement, RepairEligibility = assessment.Eligibility, RepairHistory = repairs
+            Entitlement = assessment.Entitlement, RepairEligibility = assessment.Eligibility, RepairHistory = repairs,
+            SingleItineraryEntitlement = single
         };
     }
 
@@ -128,7 +134,7 @@ public sealed class AdminTransactionRepository(AppDbContext context, TimeProvide
     }
 
     private static AdminTransactionResponse Response(TransactionRow r) => new(r.Id, r.ProviderOrderCode,
-        r.UserId, r.UserFullName, r.UserEmail, "SubscriptionPlan", r.PlanCode, r.PlanName,
+        r.UserId, r.UserFullName, r.UserEmail, r.ProductKind.ToString(), r.PlanCode, r.PlanName,
         r.OperationType.ToString(), r.Status.ToString(), r.Amount, "VND", r.CreatedAt, r.ExpiresAt, r.PaidAt);
 
     private sealed class TransactionRow
@@ -149,7 +155,8 @@ public sealed class AdminTransactionRepository(AppDbContext context, TimeProvide
         public DateTime? PaidAt { get; init; }
         public Guid? PlanId { get; init; }
         public Guid? PlanVersionId { get; init; }
-        public PlanVersionBinding PlanVersionBinding { get; init; }
+        public PlanVersionBinding? PlanVersionBinding { get; init; }
+        public PaymentProductKind ProductKind { get; init; }
         public DateTime? UpdatedAt { get; init; }
     }
 }

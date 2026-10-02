@@ -46,7 +46,7 @@ public sealed class SubscriptionService(
         var month = VietnamMonthWindow.For(nowUtc);
         var generateUsed = await EffectiveSubscriptionResolver.CountGenerateAsync(
             usageEventRepository, userId, effective, nowUtc, cancellationToken);
-        var savedTripsUsed = await tripRepository.CountFinalizedByUserAsync(userId, cancellationToken);
+        var savedTripsUsed = await tripRepository.CountNormalFinalizedByUserAsync(userId, cancellationToken);
 
         return new SubscriptionMeResponse(
             PlanIdentity.PublicCode(effective.Plan.Code),

@@ -10,6 +10,18 @@ public sealed class PaymentOrderConfiguration : IEntityTypeConfiguration<Payment
     {
         builder.ToTable("PaymentOrders");
         builder.HasKey(order => order.Id);
+        builder.Property(o => o.ProductKind).HasConversion<string>().HasMaxLength(30)
+            .HasDefaultValue(LocalMateAI.Domain.Enums.PaymentProductKind.SubscriptionPlan);
+        builder.HasOne<SingleItineraryProductVersion>().WithMany()
+            .HasForeignKey(o => o.SingleItineraryProductVersionId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(o => new { o.UserId, o.CheckoutAttemptId }).IsUnique()
+            .HasFilter("\"ProductKind\" = 'SingleItinerary'");
+        builder.ToTable("PaymentOrders", t => t.HasCheckConstraint("CK_PaymentOrders_Product",
+            "(\"ProductKind\" = 'SubscriptionPlan' AND \"PlanVersionBinding\" IS NOT NULL " +
+            "AND \"SingleItineraryProductVersionId\" IS NULL AND \"CheckoutAttemptId\" IS NULL) OR " +
+            "(\"ProductKind\" = 'SingleItinerary' AND \"Type\" = 'Purchase' " +
+            "AND \"SingleItineraryProductVersionId\" IS NOT NULL AND \"CheckoutAttemptId\" IS NOT NULL " +
+            "AND \"PlanCode\" IS NULL AND \"PlanId\" IS NULL AND \"PlanVersionId\" IS NULL AND \"PlanVersionBinding\" IS NULL)"));
         builder.Property(order => order.PlanCode).HasConversion<string>().HasMaxLength(20).IsRequired(false);
         builder.Property(order => order.PlanVersionBinding).HasConversion<string>().HasMaxLength(30);
         builder.ToTable("PaymentOrders", t => t.HasCheckConstraint("CK_PaymentOrders_NativeBinding",

@@ -105,7 +105,7 @@ public sealed class PaymentEvidencePostgresTests
         async Task<string> Snapshot(string table)
         {
             if (!tables.Contains(table)) throw new ArgumentException("Not a snapshot table.");
-            var sql = $"SELECT COALESCE(jsonb_agg(to_jsonb(t) ORDER BY to_jsonb(t)::text),'[]'::jsonb)::text AS \"Value\" FROM \"{table}\" t";
+            var sql = $"SELECT COALESCE(jsonb_agg(to_jsonb(t)-'ProductKind'-'CheckoutAttemptId'-'SingleItineraryProductVersionId' ORDER BY to_jsonb(t)::text),'[]'::jsonb)::text AS \"Value\" FROM \"{table}\" t";
             return await c.Database.SqlQueryRaw<string>(sql).SingleAsync();
         }
         foreach (var table in tables) before[table] = await Snapshot(table);
