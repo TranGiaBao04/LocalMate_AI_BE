@@ -79,7 +79,9 @@ public sealed class SubscriptionUpgradeSettlementPostgresTests
         var history = await c.PaymentOrderStatusHistories.AsNoTracking().SingleAsync(h => h.PaymentOrderId == o.Id && h.ToStatus == PaymentOrderStatus.Paid);
         Assert.Equal(Now, history.OccurredAt);
         Assert.Null(await new PaymentOrderRepository(c, Clock).GetBlockingSubscriptionAsync(o.UserId));
-        Assert.False(await c.EmailOutboxMessages.AnyAsync(e => e.DeduplicationKey == $"payment-receipt:{o.Id}"));
+        Assert.Equal(LocalMateAI.Application.DTOs.Email.EmailTemplateNames.UpgradePaymentReceipt,
+            (await c.EmailOutboxMessages.SingleAsync(e => e.DeduplicationKey == $"payment-receipt:{o.Id}")).TemplateName);
+        Assert.Equal(1, await c.EmailOutboxMessages.CountAsync(e => e.DeduplicationKey == $"payment-receipt:{o.Id}"));
     }
 
     [Fact]
@@ -334,6 +336,7 @@ public sealed class SubscriptionUpgradeSettlementPostgresTests
         Assert.Null((await seed.SubscriptionPeriods.AsNoTracking().SingleAsync()).TerminatedAt);
         Assert.False(await seed.SubscriptionPeriods.AnyAsync(p => p.SourcePaymentOrderId == o.Id));
         Assert.Equal(count, await seed.PaymentOrderStatusHistories.CountAsync());
+        Assert.False(await seed.EmailOutboxMessages.AnyAsync(e => e.DeduplicationKey == $"payment-receipt:{o.Id}"));
     }
 
     private sealed class FailSave(string phase) : SaveChangesInterceptor
@@ -369,6 +372,7 @@ public sealed class SubscriptionUpgradeSettlementPostgresTests
         Assert.False(await seed.SubscriptionPeriods.AnyAsync(p => p.SourcePaymentOrderId == o.Id));
         Assert.Empty(await seed.UserSubscriptions.ToListAsync());
         Assert.Single(await seed.PaymentOrderStatusHistories.Where(h => h.PaymentOrderId == o.Id && h.ToStatus == PaymentOrderStatus.ReviewRequired).ToListAsync());
+        Assert.False(await seed.EmailOutboxMessages.AnyAsync(e => e.DeduplicationKey == $"payment-receipt:{o.Id}"));
     }
 
     private sealed class InjectTargetOverlap : SaveChangesInterceptor

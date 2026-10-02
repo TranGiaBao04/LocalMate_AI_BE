@@ -30,10 +30,17 @@ public sealed record AdminTransactionFilter(string? Search, PaymentOrderStatus? 
 public record AdminTransactionResponse(Guid Id, long ProviderOrderCode,
     Guid UserId, string UserFullName, string UserEmail, string ProductKind,
     string? PlanCode, string? PlanName, string OperationType, string Status,
-    decimal Amount, string Currency, DateTime CreatedAt, DateTime ExpiresAt, DateTime? PaidAt);
+    decimal Amount, string Currency, DateTime CreatedAt, DateTime ExpiresAt, DateTime? PaidAt)
+{
+    public decimal CreditAmount { get; init; }
+    public decimal ListPrice => Amount + CreditAmount;
+}
 
 public sealed record AdminTransactionSummary(long TotalTransactions, long PaidCount, long PendingCount,
-    long FailedCount, long ExpiredCount, decimal GrossRevenue, string Currency);
+    long FailedCount, long ExpiredCount, decimal GrossRevenue, string Currency)
+{
+    public long ReviewRequiredCount { get; init; }
+}
 
 public sealed record AdminTransactionExportRows(long MatchingRows, IReadOnlyList<AdminTransactionResponse> Rows);
 public sealed record AdminTransactionCsvFile(byte[] Content, string FileName);

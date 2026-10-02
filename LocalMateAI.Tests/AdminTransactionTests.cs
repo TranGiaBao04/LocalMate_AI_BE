@@ -170,11 +170,12 @@ public sealed class AdminTransactionTests
         var row = Row with { PlanName = name, PaidAt = null };
         var rows = ParseCsv(AdminTransactionCsv.Write([row]));
         Assert.Equal(AdminTransactionCsv.Header.Split(','), rows[0]);
-        Assert.Equal(15, rows[1].Length);
+        Assert.Equal(16, rows[1].Length);
         Assert.Equal(name ?? "", rows[1][10]);
         Assert.Equal("", rows[1][3]);
         Assert.Equal("SubscriptionPlan", rows[1][8]);
-        Assert.Equal("VND", rows[1][14]);
+        Assert.Equal("0", rows[1][14]);
+        Assert.Equal("VND", rows[1][15]);
     }
 
     internal static List<string[]> ParseCsv(byte[] content)

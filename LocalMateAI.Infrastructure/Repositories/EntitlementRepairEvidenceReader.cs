@@ -11,7 +11,8 @@ internal static class EntitlementRepairEvidenceReader
     {
         var order = await context.PaymentOrders.AsNoTracking().Where(o => o.Id == orderId)
             .Select(o => new RepairOrderEvidence(o.Id, o.UserId, o.PlanId, o.PlanVersionId,
-                o.PlanVersionBinding, o.Status, o.Amount, o.PaidAt) { ProductKind = o.ProductKind, Type = o.Type }).SingleOrDefaultAsync(ct);
+                o.PlanVersionBinding, o.Status, o.Amount, o.PaidAt)
+                { ProductKind = o.ProductKind, Type = o.Type, CreditAmount = o.CreditAmount }).SingleOrDefaultAsync(ct);
         return order is null ? null : await ReadAsync(context, order, ct);
     }
 
@@ -23,18 +24,23 @@ internal static class EntitlementRepairEvidenceReader
         var purchases = await (
             from o in context.PaymentOrders.AsNoTracking()
             where o.ProductKind == PaymentProductKind.SubscriptionPlan &&
-                (o.Id == order.Id || (o.UserId == order.UserId && o.PlanId == order.PlanId && o.Status == PaymentOrderStatus.Paid))
+                (o.Id == order.Id || o.UserId == order.UserId)
             join v in context.SubscriptionPlanVersions.AsNoTracking() on o.PlanVersionId equals (Guid?)v.Id into versions
             from v in versions.DefaultIfEmpty()
             join p in context.SubscriptionPlans.AsNoTracking() on o.PlanId equals (Guid?)p.Id into plans
             from p in plans.DefaultIfEmpty()
             select new RepairPurchaseEvidence(
-                new(o.Id, o.UserId, o.PlanId, o.PlanVersionId, o.PlanVersionBinding, o.Status, o.Amount, o.PaidAt) { Type = o.Type },
+                new(o.Id, o.UserId, o.PlanId, o.PlanVersionId, o.PlanVersionBinding, o.Status, o.Amount, o.PaidAt)
+                    { Type = o.Type, CreditAmount = o.CreditAmount },
                 v != null && p != null ? new RepairVersionEvidence(v.Id, v.PlanId, p.Code, v.Price, v.DurationDays) : null))
             .ToListAsync(ct);
+        var orderIds = purchases.Select(p => p.Order.Id).ToArray();
+        var claims = await context.PaymentOrderCredits.AsNoTracking()
+            .Where(c => orderIds.Contains(c.OrderId)).OrderBy(c => c.OrderId).ThenBy(c => c.PeriodId).ToListAsync(ct);
+        var sourceIds = claims.Select(c => c.PeriodId).ToArray();
         var periods = await context.SubscriptionPeriods.AsNoTracking()
-            .Where(p => (p.UserId == order.UserId && p.PlanId == order.PlanId) || p.SourcePaymentOrderId == order.Id)
+            .Where(p => p.UserId == order.UserId || p.SourcePaymentOrderId == order.Id || sourceIds.Contains(p.Id))
             .ToListAsync(ct);
-        return new(userExists, purchases.Single(p => p.Order.Id == order.Id), purchases, periods);
+        return new(userExists, purchases.Single(p => p.Order.Id == order.Id), purchases, periods) { Claims = claims };
     }
 }

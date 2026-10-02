@@ -34,6 +34,7 @@ public sealed class AdminTransactionRepository(AppDbContext context, TimeProvide
                 CatalogPlanCode = plan != null ? plan.Code : null,
                 PlanName = plan != null ? plan.Name : null, OperationType = order.Type, Status = order.Status,
                 Amount = order.Amount, CreatedAt = order.CreatedAt, ExpiresAt = order.ExpiresAt, PaidAt = order.PaidAt,
+                CreditAmount = order.CreditAmount,
                 PlanId = order.PlanId, PlanVersionId = order.PlanVersionId,
                 PlanVersionBinding = order.PlanVersionBinding, UpdatedAt = order.UpdatedAt, ProductKind = order.ProductKind
             };
@@ -84,8 +85,11 @@ public sealed class AdminTransactionRepository(AppDbContext context, TimeProvide
                 r.RawPayloadRetainUntil, r.RawPayloadPurgedAt)).ToListAsync(cancellationToken);
         var evidence = await EntitlementRepairEvidenceReader.ReadAsync(context,
             new RepairOrderEvidence(row.Id, row.UserId, row.PlanId, row.PlanVersionId,
-                row.PlanVersionBinding, row.Status, row.Amount, row.PaidAt) { ProductKind = row.ProductKind, Type = row.OperationType }, cancellationToken);
+                row.PlanVersionBinding, row.Status, row.Amount, row.PaidAt)
+                { ProductKind = row.ProductKind, Type = row.OperationType, CreditAmount = row.CreditAmount }, cancellationToken);
         var assessment = EntitlementRepairAssessmentPolicy.Assess(evidence, (timeProvider ?? TimeProvider.System).GetUtcNow().UtcDateTime);
+        var creditSources = row.OperationType == PaymentOrderType.Upgrade
+            ? await GetCreditSourcesAsync(row, cancellationToken) : [];
         var repairs = await context.EntitlementRepairAudits.AsNoTracking().Where(a => a.PaymentOrderId == id)
             .OrderByDescending(a => a.OccurredAt).ThenByDescending(a => a.Id)
             .Select(a => new EntitlementRepairHistoryResponse(a.Id, a.SubscriptionPeriodId, a.ActorUserId,
@@ -100,7 +104,7 @@ public sealed class AdminTransactionRepository(AppDbContext context, TimeProvide
             history, receipts)
         {
             Entitlement = assessment.Entitlement, RepairEligibility = assessment.Eligibility, RepairHistory = repairs,
-            SingleItineraryEntitlement = single
+            SingleItineraryEntitlement = single, CreditSources = creditSources
         };
     }
 
@@ -117,7 +121,8 @@ public sealed class AdminTransactionRepository(AppDbContext context, TimeProvide
         await Filtered(filter).GroupBy(_ => 1).Select(g => new AdminTransactionSummary(g.LongCount(),
             g.LongCount(r => r.Status == PaymentOrderStatus.Paid), g.LongCount(r => r.Status == PaymentOrderStatus.Pending),
             g.LongCount(r => r.Status == PaymentOrderStatus.Failed), g.LongCount(r => r.Status == PaymentOrderStatus.Expired),
-            g.Sum(r => r.Status == PaymentOrderStatus.Paid ? r.Amount : 0m), "VND"))
+            g.Sum(r => r.Status == PaymentOrderStatus.Paid ? r.Amount : 0m), "VND")
+            { ReviewRequiredCount = g.LongCount(r => r.Status == PaymentOrderStatus.ReviewRequired) })
             .SingleOrDefaultAsync(cancellationToken) ?? new(0, 0, 0, 0, 0, 0m, "VND");
 
     public async Task<AdminTransactionExportRows> GetExportRowsAsync(AdminTransactionFilter filter, int maxRows,
@@ -135,7 +140,39 @@ public sealed class AdminTransactionRepository(AppDbContext context, TimeProvide
 
     private static AdminTransactionResponse Response(TransactionRow r) => new(r.Id, r.ProviderOrderCode,
         r.UserId, r.UserFullName, r.UserEmail, r.ProductKind.ToString(), r.PlanCode, r.PlanName,
-        r.OperationType.ToString(), r.Status.ToString(), r.Amount, "VND", r.CreatedAt, r.ExpiresAt, r.PaidAt);
+        r.OperationType.ToString(), r.Status.ToString(), r.Amount, "VND", r.CreatedAt, r.ExpiresAt, r.PaidAt)
+        { CreditAmount = r.CreditAmount };
+
+    private async Task<IReadOnlyList<AdminTransactionCreditSourceResponse>> GetCreditSourcesAsync(TransactionRow order, CancellationToken ct)
+    {
+        var sources = await (from c in context.PaymentOrderCredits.AsNoTracking()
+            where c.OrderId == order.Id
+            join p in context.SubscriptionPeriods.AsNoTracking() on c.PeriodId equals p.Id into periods
+            from p in periods.DefaultIfEmpty()
+            join plan in context.SubscriptionPlans.AsNoTracking() on p.PlanId equals plan.Id into plans
+            from plan in plans.DefaultIfEmpty()
+            orderby c.PeriodId
+            select new { Claim = c, Period = p, Code = plan != null ? plan.Code : null, Name = plan != null ? plan.Name : null })
+            .ToListAsync(ct);
+        return sources.Select(s =>
+        {
+            var c = s.Claim;
+            var consistent = c.UserId == order.UserId && s.Period is { } p
+                && p.UserId == order.UserId && p.EndsAt == c.OriginalEndsAt;
+            var released = c.HasValidReleaseEvidence() && c.ReleaseProviderRequestedAmount == order.Amount;
+            var consumed = consistent && c.ReleasedAt is null && !c.HasAnyReleaseEvidence()
+                && order.Status == PaymentOrderStatus.Paid && order.PaidAt is not null
+                && s.Period!.TerminatedAt == order.PaidAt && s.Period.TerminatedByOrderId == order.Id;
+            var reserved = consistent && c.ReleasedAt is null && !c.HasAnyReleaseEvidence()
+                && order.Status is PaymentOrderStatus.Pending or PaymentOrderStatus.Failed or PaymentOrderStatus.Expired
+                && s.Period!.TerminatedAt is null && s.Period.TerminatedByOrderId is null;
+            var state = consistent && released ? "Released" : consumed ? "Consumed" : reserved ? "Reserved" : "Conflict";
+            return new AdminTransactionCreditSourceResponse(s.Code, s.Name, c.OriginalEndsAt, c.RemainingDays,
+                c.CalculatedCreditAmount, state, s.Period?.TerminatedAt, c.ReleasedAt,
+                released ? new(c.ReleaseProviderCheckedAt!.Value, c.ReleaseProviderStatus!, c.ReleaseProviderRequestedAmount!.Value,
+                    c.ReleaseProviderAmountPaid!.Value, c.ReleaseProviderAmountRemaining!.Value, c.ReleaseReasonCode!) : null);
+        }).ToArray();
+    }
 
     private sealed class TransactionRow
     {
@@ -150,6 +187,7 @@ public sealed class AdminTransactionRepository(AppDbContext context, TimeProvide
         public PaymentOrderType OperationType { get; init; }
         public PaymentOrderStatus Status { get; init; }
         public decimal Amount { get; init; }
+        public decimal CreditAmount { get; init; }
         public DateTime CreatedAt { get; init; }
         public DateTime ExpiresAt { get; init; }
         public DateTime? PaidAt { get; init; }

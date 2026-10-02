@@ -31,15 +31,16 @@ public sealed class SubscriptionUpgradeSettlementTests
         var checkout = await f.Service.CheckoutAsync(User, "Membership");
         Assert.Equal(PaymentIntentResultStatus.Success, checkout.Status);
         var o = Assert.Single(f.Orders.Items);
-        // These collaborators must never be touched by S4 Upgrade receipt handling.
-        var service = new PaymentSettlementService(new Executor(o), f.Subscriptions, null!, null!,
+        var service = new PaymentSettlementService(new Executor(o), f.Subscriptions,
+            new PaymentSettlementServiceTests.FakeUserRepository(new() { Id = User, FullName = "Upgrade buyer", Email = "upgrade@test.invalid" }),
+            new PaymentSettlementServiceTests.FakeEmailOutboxRepository(),
             new PlanVersionFoundationPostgresTests.Clock(Now), NullLogger<PaymentSettlementService>.Instance,
             creditRepository: f.Credits);
         return (f, o, service);
     }
 
     [Fact]
-    public async Task SuccessUsesPinnedPriceAndOneTimestamp_FullTerm_NoReceipt_NoRecalculation()
+    public async Task SuccessUsesPinnedPriceAndOneTimestamp_FullTerm_NoRecalculation()
     {
         var (f, o, service) = await Prepared();
         Assert.NotEqual(o.CreditAmount, f.Credits.Rows.Sum(c => c.CalculatedCreditAmount));
@@ -173,17 +174,17 @@ public sealed class SubscriptionUpgradeSettlementTests
     }
 
     [Fact]
-    public async Task UpgradeRepairIsExplicitlyNotApplicableEvenWithExistingGrant()
+    public async Task UpgradeRepairWithoutConsumptionProofFailsClosedEvenWithExistingGrant()
     {
         var (f, o, service) = await Prepared();
         await service.ApplyVerifiedPaymentAsync(new(o.ProviderOrderCode, o.Amount, true));
         var order = new RepairOrderEvidence(o.Id, o.UserId, o.PlanId, o.PlanVersionId, o.PlanVersionBinding,
-            o.Status, o.Amount, o.PaidAt) { Type = PaymentOrderType.Upgrade };
+            o.Status, o.Amount, o.PaidAt) { Type = PaymentOrderType.Upgrade, CreditAmount = o.CreditAmount };
         var v = f.Subscriptions.Versions.Single(v => v.Id == o.PlanVersionId);
         var purchase = new RepairPurchaseEvidence(order, new(v.Id, v.PlanId, "MEMBERSHIP", v.Price, v.DurationDays));
         var assessed = EntitlementRepairAssessmentPolicy.Assess(new(true, purchase, [purchase], f.Subscriptions.Periods), Now);
-        Assert.False(assessed.Eligibility.Eligible); Assert.Equal("NotApplicable", assessed.Entitlement.GrantStatus);
-        Assert.Equal("upgrade_repair_not_supported", assessed.Eligibility.Code);
+        Assert.False(assessed.Eligibility.Eligible); Assert.Equal("Conflict", assessed.Entitlement.GrantStatus);
+        Assert.Equal("upgrade_consumption_unproven", assessed.Eligibility.Code);
     }
 
     [Fact]
