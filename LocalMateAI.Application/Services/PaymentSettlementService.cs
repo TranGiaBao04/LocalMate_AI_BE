@@ -50,6 +50,10 @@ public sealed class PaymentSettlementService(
             return new PaymentSettlementResult(PaymentSettlementStatus.AlreadyPaid);
         }
 
+        // Foundation only: no Upgrade grant before reservation/replacement settlement is implemented.
+        if (order.Type == PaymentOrderType.Upgrade)
+            return new PaymentSettlementResult(PaymentSettlementStatus.InvalidPaidPlan);
+
         if (!notification.IsSuccessful)
         {
             order.Status = PaymentOrderStatus.Failed;

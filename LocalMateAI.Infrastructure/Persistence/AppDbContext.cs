@@ -24,6 +24,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, TimePro
     public DbSet<SubscriptionPlanVersionFeature> SubscriptionPlanVersionFeatures => Set<SubscriptionPlanVersionFeature>();
     public DbSet<SubscriptionPeriod> SubscriptionPeriods => Set<SubscriptionPeriod>();
     public DbSet<PaymentOrder> PaymentOrders => Set<PaymentOrder>();
+    public DbSet<PaymentOrderCredit> PaymentOrderCredits => Set<PaymentOrderCredit>();
     public DbSet<SingleItineraryProductVersion> SingleItineraryProductVersions => Set<SingleItineraryProductVersion>();
     public DbSet<SingleItineraryEntitlement> SingleItineraryEntitlements => Set<SingleItineraryEntitlement>();
     public DbSet<PaymentWebhookReceipt> PaymentWebhookReceipts => Set<PaymentWebhookReceipt>();
@@ -67,6 +68,48 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, TimePro
 
     private void ApplyAudit()
     {
+        foreach (var entry in ChangeTracker.Entries<PaymentOrder>())
+        {
+            if (entry.State is not (EntityState.Added or EntityState.Modified)) continue;
+            if (entry.Entity.CreditAmount < 0 || entry.Entity.CreditAmount != decimal.Truncate(entry.Entity.CreditAmount)
+                || (entry.Entity.CreditAmount != 0 &&
+                    (entry.Entity.Type != LocalMateAI.Domain.Enums.PaymentOrderType.Upgrade
+                     || entry.Entity.ProductKind != LocalMateAI.Domain.Enums.PaymentProductKind.SubscriptionPlan))
+                || (entry.State == EntityState.Modified &&
+                    entry.Properties.Any(p => p.IsModified && p.Metadata.Name == nameof(PaymentOrder.CreditAmount))))
+                throw new InvalidOperationException("Credit must be an immutable whole-VND SubscriptionPlan Upgrade snapshot.");
+        }
+        foreach (var entry in ChangeTracker.Entries<PaymentOrderCredit>())
+        {
+            if (entry.State == EntityState.Deleted)
+                throw new InvalidOperationException("Credit evidence cannot be deleted.");
+            if (entry.State == EntityState.Added &&
+                (entry.Entity.ReleasedAt is not null || entry.Entity.OriginalEndsAt.Kind != DateTimeKind.Utc
+                 || entry.Entity.RemainingDays < 0 || entry.Entity.CalculatedCreditAmount < 0
+                 || entry.Entity.CalculatedCreditAmount != decimal.Truncate(entry.Entity.CalculatedCreditAmount)))
+                throw new InvalidOperationException("Credit snapshots require UTC dates and non-negative whole-VND values.");
+            if (entry.State == EntityState.Modified &&
+                (entry.Properties.Any(p => p.IsModified && p.Metadata.Name != nameof(PaymentOrderCredit.ReleasedAt))
+                 || entry.OriginalValues.GetValue<DateTime?>(nameof(PaymentOrderCredit.ReleasedAt)) is not null
+                 || entry.Entity.ReleasedAt is not { Kind: DateTimeKind.Utc }))
+                throw new InvalidOperationException("Credit evidence is immutable; release is a one-way UTC transition.");
+        }
+        foreach (var entry in ChangeTracker.Entries<SubscriptionPeriod>())
+        {
+            if (entry.State == EntityState.Deleted)
+                throw new InvalidOperationException("Entitlement periods cannot be deleted.");
+            if (entry.State == EntityState.Added &&
+                (entry.Entity.TerminatedAt is not null || entry.Entity.TerminatedByOrderId is not null))
+                throw new InvalidOperationException("New periods cannot be pre-terminated.");
+            if (entry.State == EntityState.Modified &&
+                (entry.Properties.Any(p => p.IsModified && p.Metadata.Name is not
+                    (nameof(SubscriptionPeriod.TerminatedAt) or nameof(SubscriptionPeriod.TerminatedByOrderId)))
+                 || entry.OriginalValues.GetValue<DateTime?>(nameof(SubscriptionPeriod.TerminatedAt)) is not null
+                 || entry.OriginalValues.GetValue<Guid?>(nameof(SubscriptionPeriod.TerminatedByOrderId)) is not null
+                 || entry.Entity.TerminatedAt is not { Kind: DateTimeKind.Utc }
+                 || entry.Entity.TerminatedByOrderId is null || entry.Entity.TerminatedByOrderId == Guid.Empty))
+                throw new InvalidOperationException("Period evidence is immutable; only one-way Upgrade termination is allowed.");
+        }
         if (ChangeTracker.Entries<SingleItineraryProductVersion>().Any(e => e.State is EntityState.Modified or EntityState.Deleted)
             || ChangeTracker.Entries<SingleItineraryProductVersion>().Any(e => e.State == EntityState.Added &&
                 (e.Entity.Price <= 0 || e.Entity.Price != decimal.Truncate(e.Entity.Price) || e.Entity.VersionNumber <= 0)))
@@ -114,7 +157,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, TimePro
                 throw new InvalidOperationException("Webhook metadata is immutable; only expired raw payload can be purged.");
         }
         if (ChangeTracker.Entries().Any(e =>
-            (e.Entity is SubscriptionPlanVersion or SubscriptionPeriod or SubscriptionPlanVersionFeature)
+            (e.Entity is SubscriptionPlanVersion or SubscriptionPlanVersionFeature)
             && e.State is EntityState.Modified or EntityState.Deleted))
             throw new InvalidOperationException("Published versions, their features and entitlement periods are immutable.");
 
@@ -133,7 +176,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, TimePro
                 entry.Entity.CreatedAt = now;
                 entry.Entity.UpdatedAt = now;
             }
-            else if (entry.State == EntityState.Modified)
+            else if (entry.State == EntityState.Modified && entry.Entity is not SubscriptionPeriod)
             {
                 entry.Property(entity => entity.CreatedAt).IsModified = false;
                 entry.Entity.UpdatedAt = now;

@@ -15,6 +15,7 @@ public sealed class PaymentOrder : BaseEntity
     public Guid? CheckoutAttemptId { get; set; }
     public PaymentOrderType Type { get; set; }
     public decimal Amount { get; set; }
+    public decimal CreditAmount { get; set; }
     public PaymentOrderStatus Status { get; set; }
     public long ProviderOrderCode { get; set; }
     public string? CheckoutUrl { get; set; }

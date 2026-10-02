@@ -62,9 +62,17 @@ internal sealed class BeforeSingleItineraryModelCustomizer(ModelCustomizerDepend
         base.Customize(modelBuilder, context);
         modelBuilder.Ignore<SingleItineraryEntitlement>();
         modelBuilder.Ignore<SingleItineraryProductVersion>();
+        modelBuilder.Ignore<PaymentOrderCredit>();
+        var period = modelBuilder.Entity<SubscriptionPeriod>();
+        foreach (var fk in period.Metadata.GetForeignKeys()
+                     .Where(f => f.Properties.Any(p => p.Name == nameof(SubscriptionPeriod.TerminatedByOrderId))).ToArray())
+            period.Metadata.RemoveForeignKey(fk);
+        period.Ignore(p => p.TerminatedAt);
+        period.Ignore(p => p.TerminatedByOrderId);
         var order = modelBuilder.Entity<PaymentOrder>();
         order.Ignore(o => o.ProductKind);
         order.Ignore(o => o.CheckoutAttemptId);
         order.Ignore(o => o.SingleItineraryProductVersionId);
+        order.Ignore(o => o.CreditAmount);
     }
 }

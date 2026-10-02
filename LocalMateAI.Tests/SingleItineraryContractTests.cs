@@ -17,7 +17,7 @@ public sealed class SingleItineraryContractTests
     public void FrozenProduct_IsSeparatePermanentFinalize_29000()
     {
         Assert.Equal(29000m, SingleItineraryBaseline.Version().Price);
-        Assert.Equal(new[] { "Purchase", "Renewal" }, Enum.GetNames<PaymentOrderType>());
+        Assert.Equal(new[] { "Purchase", "Renewal", "Upgrade" }, Enum.GetNames<PaymentOrderType>());
         Assert.Equal(new[] { "Generate" }, Enum.GetNames<UsageEventType>());
         Assert.DoesNotContain(typeof(SingleItineraryEntitlement).GetProperties(), p => p.Name is "ExpiresAt" or "DurationDays");
     }

@@ -11,6 +11,8 @@ public sealed class SubscriptionPeriodConfiguration : IEntityTypeConfiguration<S
         {
             t.HasCheckConstraint("CK_Periods_Range", "\"StartsAt\" < \"EndsAt\"");
             t.HasCheckConstraint("CK_Periods_Source", "(\"SourcePaymentOrderId\" IS NOT NULL) <> (\"LegacyUserSubscriptionId\" IS NOT NULL)");
+            t.HasCheckConstraint("CK_Periods_Termination",
+                "(\"TerminatedAt\" IS NULL) = (\"TerminatedByOrderId\" IS NULL)");
         });
         b.HasKey(p => p.Id);
         b.HasAlternateKey(p => new { p.Id, p.UserId });
@@ -27,5 +29,7 @@ public sealed class SubscriptionPeriodConfiguration : IEntityTypeConfiguration<S
             .HasForeignKey(p => new { p.SourcePaymentOrderId, p.UserId })
             .HasPrincipalKey(o => new { o.Id, o.UserId }).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<UserSubscription>().WithMany().HasForeignKey(p => p.LegacyUserSubscriptionId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<PaymentOrder>().WithMany().HasForeignKey(p => new { p.TerminatedByOrderId, p.UserId })
+            .HasPrincipalKey(o => new { o.Id, o.UserId }).OnDelete(DeleteBehavior.Restrict);
     }
 }
