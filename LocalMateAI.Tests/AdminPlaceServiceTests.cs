@@ -1,3 +1,4 @@
+using LocalMateAI.Application.DTOs.Common;
 using LocalMateAI.Application.DTOs.Places;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Services;
@@ -51,6 +52,24 @@ public sealed class AdminPlaceServiceTests
         Assert.Equal(nameof(PlaceStatus.Pending), result.Response!.Status);
         Assert.False(result.Response.IsVerified);
         Assert.Equal(1, repository.SaveChangesCalls);
+    }
+
+    [Fact]
+    public async Task GetPagedAsync_ValidQuery_ReturnsPagedResult()
+    {
+        var place = ExistingPlace(PlaceStatus.Active);
+        var repository = new FakePlaceRepository(place);
+        var service = new AdminPlaceService(repository, new CoordinatesValidationService());
+        var query = new AdminPlaceQuery { Page = 1, PageSize = 10, Search = "Test" };
+
+        var result = await service.GetPagedAsync(query);
+
+        Assert.NotNull(result);
+        Assert.Equal(1, result.Page);
+        Assert.Equal(10, result.PageSize);
+        Assert.Equal(1, result.TotalCount);
+        Assert.Single(result.Items);
+        Assert.Equal(place.Id, result.Items[0].Id);
     }
 
     [Theory]
@@ -447,6 +466,31 @@ public sealed class AdminPlaceServiceTests
         public Task<IReadOnlyList<AdminPlaceResponse>> GetAllForAdminAsync(
             CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<AdminPlaceResponse>>([]);
+
+        public Task<PagedResult<AdminPlaceResponse>> GetPagedForAdminAsync(
+            AdminPlaceQuery query,
+            CancellationToken cancellationToken = default)
+        {
+            var items = place is null ? Array.Empty<AdminPlaceResponse>() : new[]
+            {
+                new AdminPlaceResponse(
+                    place.Id,
+                    place.Name,
+                    place.Description,
+                    place.Address,
+                    place.Location.Y,
+                    place.Location.X,
+                    place.Category.ToString(),
+                    place.Status.ToString(),
+                    place.IsVerified,
+                    place.EstimatedCostMin,
+                    place.EstimatedCostMax,
+                    place.ImageUrl,
+                    place.CreatedAt,
+                    place.UpdatedAt)
+            };
+            return Task.FromResult(PagedResult<AdminPlaceResponse>.Create(items, query.Page, query.PageSize, items.Length));
+        }
 
         public Task<AdminPlaceResponse?> GetAdminByIdAsync(
             Guid placeId,

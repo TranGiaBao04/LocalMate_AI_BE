@@ -1,3 +1,4 @@
+using LocalMateAI.Application.DTOs.Common;
 using LocalMateAI.Application.DTOs.Places;
 using LocalMateAI.Domain.Entities;
 using LocalMateAI.Domain.Enums;
@@ -27,6 +28,10 @@ public interface IPlaceRepository
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<AdminPlaceResponse>> GetAllForAdminAsync(
+        CancellationToken cancellationToken = default);
+
+    Task<PagedResult<AdminPlaceResponse>> GetPagedForAdminAsync(
+        AdminPlaceQuery query,
         CancellationToken cancellationToken = default);
 
     Task<AdminPlaceResponse?> GetAdminByIdAsync(

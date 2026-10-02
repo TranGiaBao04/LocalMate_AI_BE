@@ -1,4 +1,5 @@
 using LocalMateAI.Application.DTOs.Geo;
+using LocalMateAI.Application.DTOs.Common;
 using LocalMateAI.Application.DTOs.Places;
 using LocalMateAI.Application.DTOs.Trips;
 using LocalMateAI.Application.Interfaces.Repositories;
@@ -364,6 +365,11 @@ public sealed class TripItemReplacementServiceTests
             throw new NotSupportedException();
 
         public Task<IReadOnlyList<AdminPlaceResponse>> GetAllForAdminAsync(
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<PagedResult<AdminPlaceResponse>> GetPagedForAdminAsync(
+            AdminPlaceQuery query,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
