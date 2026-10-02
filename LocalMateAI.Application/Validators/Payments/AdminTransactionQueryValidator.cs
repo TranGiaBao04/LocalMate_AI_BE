@@ -19,9 +19,9 @@ public sealed class AdminTransactionFilterQueryValidator : AbstractValidator<Adm
         RuleFor(q => q.Search).Must(s => s is null || s.Trim().Length <= PagedQuery.MaxSearchLength)
             .WithMessage($"Search must not exceed {PagedQuery.MaxSearchLength} characters.");
         RuleFor(q => q.Status).Must(s => s is null || ParseEnum<PaymentOrderStatus>(s) is not null)
-            .WithMessage("Status must be Pending, Paid, Failed or Expired.");
+            .WithMessage("Status must be Pending, Paid, Failed, Expired or ReviewRequired.");
         RuleFor(q => q.OperationType).Must(s => s is null || ParseEnum<PaymentOrderType>(s) is not null)
-            .WithMessage("OperationType must be Purchase or Renewal.");
+            .WithMessage("OperationType must be Purchase, Renewal or Upgrade.");
         RuleFor(q => q.CreatedFrom).Must(s => s is null || ParseTimestamp(s) is not null)
             .WithMessage("CreatedFrom must be an ISO timestamp with Z or an explicit UTC offset.");
         RuleFor(q => q.CreatedTo).Must(s => s is null || ParseTimestamp(s) is not null)

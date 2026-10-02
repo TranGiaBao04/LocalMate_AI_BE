@@ -4,6 +4,7 @@ using LocalMateAI.Infrastructure.Persistence;
 using LocalMateAI.Application.Payments;
 using LocalMateAI.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace LocalMateAI.Infrastructure.Repositories;
 
@@ -53,12 +54,35 @@ public sealed class PaymentSettlementExecutor(AppDbContext dbContext, TimeProvid
             cancellationToken);
         await dbContext.Entry(order).ReloadAsync(cancellationToken);
         var before = order.Status;
+        var isUpgrade = order.ProductKind == PaymentProductKind.SubscriptionPlan
+            && order.Type == PaymentOrderType.Upgrade && typeof(T) == typeof(PaymentSettlementResult);
+        if (isUpgrade) await transaction.CreateSavepointAsync("upgrade_grant", cancellationToken);
         var result = await operation(order, cancellationToken);
         if (order.Status != before)
             dbContext.PaymentOrderStatusHistories.Add(context.History(order, before,
-                (timeProvider ?? TimeProvider.System).GetUtcNow().UtcDateTime,
+                (result as PaymentSettlementResult)?.OccurredAt ?? (timeProvider ?? TimeProvider.System).GetUtcNow().UtcDateTime,
                 (result as PaymentSettlementResult)?.TransitionReasonCode));
-        await dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (isUpgrade && order.Status == PaymentOrderStatus.Paid
+            && ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.ExclusionViolation,
+                ConstraintName: "EX_Periods_UserPlan_NoOverlap" })
+        {
+            // An out-of-band target insert can win after the overlap read. Undo the entire grant,
+            // but retain the earlier User/Order locks while recording durable financial review.
+            await transaction.RollbackToSavepointAsync("upgrade_grant", cancellationToken);
+            dbContext.ChangeTracker.Clear();
+            order = await dbContext.PaymentOrders.SingleAsync(o => o.ProviderOrderCode == providerOrderCode, cancellationToken);
+            order.Status = PaymentOrderStatus.ReviewRequired;
+            var occurredAt = (result as PaymentSettlementResult)!.OccurredAt!.Value;
+            var conflict = new PaymentSettlementResult(PaymentSettlementStatus.CreditConflict)
+            { OccurredAt = occurredAt, TransitionReasonCode = "upgrade_credit_conflict" };
+            dbContext.PaymentOrderStatusHistories.Add(context.History(order, before, occurredAt, conflict.TransitionReasonCode));
+            await dbContext.SaveChangesAsync(cancellationToken);
+            result = (T)(object)conflict;
+        }
         await transaction.CommitAsync(cancellationToken);
 
         return new PaymentSettlementExecution<T>(true, result);

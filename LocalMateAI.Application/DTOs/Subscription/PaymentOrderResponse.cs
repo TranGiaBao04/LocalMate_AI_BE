@@ -6,4 +6,9 @@ public sealed record PaymentOrderResponse(
     string PlanCode,
     decimal Amount,
     DateTime ExpiresAt,
-    DateTime? PaidAt);
+    DateTime? PaidAt)
+{
+    public string Type { get; init; } = "Purchase";
+    public decimal ListPrice { get; init; } = Amount;
+    public decimal CreditAmount { get; init; }
+}

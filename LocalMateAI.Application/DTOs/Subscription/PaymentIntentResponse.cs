@@ -5,4 +5,10 @@ public sealed record PaymentIntentResponse(
     string QrCode,
     string CheckoutUrl,
     decimal Amount,
-    DateTime ExpiresAt);
+    DateTime ExpiresAt)
+{
+    public string Status { get; init; } = "Pending";
+    public string Type { get; init; } = "Purchase";
+    public decimal ListPrice { get; init; } = Amount;
+    public decimal CreditAmount { get; init; }
+}

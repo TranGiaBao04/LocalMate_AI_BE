@@ -14,7 +14,7 @@ public sealed class SubscriptionUpgradeFoundationPostgresTests
 {
     private static readonly DateTime Now = new(2026, 10, 2, 4, 0, 0, DateTimeKind.Utc);
     private const string Previous = "20261002035306_AddSystemSettings";
-    private const string Migration = "20261002044046_AddSubscriptionUpgradeFoundation";
+    private const string Migration = SubscriptionUpgradeReservationPostgresTests.Migration;
 
     private static async Task<(PaymentOrder Order, SubscriptionPeriod Period)> Source(AppDbContext c, int future = 0)
     {
@@ -105,10 +105,10 @@ public sealed class SubscriptionUpgradeFoundationPostgresTests
         var outbox = await c.EmailOutboxMessages.CountAsync();
         var result = await PlanVersionFoundationPostgresTests.Settlement(c,
             new PlanVersionFoundationPostgresTests.Clock(Now)).ApplyVerifiedPaymentAsync(new(order.ProviderOrderCode, order.Amount, true));
-        Assert.Equal(PaymentSettlementStatus.InvalidPaidPlan, result.Status);
-        Assert.Equal(PaymentOrderStatus.Pending, (await c.PaymentOrders.AsNoTracking().SingleAsync(o => o.Id == order.Id)).Status);
+        Assert.Equal(PaymentSettlementStatus.CreditConflict, result.Status);
+        Assert.Equal(PaymentOrderStatus.ReviewRequired, (await c.PaymentOrders.AsNoTracking().SingleAsync(o => o.Id == order.Id)).Status);
         Assert.Equal(periods, await c.SubscriptionPeriods.CountAsync());
-        Assert.Equal(history, await c.PaymentOrderStatusHistories.CountAsync());
+        Assert.Equal(history + 1, await c.PaymentOrderStatusHistories.CountAsync());
         Assert.Equal(outbox, await c.EmailOutboxMessages.CountAsync());
     }
 
@@ -148,11 +148,13 @@ public sealed class SubscriptionUpgradeFoundationPostgresTests
         await using var c = db.Context();
         var (source, p) = await Source(c);
         var a = await Upgrade(c, source.UserId, 0);
-        var b = await Upgrade(c, source.UserId, 0);
         await Claim(c, a, p, 0);
+        a.Status = PaymentOrderStatus.Failed;
+        await c.SaveChangesAsync();
+        var b = await Upgrade(c, source.UserId, 0);
         await Assert.ThrowsAsync<PostgresException>(() => InsertCredit(c, b.Id, p.Id, source.UserId, p.EndsAt, value: 0));
         var row = await c.PaymentOrderCredits.SingleAsync();
-        row.Release(Now);
+        row.Release(Now, new(Now, "Cancelled", a.Amount, 0, a.Amount, CreditReleaseEvidence.SafeReason));
         await c.SaveChangesAsync();
         await InsertCredit(c, b.Id, p.Id, source.UserId, p.EndsAt, value: 0);
         Assert.Equal(2, await c.PaymentOrderCredits.CountAsync());
@@ -173,7 +175,13 @@ public sealed class SubscriptionUpgradeFoundationPostgresTests
         var order = await Upgrade(c, source.UserId);
         await Claim(c, order, p);
         if (kind is "reopen" or "retime")
-            await c.Database.ExecuteSqlAsync($"""UPDATE "PaymentOrderCredits" SET "ReleasedAt"={Now} WHERE "OrderId"={order.Id}""");
+        {
+            order.Status = PaymentOrderStatus.Failed;
+            await c.SaveChangesAsync();
+            var row = await c.PaymentOrderCredits.SingleAsync();
+            row.Release(Now, new(Now, "Cancelled", order.Amount, 0, order.Amount, CreditReleaseEvidence.SafeReason));
+            await c.SaveChangesAsync();
+        }
         if (kind == "truncate")
         {
             await Assert.ThrowsAsync<PostgresException>(() => c.Database.ExecuteSqlRawAsync("""TRUNCATE "PaymentOrderCredits" """));
@@ -393,7 +401,8 @@ public sealed class SubscriptionUpgradeFoundationPostgresTests
             var user = await PlanVersionFoundationPostgresTests.UserAsync(c);
             await Upgrade(c, user.Id, 0);
             await Assert.ThrowsAsync<PostgresException>(() => c.GetService<IMigrator>().MigrateAsync(Previous));
-            Assert.Equal(Migration, (await c.Database.GetAppliedMigrationsAsync()).Last());
+            // S3's reversible schema is removed first; S1 still rejects losing Upgrade evidence.
+            Assert.Equal(SubscriptionUpgradeReservationPostgresTests.Previous, (await c.Database.GetAppliedMigrationsAsync()).Last());
         }
         else
         {
@@ -405,12 +414,15 @@ public sealed class SubscriptionUpgradeFoundationPostgresTests
     }
 
     [Fact]
-    public async Task ConcurrentActiveClaims_ExactlyOneWins()
+    public async Task ConcurrentActiveClaims_FailedOrderStillReservesSource()
     {
         await using var db = await IsolatedPlanDatabase.CreateAsync();
         await using var c = db.Context();
         var (source, p) = await Source(c);
         var a = await Upgrade(c, source.UserId);
+        await Claim(c, a, p);
+        a.Status = PaymentOrderStatus.Failed;
+        await c.SaveChangesAsync();
         var b = await Upgrade(c, source.UserId);
         async Task<bool> Attempt(Guid orderId)
         {
@@ -418,8 +430,8 @@ public sealed class SubscriptionUpgradeFoundationPostgresTests
             try { await InsertCredit(scope, orderId, p.Id, source.UserId, p.EndsAt); return true; }
             catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UniqueViolation) { return false; }
         }
-        var results = await Task.WhenAll(Attempt(a.Id), Attempt(b.Id));
-        Assert.Single(results, x => x);
+        var results = await Task.WhenAll(Attempt(b.Id), Attempt(b.Id));
+        Assert.DoesNotContain(true, results);
         Assert.Single(await c.PaymentOrderCredits.ToListAsync());
     }
 }

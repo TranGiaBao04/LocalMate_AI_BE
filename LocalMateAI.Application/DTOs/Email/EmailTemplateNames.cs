@@ -6,6 +6,7 @@ public static class EmailTemplateNames
     public const string OtpRegistration = "otp-registration";
     public const string OtpPasswordReset = "otp-password-reset";
     public const string PaymentReceipt = "payment-receipt";
+    public const string UpgradePaymentReceipt = "upgrade-payment-receipt";
     public const string SingleItineraryPaymentReceipt = "single-itinerary-payment-receipt";
     public const string TripItinerary = "trip-itinerary";
 }

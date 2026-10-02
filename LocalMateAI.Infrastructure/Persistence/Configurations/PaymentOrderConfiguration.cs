@@ -31,6 +31,9 @@ public sealed class PaymentOrderConfiguration : IEntityTypeConfiguration<Payment
             .HasForeignKey(o => new { o.PlanId, o.PlanVersionId })
             .HasPrincipalKey(v => new { v.PlanId, v.Id }).OnDelete(DeleteBehavior.Restrict);
         builder.HasAlternateKey(o => new { o.Id, o.UserId });
+        builder.HasIndex(o => o.UserId).IsUnique()
+            .HasFilter("\"ProductKind\" = 'SubscriptionPlan' AND \"Status\" = 'Pending'")
+            .HasDatabaseName("UX_PaymentOrders_PendingSubscriptionUser");
         builder.HasIndex(o => new { o.UserId, o.PlanId, o.Type, o.Status });
         builder.Property(order => order.Type).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.Property(order => order.Status).HasConversion<string>().HasMaxLength(20).IsRequired();

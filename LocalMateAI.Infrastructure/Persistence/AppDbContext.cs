@@ -84,14 +84,18 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, TimePro
             if (entry.State == EntityState.Deleted)
                 throw new InvalidOperationException("Credit evidence cannot be deleted.");
             if (entry.State == EntityState.Added &&
-                (entry.Entity.ReleasedAt is not null || entry.Entity.OriginalEndsAt.Kind != DateTimeKind.Utc
+                (entry.Entity.ReleasedAt is not null || entry.Entity.HasAnyReleaseEvidence() || entry.Entity.OriginalEndsAt.Kind != DateTimeKind.Utc
                  || entry.Entity.RemainingDays < 0 || entry.Entity.CalculatedCreditAmount < 0
                  || entry.Entity.CalculatedCreditAmount != decimal.Truncate(entry.Entity.CalculatedCreditAmount)))
                 throw new InvalidOperationException("Credit snapshots require UTC dates and non-negative whole-VND values.");
             if (entry.State == EntityState.Modified &&
-                (entry.Properties.Any(p => p.IsModified && p.Metadata.Name != nameof(PaymentOrderCredit.ReleasedAt))
+                (entry.Properties.Any(p => p.IsModified && p.Metadata.Name is not
+                    (nameof(PaymentOrderCredit.ReleasedAt) or nameof(PaymentOrderCredit.ReleaseProviderCheckedAt)
+                     or nameof(PaymentOrderCredit.ReleaseProviderStatus) or nameof(PaymentOrderCredit.ReleaseProviderRequestedAmount)
+                     or nameof(PaymentOrderCredit.ReleaseProviderAmountPaid) or nameof(PaymentOrderCredit.ReleaseProviderAmountRemaining)
+                     or nameof(PaymentOrderCredit.ReleaseReasonCode)))
                  || entry.OriginalValues.GetValue<DateTime?>(nameof(PaymentOrderCredit.ReleasedAt)) is not null
-                 || entry.Entity.ReleasedAt is not { Kind: DateTimeKind.Utc }))
+                 || !entry.Entity.HasValidReleaseEvidence()))
                 throw new InvalidOperationException("Credit evidence is immutable; release is a one-way UTC transition.");
         }
         foreach (var entry in ChangeTracker.Entries<SubscriptionPeriod>())

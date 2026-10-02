@@ -8,12 +8,14 @@ public enum PaymentSettlementStatus
     AmountMismatch,
     UnknownOrder,
     InvalidPaidPlan,
-    UnresolvedPlanVersion
+    UnresolvedPlanVersion,
+    CreditConflict
 }
 
 public sealed record PaymentSettlementResult(PaymentSettlementStatus Status)
 {
     public string? TransitionReasonCode { get; init; }
+    public DateTime? OccurredAt { get; init; }
 }
 
 public enum PaymentWebhookStatus

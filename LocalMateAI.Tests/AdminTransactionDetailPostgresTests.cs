@@ -187,7 +187,7 @@ public sealed class AdminTransactionDetailPostgresTests
         var detail = (await new AdminTransactionRepository(c).GetDetailAsync(order.Id))!;
         Assert.True(Assert.Single(detail.WebhookReceipts).HasRawPayload);
         Assert.Equal(before, await Counts(db));
-        Assert.Equal(7, capture.Reads.Count);
+        Assert.Equal(8, capture.Reads.Count);
         Assert.Equal(new[] { "SET TRANSACTION READ ONLY" }, capture.Writes);
         Assert.Equal("on", capture.ServerReadOnly);
         Assert.All(capture.IsolationLevels, level => Assert.Equal(IsolationLevel.RepeatableRead, level));
@@ -245,7 +245,7 @@ public sealed class AdminTransactionDetailPostgresTests
         Assert.Equal("Paid", transition.ToStatus);
         Assert.Equal(Assert.Single(current.WebhookReceipts).Id, transition.WebhookReceiptId);
         Assert.Equal(1, await fresh.SubscriptionPeriods.CountAsync(p => p.SourcePaymentOrderId == order.Id));
-        Assert.Equal(7, capture.Reads.Count);
+        Assert.Equal(8, capture.Reads.Count);
     }
 
     [Fact]

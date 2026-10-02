@@ -10,6 +10,7 @@ public sealed class EmailOutboxModelRegistry(IReadOnlyDictionary<string, Type> m
     public static EmailOutboxModelRegistry Default { get; } = new(new Dictionary<string, Type>
     {
         [EmailTemplateNames.PaymentReceipt] = typeof(PaymentReceiptEmailModel),
+        [EmailTemplateNames.UpgradePaymentReceipt] = typeof(UpgradePaymentReceiptEmailModel),
         [EmailTemplateNames.SingleItineraryPaymentReceipt] = typeof(SingleItineraryPaymentReceiptEmailModel),
         [EmailTemplateNames.TripItinerary] = typeof(TripItineraryEmailModel)
     });

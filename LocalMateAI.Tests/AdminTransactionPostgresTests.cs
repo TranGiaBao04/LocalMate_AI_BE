@@ -131,7 +131,7 @@ public sealed class AdminTransactionPostgresTests
         {
             Id = new Guid($"00000000-0000-0000-0000-{i + 1:D12}"), UserId = user.Id, ProviderOrderCode = 900100 + i,
             PlanCode = PlanCode.TripPass, PlanVersionBinding = PlanVersionBinding.LegacyUnresolved,
-            Amount = 19000, Status = PaymentOrderStatus.Pending, Type = PaymentOrderType.Purchase, ExpiresAt = Day.AddDays(1)
+            Amount = 19000, Status = PaymentOrderStatus.Failed, Type = PaymentOrderType.Purchase, ExpiresAt = Day.AddDays(1)
         }).ToArray();
         c.PaymentOrders.AddRange(orders);
         await c.SaveChangesAsync();
@@ -274,7 +274,7 @@ public sealed class AdminTransactionPostgresTests
         await c.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO "PaymentOrders" ("Id","UserId","PlanCode","PlanVersionBinding","Type","Amount","Status",
                 "ProviderOrderCode","CreatedAt","UpdatedAt","ExpiresAt")
-            SELECT gen_random_uuid(),{user.Id},'TripPass','LegacyUnresolved','Purchase',19000,'Pending',700000+i,
+            SELECT gen_random_uuid(),{user.Id},'TripPass','LegacyUnresolved','Purchase',19000,'Failed',700000+i,
                 {Day},{Day},{Day.AddDays(1)} FROM generate_series(1,10001) i
             """);
         var service = Service(c);
@@ -332,7 +332,7 @@ public sealed class AdminTransactionPostgresTests
                 await using var writer = db.Context();
                 writer.PaymentOrders.Add(new PaymentOrder { UserId = orders[0].UserId, ProviderOrderCode = 900199,
                     PlanCode = PlanCode.TripPass, PlanVersionBinding = PlanVersionBinding.LegacyUnresolved,
-                    Status = PaymentOrderStatus.Pending, Type = PaymentOrderType.Purchase, Amount = 19000, ExpiresAt = Day.AddDays(1) });
+                    Status = PaymentOrderStatus.Failed, Type = PaymentOrderType.Purchase, Amount = 19000, ExpiresAt = Day.AddDays(1) });
                 await writer.SaveChangesAsync();
             }
         };

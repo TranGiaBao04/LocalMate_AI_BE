@@ -151,6 +151,9 @@ public sealed class PaymentReconciliationTests
         public List<PaymentOrder> Items { get; } = [.. orders];
         public List<PaymentOrderStatusHistory> History { get; } = [];
         public int CandidateReads { get; private set; }
+        public Task<PaymentOrder?> GetBlockingSubscriptionAsync(Guid userId, CancellationToken ct = default) =>
+            Task.FromResult(Items.FirstOrDefault(o => o.UserId == userId && o.ProductKind == PaymentProductKind.SubscriptionPlan
+                && o.Status == PaymentOrderStatus.Pending));
         public Task<PaymentOrder?> GetByIdAsync(Guid id, CancellationToken ct = default)
         { ct.ThrowIfCancellationRequested(); return Task.FromResult(Items.SingleOrDefault(o => o.Id == id)); }
         public Task<PaymentOrder?> GetOwnedByIdAsync(Guid id, Guid user, CancellationToken ct = default) =>

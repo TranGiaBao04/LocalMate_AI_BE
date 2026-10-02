@@ -1,5 +1,6 @@
 using LocalMateAI.Domain.Entities;
 using LocalMateAI.Domain.Enums;
+using LocalMateAI.Application.Payments;
 
 namespace LocalMateAI.Application.Interfaces.Repositories;
 
@@ -10,6 +11,8 @@ public interface ISubscriptionRepository
     Task<SubscriptionPlan?> GetPlanAsync(Guid id, CancellationToken cancellationToken = default);
     Task<SubscriptionPlanVersion?> GetVersionAsync(Guid id, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<SubscriptionPeriod>> GetPeriodsAsync(Guid userId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<SubscriptionQuoteSource>> GetQuoteSourcesAsync(
+        Guid userId, CancellationToken cancellationToken = default);
     Task AddPeriodAsync(SubscriptionPeriod period, CancellationToken cancellationToken = default);
     Task PublishVersionAsync(SubscriptionPlanVersion version, CancellationToken cancellationToken = default);
     Task PublishVersionAsync(SubscriptionPlanVersion version, IReadOnlyList<Guid> featureIds,

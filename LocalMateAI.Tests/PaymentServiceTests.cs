@@ -19,7 +19,6 @@ public sealed class PaymentServiceTests
     [InlineData("")]
     [InlineData("Free")]
     [InlineData("Unknown")]
-    [InlineData("membership")]
     public async Task Checkout_InvalidOrFreePlan_IsRejected(string? planCode)
     {
         var fixture = new Fixture();
@@ -82,7 +81,7 @@ public sealed class PaymentServiceTests
     }
 
     [Fact]
-    public async Task Checkout_ActiveTripPassAllowsMembershipUpgradeWithoutMutatingSubscription()
+    public async Task Checkout_ActiveTripPassPreparesUpgradeWithoutMutatingSubscription()
     {
         var subscription = Active(PlanCode.TripPass);
         var originalEndsAt = subscription.EndsAt;
@@ -91,7 +90,9 @@ public sealed class PaymentServiceTests
         var result = await fixture.Service.CheckoutAsync(UserId, "Membership");
 
         Assert.Equal(PaymentIntentResultStatus.Success, result.Status);
-        Assert.Equal(PlanCode.Membership, Assert.Single(fixture.Orders.Items).PlanCode);
+        Assert.Equal(PaymentOrderType.Upgrade, Assert.Single(fixture.Orders.Items).Type);
+        Assert.Single(fixture.Gateway.Requests);
+        Assert.Single(fixture.Credits.Rows);
         Assert.Equal(originalEndsAt, subscription.EndsAt);
     }
 
@@ -221,18 +222,17 @@ public sealed class PaymentServiceTests
     }
 
     [Fact]
-    public async Task Renew_ReusesPendingRenewalOnly()
+    public async Task Renew_AnotherPendingPurchaseBlocksGlobally()
     {
         var purchase = Pending(PlanCode.TripPass, PaymentOrderType.Purchase, Now.AddMinutes(10));
-        var renewal = Pending(PlanCode.TripPass, PaymentOrderType.Renewal, Now.AddMinutes(10));
         var fixture = new Fixture(
             subscriptions: [Active(PlanCode.TripPass)],
-            existingOrders: [purchase, renewal]);
+            existingOrders: [purchase]);
 
         var result = await fixture.Service.RenewAsync(UserId);
 
-        Assert.Equal(PaymentIntentResultStatus.PendingOrderExists, result.Status);
-        Assert.Equal(renewal.Id, result.Response!.OrderId);
+        Assert.Equal(PaymentIntentResultStatus.AnotherPendingOrder, result.Status);
+        Assert.Equal(purchase.Id, result.Response!.OrderId);
         Assert.Empty(fixture.Gateway.Requests);
     }
 
@@ -374,7 +374,7 @@ public sealed class PaymentServiceTests
     }
 
     private static UserSubscription Active(PlanCode planCode) =>
-        new() { UserId = UserId, PlanCode = planCode, EndsAt = Now.AddDays(10) };
+        new() { UserId = UserId, PlanCode = planCode, StartsAt = Now.AddDays(-2), EndsAt = Now.AddDays(10) };
 
     private static PaymentOrder Pending(
         PlanCode planCode,
@@ -394,33 +394,42 @@ public sealed class PaymentServiceTests
             CreatedAt = Now.AddMinutes(-1)
         };
 
-    private sealed class Fixture
+    internal sealed class Fixture
     {
         public Fixture(
             bool persistedUser = true,
             IReadOnlyList<UserSubscription>? subscriptions = null,
             IReadOnlyList<PaymentOrder>? existingOrders = null,
             FakeGateway? gateway = null,
-            IPaymentSettlementService? settlementService = null)
+            IPaymentSettlementService? settlementService = null,
+            DateTime? now = null)
         {
             Orders = new FakePaymentOrderRepository(existingOrders ?? []);
             Gateway = gateway ?? new FakeGateway(_ =>
                 PaymentLinkResult.Succeeded("https://checkout.test/new", "new-qr"));
+            Subscriptions = new FakeSubscriptionRepository(subscriptions ?? []);
+            Credits = new TestPaymentCreditRepository(Orders, Subscriptions);
+            var executor = new FakePaymentOperationExecutor(persistedUser);
+            var clock = new FixedTimeProvider(now ?? Now);
             Service = new PaymentService(
                 new FakeUserRepository(persistedUser),
-                new FakeSubscriptionRepository(subscriptions ?? []),
+                Subscriptions,
                 Orders,
-                new FakePaymentOperationExecutor(persistedUser),
+                executor,
                 Gateway,
                 new PaymentReconciliationService(Orders, Gateway, settlementService ?? new FakeSettlementService(),
-                    new FixedTimeProvider(Now), NullLogger<PaymentReconciliationService>.Instance),
-                new FixedTimeProvider(Now),
-                NullLogger<PaymentService>.Instance);
+                    new FixedTimeProvider(now ?? Now), NullLogger<PaymentReconciliationService>.Instance),
+                new FixedTimeProvider(now ?? Now),
+                NullLogger<PaymentService>.Instance,
+                new SubscriptionUpgradeReservationService(Subscriptions, Orders, Credits, executor, Gateway, clock),
+                settlementService ?? new FakeSettlementService());
         }
 
         public PaymentService Service { get; }
         public FakePaymentOrderRepository Orders { get; }
         public FakeGateway Gateway { get; }
+        public TestSubscriptionRepository Subscriptions { get; }
+        public TestPaymentCreditRepository Credits { get; }
     }
 
     private sealed class FixedTimeProvider(DateTime now) : TimeProvider
@@ -439,13 +448,23 @@ public sealed class PaymentServiceTests
                 : new PaymentOperationExecution<T>(false, default);
     }
 
-    private sealed class FakePaymentOrderRepository(IReadOnlyList<PaymentOrder> existing)
+    internal sealed class FakePaymentOrderRepository(IReadOnlyList<PaymentOrder> existing)
         : IPaymentOrderRepository
     {
         private long nextProviderCode = 1000;
         public List<PaymentOrderStatusHistory> Histories { get; } = [];
         public List<PaymentOrder> Items { get; } = [.. existing];
         public int LookupCalls { get; private set; }
+        public HashSet<Guid> ReservedOrders { get; } = [];
+        public Task<PaymentOrder?> GetBlockingSubscriptionAsync(Guid userId, CancellationToken cancellationToken = default)
+        {
+            var order = Items.Where(o => o.UserId == userId && o.ProductKind == PaymentProductKind.SubscriptionPlan
+                && (o.Status == PaymentOrderStatus.Pending || o.Status == PaymentOrderStatus.ReviewRequired
+                    || (o.Status != PaymentOrderStatus.Paid && ReservedOrders.Contains(o.Id))))
+                .OrderByDescending(o => o.Status == PaymentOrderStatus.ReviewRequired).FirstOrDefault();
+            if (order is { PlanId: null, PlanCode: { } code }) order.PlanId = LocalMateAI.Infrastructure.Persistence.SubscriptionBaseline.PlanId(code);
+            return Task.FromResult(order);
+        }
 
         public Task<PaymentOrder?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
             Task.FromResult(Items.SingleOrDefault(o => o.Id == id));
@@ -497,6 +516,20 @@ public sealed class PaymentServiceTests
         public Task SaveChangesAsync(CancellationToken cancellationToken = default) =>
             Task.CompletedTask;
 
+        public async Task<PaymentOrder?> CompleteUpgradeLinkAsync(Guid user, Guid id, PaymentLinkResult link,
+            DateTime now, CancellationToken ct = default)
+        {
+            var o = Items.SingleOrDefault(o => o.Id == id && o.UserId == user);
+            if (o?.Status == PaymentOrderStatus.Pending)
+            {
+                if (link.IsSuccess && !string.IsNullOrWhiteSpace(link.CheckoutUrl) && !string.IsNullOrWhiteSpace(link.QrCode))
+                { o.CheckoutUrl = link.CheckoutUrl; o.QrCode = link.QrCode; }
+                else await TransitionStatusAsync(o, PaymentOrderStatus.Failed,
+                    new(PaymentStatusChangeSource.Checkout, user, ReasonCode: "gateway_unavailable"), now, ct);
+            }
+            return o;
+        }
+
         public Task TransitionStatusAsync(PaymentOrder order, PaymentOrderStatus status, PaymentTransitionContext context,
             DateTime nowUtc, CancellationToken cancellationToken = default)
         {
@@ -518,7 +551,7 @@ public sealed class PaymentServiceTests
         }
     }
 
-    private sealed class FakeGateway(
+    internal sealed class FakeGateway(
         Func<PaymentLinkRequest, PaymentLinkResult> create,
         Func<long, PaymentGatewayOrderResult>? lookup = null)
         : IPaymentGateway

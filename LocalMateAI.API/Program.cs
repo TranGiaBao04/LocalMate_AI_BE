@@ -200,6 +200,8 @@ builder.Services.AddScoped<IPaymentSettlementExecutor, PaymentSettlementExecutor
 builder.Services.AddScoped<ITripFinalizeQuotaExecutor, TripFinalizeQuotaExecutor>();
 builder.Services.AddScoped<ITripGenerationQuotaExecutor, TripGenerationQuotaExecutor>();
 builder.Services.AddScoped<IPaymentService, PaymentService>();
+builder.Services.AddScoped<IPaymentCreditRepository, PaymentCreditRepository>();
+builder.Services.AddScoped<ISubscriptionUpgradeReservationService, SubscriptionUpgradeReservationService>();
 builder.Services.AddScoped<IPaymentSettlementService, PaymentSettlementService>();
 builder.Services.AddScoped<IPaymentReconciliationService, PaymentReconciliationService>();
 builder.Services.AddScoped<IPaymentReconciliationLeaseProvider, PaymentReconciliationLeaseProvider>();

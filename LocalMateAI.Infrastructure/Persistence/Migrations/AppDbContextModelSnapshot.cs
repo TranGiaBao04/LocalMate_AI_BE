@@ -481,6 +481,11 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("SingleItineraryProductVersionId");
 
+                    b.HasIndex("UserId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_PaymentOrders_PendingSubscriptionUser")
+                        .HasFilter("\"ProductKind\" = 'SubscriptionPlan' AND \"Status\" = 'Pending'");
+
                     b.HasIndex("PlanId", "PlanVersionId");
 
                     b.HasIndex("UserId", "CheckoutAttemptId")
@@ -515,6 +520,26 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("OriginalEndsAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<decimal?>("ReleaseProviderAmountPaid")
+                        .HasColumnType("numeric(12,0)");
+
+                    b.Property<decimal?>("ReleaseProviderAmountRemaining")
+                        .HasColumnType("numeric(12,0)");
+
+                    b.Property<DateTime?>("ReleaseProviderCheckedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("ReleaseProviderRequestedAmount")
+                        .HasColumnType("numeric(12,0)");
+
+                    b.Property<string>("ReleaseProviderStatus")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("ReleaseReasonCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<DateTime?>("ReleasedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -540,6 +565,8 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_OrderCredits_Amount", "\"CalculatedCreditAmount\" >= 0");
 
                             t.HasCheckConstraint("CK_OrderCredits_Days", "\"RemainingDays\" >= 0");
+
+                            t.HasCheckConstraint("CK_OrderCredits_ReleaseProof", "(\"ReleasedAt\" IS NULL AND \"ReleaseProviderCheckedAt\" IS NULL AND \"ReleaseProviderStatus\" IS NULL\n AND \"ReleaseProviderRequestedAmount\" IS NULL AND \"ReleaseProviderAmountPaid\" IS NULL\n AND \"ReleaseProviderAmountRemaining\" IS NULL AND \"ReleaseReasonCode\" IS NULL) OR\n(\"ReleasedAt\" IS NOT NULL AND \"ReleaseProviderCheckedAt\" IS NOT NULL AND \"ReleaseProviderStatus\" IS NOT NULL\n AND \"ReleaseProviderRequestedAmount\" IS NOT NULL AND \"ReleaseProviderAmountPaid\" IS NOT NULL\n AND \"ReleaseProviderAmountRemaining\" IS NOT NULL AND \"ReleaseReasonCode\" IS NOT NULL\n AND \"ReleaseProviderStatus\" = 'Cancelled' AND \"ReleaseProviderRequestedAmount\" > 0\n AND \"ReleaseProviderAmountPaid\" = 0 AND \"ReleaseProviderAmountRemaining\" = \"ReleaseProviderRequestedAmount\"\n AND \"ReleaseReasonCode\" = 'provider_cancelled_no_funds'\n AND \"ReleaseProviderCheckedAt\" <= \"ReleasedAt\"\n AND \"ReleasedAt\" - \"ReleaseProviderCheckedAt\" <= interval '1 minute')");
                         });
                 });
 
