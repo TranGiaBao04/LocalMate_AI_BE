@@ -11,7 +11,8 @@ public enum PaymentIntentResultStatus
     GatewayUnavailable,
     NonPersistedUser,
     TargetPlanAlreadyScheduled,
-    UpgradeCheckoutNotReady
+    UpgradeCheckoutNotReady,
+    AnotherPendingOrder
 }
 
 public sealed record PaymentIntentResult(

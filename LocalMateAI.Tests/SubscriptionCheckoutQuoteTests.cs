@@ -252,7 +252,7 @@ public sealed class SubscriptionCheckoutQuoteTests
     }
 
     [Fact]
-    public async Task QuoteIgnoresPendingAndNeverChecksProvider_CheckoutUpgradeDoesNotExpirePending()
+    public async Task QuoteIgnoresPending_CheckoutExpiresOrdinaryPendingButNeverCreatesUpgrade()
     {
         var f = Fixture(); var (_, p) = AddNative(f);
         var pending = new PaymentOrder { UserId = UserId, PlanId = SubscriptionBaseline.PlanId(PlanCode.Membership),
@@ -261,8 +261,8 @@ public sealed class SubscriptionCheckoutQuoteTests
         var end = p.EndsAt;
         Assert.Equal(PaymentIntentResultStatus.Success, (await f.Service.GetCheckoutQuoteAsync(UserId, "Membership")).Status);
         Assert.Equal(PaymentIntentResultStatus.UpgradeCheckoutNotReady, (await f.Service.CheckoutAsync(UserId, "Membership")).Status);
-        Assert.Single(f.Orders.Items); Assert.Empty(f.Orders.Histories);
-        Assert.Equal(PaymentOrderStatus.Pending, pending.Status); Assert.Equal(end, p.EndsAt);
+        Assert.Single(f.Orders.Items); Assert.Single(f.Orders.Histories);
+        Assert.Equal(PaymentOrderStatus.Expired, pending.Status); Assert.Equal(end, p.EndsAt);
         Assert.Empty(f.Gateway.Requests); Assert.Equal(0, f.Gateway.LookupCalls);
     }
 

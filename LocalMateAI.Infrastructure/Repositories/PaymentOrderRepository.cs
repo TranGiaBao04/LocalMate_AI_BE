@@ -9,6 +9,12 @@ namespace LocalMateAI.Infrastructure.Repositories;
 
 public sealed class PaymentOrderRepository(AppDbContext dbContext, TimeProvider? timeProvider = null) : IPaymentOrderRepository
 {
+    public Task<PaymentOrder?> GetBlockingSubscriptionAsync(Guid userId, CancellationToken cancellationToken = default) =>
+        dbContext.PaymentOrders.Where(o => o.UserId == userId && o.ProductKind == PaymentProductKind.SubscriptionPlan
+            && (o.Status == PaymentOrderStatus.Pending || (o.Type == PaymentOrderType.Upgrade
+                && dbContext.PaymentOrderCredits.Any(c => c.OrderId == o.Id && c.ReleasedAt == null))))
+            .OrderBy(o => o.CreatedAt).ThenBy(o => o.Id).FirstOrDefaultAsync(cancellationToken);
+
     public Task<PaymentOrder?> GetByIdAsync(Guid orderId, CancellationToken cancellationToken = default) =>
         dbContext.PaymentOrders.AsNoTracking().SingleOrDefaultAsync(o => o.Id == orderId, cancellationToken);
 
