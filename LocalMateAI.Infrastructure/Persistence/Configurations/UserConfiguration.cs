@@ -34,6 +34,9 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
             .IsUnique()
             .HasDatabaseName("UX_Users_Email");
 
+        builder.HasIndex(user => user.CreatedAt)
+            .HasDatabaseName("IX_Users_CreatedAt");
+
         builder.Property(user => user.PasswordHash)
             .HasColumnType("text")
             .IsRequired(false);

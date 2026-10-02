@@ -42,6 +42,9 @@ public sealed class PaymentOrderConfiguration : IEntityTypeConfiguration<Payment
         builder.HasIndex(order => order.ProviderOrderCode)
             .IsUnique()
             .HasDatabaseName("UX_PaymentOrders_ProviderOrderCode");
+        builder.HasIndex(order => order.PaidAt)
+            .HasFilter("\"Status\" = 'Paid'")
+            .HasDatabaseName("IX_PaymentOrders_PaidAt_Paid");
         builder.HasOne<User>()
             .WithMany()
             .HasForeignKey(order => order.UserId)

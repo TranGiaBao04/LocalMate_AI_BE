@@ -39,5 +39,8 @@ public sealed class TripConfiguration : IEntityTypeConfiguration<Trip>
             .WithOne(item => item.Trip)
             .HasForeignKey(item => item.TripId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasIndex(trip => trip.CreatedAt)
+            .HasDatabaseName("IX_Trips_CreatedAt");
     }
 }
