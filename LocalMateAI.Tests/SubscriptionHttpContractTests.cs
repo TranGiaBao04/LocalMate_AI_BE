@@ -61,6 +61,7 @@ public sealed class SubscriptionHttpContractTests
 
     [Theory]
     [InlineData("GET", "/api/subscription/me")]
+    [InlineData("GET", "/api/subscription/checkout-quote?planCode=Membership")]
     [InlineData("POST", "/api/subscription/checkout")]
     [InlineData("POST", "/api/subscription/renew")]
     [InlineData("GET", "/api/subscription/orders/22222222-2222-2222-2222-222222222222")]
@@ -129,6 +130,8 @@ public sealed class SubscriptionHttpContractTests
     [InlineData(PaymentIntentResultStatus.InvalidPlanCode, 400, "invalid_plan_code")]
     [InlineData(PaymentIntentResultStatus.PlanAlreadyActive, 409, "plan_already_active")]
     [InlineData(PaymentIntentResultStatus.CoveredByHigherPlan, 409, "already_covered_by_higher_plan")]
+    [InlineData(PaymentIntentResultStatus.TargetPlanAlreadyScheduled, 409, "target_plan_already_scheduled")]
+    [InlineData(PaymentIntentResultStatus.UpgradeCheckoutNotReady, 409, "upgrade_checkout_not_ready")]
     [InlineData(PaymentIntentResultStatus.GatewayUnavailable, 502, "payment_gateway_unavailable")]
     [InlineData(PaymentIntentResultStatus.NonPersistedUser, 403, "persisted_account_required")]
     public async Task Checkout_ServiceError_MapsToHttpProblem(
@@ -243,13 +246,13 @@ public sealed class SubscriptionHttpContractTests
         Assert.True(json.RootElement.GetProperty("success").GetBoolean());
     }
 
-    private static void Authenticate(HttpClient client, string role = "User")
+    internal static void Authenticate(HttpClient client, string role = "User")
     {
         client.DefaultRequestHeaders.Add(TestAuthenticationHandler.UserIdHeader, UserId.ToString());
         client.DefaultRequestHeaders.Add(TestAuthenticationHandler.RoleHeader, role);
     }
 
-    private static async Task AssertProblemAsync(
+    internal static async Task AssertProblemAsync(
         HttpResponseMessage response,
         HttpStatusCode expectedStatus,
         string expectedCode)
@@ -259,11 +262,11 @@ public sealed class SubscriptionHttpContractTests
         Assert.Equal(expectedCode, json.RootElement.GetProperty("code").GetString());
     }
 
-    private sealed class ContractTestHost : IDisposable
+    internal sealed class ContractTestHost : IDisposable
     {
         private readonly WebApplication application;
 
-        public ContractTestHost()
+        public ContractTestHost(IPaymentService? paymentService = null)
         {
             Subscription = new StubSubscriptionService();
             Payment = new StubPaymentService();
@@ -275,7 +278,7 @@ public sealed class SubscriptionHttpContractTests
             });
             builder.WebHost.UseTestServer();
             builder.Services.AddSingleton<ISubscriptionService>(Subscription);
-            builder.Services.AddSingleton<IPaymentService>(Payment);
+            builder.Services.AddSingleton<IPaymentService>(paymentService ?? Payment);
             builder.Services.AddSingleton<IPaymentWebhookService>(Webhook);
             builder.Services.AddAuthentication(TestAuthenticationHandler.SchemeName)
                 .AddScheme<AuthenticationSchemeOptions, TestAuthenticationHandler>(
@@ -343,7 +346,7 @@ public sealed class SubscriptionHttpContractTests
         }
     }
 
-    private sealed class StubSubscriptionService : ISubscriptionService
+    internal sealed class StubSubscriptionService : ISubscriptionService
     {
         public SubscriptionMeResponse? MeResponse { get; set; } = new(
             "Free",
@@ -370,8 +373,11 @@ public sealed class SubscriptionHttpContractTests
             Task.FromResult(MeResponse);
     }
 
-    private sealed class StubPaymentService : IPaymentService
+    internal sealed class StubPaymentService : IPaymentService
     {
+        public CheckoutQuoteResult QuoteResult { get; set; } = new(PaymentIntentResultStatus.InvalidPlanCode);
+        public Task<CheckoutQuoteResult> GetCheckoutQuoteAsync(Guid userId, string? planCode,
+            CancellationToken cancellationToken = default) => Task.FromResult(QuoteResult);
         public PaymentIntentResult CheckoutResult { get; set; } = new(
             PaymentIntentResultStatus.GatewayUnavailable);
 
@@ -399,7 +405,7 @@ public sealed class SubscriptionHttpContractTests
             Task.FromResult(OrderResult);
     }
 
-    private sealed class StubPaymentWebhookService : IPaymentWebhookService
+    internal sealed class StubPaymentWebhookService : IPaymentWebhookService
     {
         public PaymentWebhookResult Result { get; set; } = new(
             PaymentWebhookStatus.Acknowledged);

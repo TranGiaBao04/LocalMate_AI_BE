@@ -21,6 +21,34 @@ public sealed class PaymentService(
 {
     private static readonly TimeSpan PaymentIntentLifetime = TimeSpan.FromMinutes(15);
 
+    public async Task<CheckoutQuoteResult> GetCheckoutQuoteAsync(
+        Guid userId, string? planCode, CancellationToken cancellationToken = default)
+    {
+        if (await userRepository.GetByIdAsync(userId, cancellationToken) is null)
+            return new(PaymentIntentResultStatus.NonPersistedUser);
+        var target = await GetTargetAsync(planCode, cancellationToken);
+        if (target is null) return new(PaymentIntentResultStatus.InvalidPlanCode);
+        var (plan, version) = target.Value;
+        var nowUtc = timeProvider.GetUtcNow().UtcDateTime;
+        var classification = await ClassifyAsync(userId, plan, nowUtc, cancellationToken);
+        if (ClassificationError(classification) is { } error) return new(error);
+        if (classification == SubscriptionCheckoutClassification.Purchase)
+            return new(PaymentIntentResultStatus.Success,
+                new(PlanIdentity.PublicCode(plan.Code), "Purchase", version.Price, 0,
+                    version.Price, version.DurationDays!.Value, []));
+
+        var evidence = await subscriptionRepository.GetQuoteSourcesAsync(userId, cancellationToken);
+        var sources = SubscriptionQuoteEvidence.Build(userId, plan.EntitlementPriority, nowUtc, evidence);
+        var calculated = UpgradeCreditCalculator.Calculate(new(version.Price, nowUtc, sources));
+        var byPeriod = evidence.ToDictionary(s => s.Period.Id);
+        return new(PaymentIntentResultStatus.Success,
+            new(PlanIdentity.PublicCode(plan.Code), "Upgrade", calculated.ListPrice,
+                calculated.AppliedCredit, calculated.AmountPayable, version.DurationDays!.Value,
+                calculated.Sources.Select(row => new CheckoutQuoteCreditResponse(
+                    PlanIdentity.PublicCode(byPeriod[row.PeriodId].Plan.Code),
+                    byPeriod[row.PeriodId].Plan.Name, row.RemainingDays, row.CalculatedCreditAmount)).ToArray()));
+    }
+
     public async Task<PaymentIntentResult> CheckoutAsync(
         Guid userId,
         string? planCode,
@@ -98,31 +126,20 @@ public sealed class PaymentService(
         string? planCode,
         CancellationToken cancellationToken)
     {
-        var code = PlanIdentity.Canonical(planCode);
-        var requestedPlan = code is null ? null
-            : await subscriptionRepository.GetPlanByCodeAsync(code, cancellationToken);
-        if (requestedPlan is null || !requestedPlan.IsActive || requestedPlan.CurrentVersionId is null
-            || requestedPlan.Code == PlanIdentity.Free)
-        {
-            return new PaymentIntentResult(PaymentIntentResultStatus.InvalidPlanCode);
-        }
-
+        var target = await GetTargetAsync(planCode, cancellationToken);
+        if (target is null) return new(PaymentIntentResultStatus.InvalidPlanCode);
+        var (requestedPlan, version) = target.Value;
         var nowUtc = timeProvider.GetUtcNow().UtcDateTime;
-        var effective = await EffectiveSubscriptionResolver.ResolveAsync(subscriptionRepository, userId, nowUtc, cancellationToken);
-
-        if (effective.Plan.Id == requestedPlan.Id)
-        {
-            return new PaymentIntentResult(PaymentIntentResultStatus.PlanAlreadyActive);
-        }
-
-        if (effective.Plan.Code == PlanIdentity.Membership && requestedPlan.Code == PlanIdentity.TripPass)
-        {
-            return new PaymentIntentResult(PaymentIntentResultStatus.CoveredByHigherPlan);
-        }
+        var classification = await ClassifyAsync(userId, requestedPlan, nowUtc, cancellationToken);
+        if (ClassificationError(classification) is { } error) return new(error);
+        // Phase safety gate: UP-S3 reservation and UP-S4 settlement must precede a payable Upgrade.
+        if (classification == SubscriptionCheckoutClassification.Upgrade)
+            return new(PaymentIntentResultStatus.UpgradeCheckoutNotReady);
 
         return await CreatePaymentIntentAsync(
             userId,
             requestedPlan,
+            version,
             PaymentOrderType.Purchase,
             nowUtc,
             cancellationToken);
@@ -139,9 +156,12 @@ public sealed class PaymentService(
             return new PaymentIntentResult(PaymentIntentResultStatus.NoActiveSubscription);
         }
 
+        var target = await GetTargetAsync(effective.Plan.Code, cancellationToken);
+        if (target is null) return new(PaymentIntentResultStatus.InvalidPlanCode);
         return await CreatePaymentIntentAsync(
             userId,
-            effective.Plan,
+            target.Value.Plan,
+            target.Value.Version,
             PaymentOrderType.Renewal,
             nowUtc,
             cancellationToken);
@@ -150,6 +170,7 @@ public sealed class PaymentService(
     private async Task<PaymentIntentResult> CreatePaymentIntentAsync(
         Guid userId,
         SubscriptionPlan plan,
+        SubscriptionPlanVersion version,
         PaymentOrderType type,
         DateTime nowUtc,
         CancellationToken cancellationToken)
@@ -180,10 +201,6 @@ public sealed class PaymentService(
             }
         }
 
-        var version = plan.CurrentVersionId is { } versionId
-            ? await subscriptionRepository.GetVersionAsync(versionId, cancellationToken) : null;
-        if (version is null || version.PlanId != plan.Id || version.DurationDays is null || version.Price <= 0)
-            return new PaymentIntentResult(PaymentIntentResultStatus.InvalidPlanCode);
         var order = new PaymentOrder
         {
             UserId = userId,
@@ -242,7 +259,8 @@ public sealed class PaymentService(
         && !string.IsNullOrWhiteSpace(order.QrCode);
 
     private static PaymentIntentResponse ToIntentResponse(PaymentOrder order) =>
-        new(order.Id, order.QrCode!, order.CheckoutUrl!, order.Amount, order.ExpiresAt);
+        new(order.Id, order.QrCode!, order.CheckoutUrl!, order.Amount, order.ExpiresAt)
+        { Type = order.Type.ToString(), ListPrice = order.Amount + order.CreditAmount, CreditAmount = order.CreditAmount };
 
     private static PaymentOrderResponse ToOrderResponse(PaymentOrder order, string? code) =>
         new(
@@ -251,5 +269,39 @@ public sealed class PaymentService(
             code is null ? order.PlanCode?.ToString() ?? "" : PlanIdentity.PublicCode(code),
             order.Amount,
             order.ExpiresAt,
-            order.PaidAt);
+            order.PaidAt)
+        { Type = order.Type.ToString(), ListPrice = order.Amount + order.CreditAmount, CreditAmount = order.CreditAmount };
+
+    private async Task<(SubscriptionPlan Plan, SubscriptionPlanVersion Version)?> GetTargetAsync(
+        string? planCode, CancellationToken cancellationToken)
+    {
+        var code = PlanIdentity.Canonical(planCode);
+        if (string.IsNullOrWhiteSpace(code)) return null;
+        var plan = await subscriptionRepository.GetPlanByCodeAsync(code, cancellationToken);
+        if (plan is null || !plan.IsActive || plan.Code == PlanIdentity.Free
+            || plan.CurrentVersionId is not { } id) return null;
+        var version = await subscriptionRepository.GetVersionAsync(id, cancellationToken);
+        return version is null || version.PlanId != plan.Id || version.DurationDays is not > 0
+            || version.Price <= 0 || decimal.Truncate(version.Price) != version.Price
+            ? null : (plan, version);
+    }
+
+    private async Task<SubscriptionCheckoutClassification> ClassifyAsync(
+        Guid userId, SubscriptionPlan target, DateTime nowUtc, CancellationToken cancellationToken)
+    {
+        var effective = await EffectiveSubscriptionResolver.ResolveAsync(
+            subscriptionRepository, userId, nowUtc, cancellationToken);
+        var periods = await subscriptionRepository.GetPeriodsAsync(userId, cancellationToken);
+        return SubscriptionCheckoutPolicy.Classify(effective, target, nowUtc, periods);
+    }
+
+    private static PaymentIntentResultStatus? ClassificationError(SubscriptionCheckoutClassification classification) =>
+        classification switch
+        {
+            SubscriptionCheckoutClassification.SamePlan => PaymentIntentResultStatus.PlanAlreadyActive,
+            SubscriptionCheckoutClassification.CoveredByHigherPlan => PaymentIntentResultStatus.CoveredByHigherPlan,
+            SubscriptionCheckoutClassification.TargetPlanAlreadyScheduled => PaymentIntentResultStatus.TargetPlanAlreadyScheduled,
+            SubscriptionCheckoutClassification.InvalidConfiguration => PaymentIntentResultStatus.InvalidPlanCode,
+            _ => null
+        };
 }

@@ -4,6 +4,9 @@ namespace LocalMateAI.Application.Interfaces.Services;
 
 public interface IPaymentService
 {
+    Task<CheckoutQuoteResult> GetCheckoutQuoteAsync(
+        Guid userId, string? planCode, CancellationToken cancellationToken = default);
+
     Task<PaymentIntentResult> CheckoutAsync(
         Guid userId,
         string? planCode,
