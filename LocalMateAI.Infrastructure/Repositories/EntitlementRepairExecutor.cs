@@ -2,6 +2,7 @@ using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Payments;
 using LocalMateAI.Application.Services;
 using LocalMateAI.Domain.Entities;
+using LocalMateAI.Domain.Enums;
 using LocalMateAI.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -28,6 +29,13 @@ public sealed class EntitlementRepairExecutor(AppDbContext context, TimeProvider
         var order = await context.PaymentOrders.SingleAsync(o => o.Id == orderId, cancellationToken);
         await context.Entry(order).ReloadAsync(cancellationToken);
         if (order.UserId != owner.Value) throw new InvalidOperationException("Order ownership changed during repair.");
+        if (order.ProductKind == PaymentProductKind.SubscriptionPlan && order.Type == PaymentOrderType.Upgrade)
+        {
+            await context.Database.SqlQuery<Guid>($"SELECT \"PeriodId\" AS \"Value\" FROM \"PaymentOrderCredits\" WHERE \"OrderId\"={orderId} ORDER BY \"PeriodId\" FOR UPDATE")
+                .ToListAsync(cancellationToken);
+            await context.Database.SqlQuery<Guid>($"SELECT \"Id\" AS \"Value\" FROM \"SubscriptionPeriods\" WHERE \"Id\" IN (SELECT \"PeriodId\" FROM \"PaymentOrderCredits\" WHERE \"OrderId\"={orderId}) ORDER BY \"Id\" FOR UPDATE")
+                .ToListAsync(cancellationToken);
+        }
         var before = context.Entry(order).CurrentValues.Clone();
         var evidence = (await EntitlementRepairEvidenceReader.ReadAsync(context, orderId, cancellationToken))!;
         var now = clock.GetUtcNow().UtcDateTime;

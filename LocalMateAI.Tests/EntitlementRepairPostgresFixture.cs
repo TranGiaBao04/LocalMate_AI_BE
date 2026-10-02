@@ -76,7 +76,7 @@ internal sealed class EntitlementRepairPostgresFixture(IsolatedPlanDatabase data
         catch { await db.DisposeAsync(); throw; }
     }
 
-    private static async Task SimulateLostPeriodsBeforeAuditMigration(AppDbContext c, IEnumerable<SubscriptionPeriod> retained)
+    internal static async Task SimulateLostPeriodsBeforeAuditMigration(AppDbContext c, IEnumerable<SubscriptionPeriod> retained)
     {
         var name = new NpgsqlConnectionStringBuilder(c.Database.GetConnectionString()).Database;
         if (name is null || !name.StartsWith("localmate_s1b_test_", StringComparison.Ordinal))

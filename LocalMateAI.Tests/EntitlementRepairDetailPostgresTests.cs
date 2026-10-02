@@ -71,7 +71,7 @@ public sealed class EntitlementRepairDetailPostgresTests
         Assert.Equal("Missing", before.Entitlement!.GrantStatus);
         Assert.True(before.RepairEligibility!.Eligible);
         Assert.Empty(before.RepairHistory);
-        Assert.Equal(7, capture.Reads.Count);
+        Assert.Equal(8, capture.Reads.Count);
         Assert.All(capture.Reads, sql =>
         {
             foreach (var name in new[] { "CheckoutUrl", "QrCode", "PasswordHash", "FOR UPDATE", "FOR SHARE" })

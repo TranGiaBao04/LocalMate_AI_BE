@@ -148,14 +148,18 @@ public sealed class PaymentSettlementService(
             && p.StartsAt < end && now < SubscriptionPeriodLifecycle.EffectiveEnd(p)))
             return Conflict();
         foreach (var source in sources) source.Period!.Terminate(now, order.Id);
-        await subscriptionRepository.AddPeriodAsync(new SubscriptionPeriod
+        var targetPeriod = new SubscriptionPeriod
         {
             UserId = order.UserId, PlanId = plan.Id, PlanVersionId = version.Id,
             StartsAt = now, EndsAt = end, SourcePaymentOrderId = order.Id
-        }, ct);
+        };
+        await subscriptionRepository.AddPeriodAsync(targetPeriod, ct);
         order.Status = PaymentOrderStatus.Paid;
         order.PaidAt = now;
-        // Upgrade receipt content belongs to UP-S5; never enqueue the generic purchase receipt.
+        var user = await userRepository.GetByIdAsync(order.UserId, ct)
+            ?? throw new InvalidOperationException("Paid order owner is missing.");
+        await emailOutboxRepository.EnqueueAsync(
+            UpgradePaymentReceiptEmailBuilder.Build(user, order, targetPeriod, plan, version), now, ct);
         return new(PaymentSettlementStatus.Settled)
         { TransitionReasonCode = context.ReasonCode ?? "verified_success", OccurredAt = now };
 

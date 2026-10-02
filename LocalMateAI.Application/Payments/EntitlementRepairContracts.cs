@@ -26,11 +26,15 @@ public sealed record RepairOrderEvidence(Guid Id, Guid UserId, Guid? PlanId, Gui
 {
     public PaymentProductKind ProductKind { get; init; } = PaymentProductKind.SubscriptionPlan;
     public PaymentOrderType Type { get; init; } = PaymentOrderType.Purchase;
+    public decimal CreditAmount { get; init; }
 }
 public sealed record RepairVersionEvidence(Guid Id, Guid PlanId, string PlanCode, decimal Price, int? DurationDays);
 public sealed record RepairPurchaseEvidence(RepairOrderEvidence Order, RepairVersionEvidence? Version);
 public sealed record EntitlementRepairEvidence(bool UserExists, RepairPurchaseEvidence Target,
-    IReadOnlyList<RepairPurchaseEvidence> Purchases, IReadOnlyList<SubscriptionPeriod> Periods);
+    IReadOnlyList<RepairPurchaseEvidence> Purchases, IReadOnlyList<SubscriptionPeriod> Periods)
+{
+    public IReadOnlyList<PaymentOrderCredit> Claims { get; init; } = [];
+}
 
 public static class EntitlementRepairReason
 {

@@ -330,7 +330,7 @@ public sealed class PaymentSettlementServiceTests
         }
     }
 
-    private sealed class FakeUserRepository(User user) : IUserRepository
+    internal sealed class FakeUserRepository(User user) : IUserRepository
     {
         public Task<bool> EmailExistsAsync(string email, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
@@ -354,7 +354,7 @@ public sealed class PaymentSettlementServiceTests
             throw new NotSupportedException();
     }
 
-    private sealed class FakeEmailOutboxRepository : IEmailOutboxRepository
+    internal sealed class FakeEmailOutboxRepository : IEmailOutboxRepository
     {
         public List<(EmailOutboxEntry Entry, DateTime Now)> Entries { get; } = [];
 

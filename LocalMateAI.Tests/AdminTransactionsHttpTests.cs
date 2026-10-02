@@ -105,7 +105,7 @@ public sealed class AdminTransactionsHttpTests
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         var row = json.RootElement.GetProperty("items")[0];
         string[] names = ["id", "providerOrderCode", "userId", "userFullName", "userEmail", "productKind", "planCode",
-            "planName", "operationType", "status", "amount", "currency", "createdAt", "expiresAt", "paidAt"];
+            "planName", "operationType", "status", "amount", "creditAmount", "listPrice", "currency", "createdAt", "expiresAt", "paidAt"];
         Assert.Equal(names.Order(), row.EnumerateObject().Select(p => p.Name).Order());
         Assert.Equal("SubscriptionPlan", row.GetProperty("productKind").GetString());
         Assert.Equal("Purchase", row.GetProperty("operationType").GetString());

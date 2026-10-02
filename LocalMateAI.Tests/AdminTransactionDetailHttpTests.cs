@@ -50,7 +50,7 @@ public sealed class AdminTransactionDetailHttpTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         var root = json.RootElement;
-        Assert.Equal(new[] { "entitlement", "repairEligibility", "repairHistory", "singleItineraryEntitlement", "statusHistory", "transaction", "webhookReceipts" },
+        Assert.Equal(new[] { "creditSources", "entitlement", "repairEligibility", "repairHistory", "singleItineraryEntitlement", "statusHistory", "transaction", "webhookReceipts" },
             root.EnumerateObject().Select(p => p.Name).Order());
         var transaction = root.GetProperty("transaction");
         Assert.Equal("SubscriptionPlan", transaction.GetProperty("productKind").GetString());
