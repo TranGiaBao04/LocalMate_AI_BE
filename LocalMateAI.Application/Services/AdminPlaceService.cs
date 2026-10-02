@@ -1,3 +1,4 @@
+using LocalMateAI.Application.DTOs.Common;
 using LocalMateAI.Application.DTOs.Places;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Interfaces.Services;
@@ -57,6 +58,14 @@ public sealed class AdminPlaceService(
     public Task<IReadOnlyList<AdminPlaceResponse>> GetAllAsync(
         CancellationToken cancellationToken = default) =>
         placeRepository.GetAllForAdminAsync(cancellationToken);
+
+    public Task<PagedResult<AdminPlaceResponse>> GetPagedAsync(
+        AdminPlaceQuery query,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        return placeRepository.GetPagedForAdminAsync(query, cancellationToken);
+    }
 
     public Task<AdminPlaceResponse?> GetByIdAsync(
         Guid placeId,

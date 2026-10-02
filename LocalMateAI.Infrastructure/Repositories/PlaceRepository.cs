@@ -1,8 +1,10 @@
+using LocalMateAI.Application.DTOs.Common;
 using LocalMateAI.Application.DTOs.Places;
 using LocalMateAI.Application.DTOs.Tags;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Domain.Entities;
 using LocalMateAI.Infrastructure.Persistence;
+using LocalMateAI.Infrastructure.Persistence.Querying;
 using LocalMateAI.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 using NetTopologySuite.Geometries;
@@ -11,6 +13,16 @@ namespace LocalMateAI.Infrastructure.Repositories;
 
 public sealed class PlaceRepository(AppDbContext dbContext) : IPlaceRepository
 {
+    private static readonly SortMap<Place> AdminPlaceSortMap = new SortMap<Place>("name", false, p => p.Id)
+        .Add("name", p => p.Name)
+        .Add("address", p => p.Address)
+        .Add("category", p => p.Category)
+        .Add("status", p => p.Status)
+        .Add("isVerified", p => p.IsVerified)
+        .Add("estimatedCostMin", p => p.EstimatedCostMin)
+        .Add("estimatedCostMax", p => p.EstimatedCostMax)
+        .Add("createdAt", p => p.CreatedAt)
+        .Add("updatedAt", p => p.UpdatedAt);
     public async Task<IReadOnlyList<MetroClusterPlaceReadModel>> GetMetroClusterPlacesAsync(
         double radiusMeters,
         CancellationToken cancellationToken = default)
@@ -125,6 +137,68 @@ public sealed class PlaceRepository(AppDbContext dbContext) : IPlaceRepository
                 place.CreatedAt,
                 place.UpdatedAt))
             .ToListAsync(cancellationToken);
+    }
+
+    public async Task<PagedResult<AdminPlaceResponse>> GetPagedForAdminAsync(
+        AdminPlaceQuery query,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        var places = dbContext.Places.AsNoTracking().Where(place => place.DeletedAt == null);
+
+        if (query.NormalizedSearch is { } search)
+        {
+            var upper = search.ToUpperInvariant();
+            places = places.Where(place => place.Name.ToUpper().Contains(upper) || place.Address.ToUpper().Contains(upper));
+        }
+
+        if (query.Category is { } category)
+        {
+            places = places.Where(place => place.Category == category);
+        }
+
+        if (query.Status is { } status)
+        {
+            places = places.Where(place => place.Status == status);
+        }
+
+        if (query.IsVerified is { } isVerified)
+        {
+            places = places.Where(place => place.IsVerified == isVerified);
+        }
+
+        if (query.StationId is { } stationId)
+        {
+            var stationLocation = await dbContext.MetroStations
+                .Where(s => s.Id == stationId)
+                .Select(s => s.Location)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (stationLocation is not null)
+            {
+                places = places.Where(place => place.Location.IsWithinDistance(stationLocation, 1500));
+            }
+        }
+
+        return await places
+            .ApplySort(query, AdminPlaceSortMap)
+            .Select(place => new AdminPlaceResponse(
+                place.Id,
+                place.Name,
+                place.Description,
+                place.Address,
+                place.Location.Y,
+                place.Location.X,
+                place.Category.ToString(),
+                place.Status.ToString(),
+                place.IsVerified,
+                place.EstimatedCostMin,
+                place.EstimatedCostMax,
+                place.ImageUrl,
+                place.CreatedAt,
+                place.UpdatedAt))
+            .ToPagedResultAsync(query, cancellationToken);
     }
 
     public async Task<AdminPlaceResponse?> GetAdminByIdAsync(

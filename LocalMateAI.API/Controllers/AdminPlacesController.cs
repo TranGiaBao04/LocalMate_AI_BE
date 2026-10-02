@@ -1,4 +1,6 @@
+using FluentValidation;
 using LocalMateAI.API.Authorization;
+using LocalMateAI.Application.DTOs.Common;
 using LocalMateAI.Application.DTOs.Places;
 using LocalMateAI.Application.Interfaces.Services;
 using LocalMateAI.Application.Security;
@@ -37,13 +39,23 @@ public sealed class AdminPlacesController(IAdminPlaceService adminPlaceService) 
     }
 
     [HttpGet]
-    [ProducesResponseType<IReadOnlyList<AdminPlaceResponse>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<PagedResult<AdminPlaceResponse>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
-    public async Task<ActionResult<IReadOnlyList<AdminPlaceResponse>>> GetAllAsync(
+    public async Task<ActionResult<PagedResult<AdminPlaceResponse>>> GetPagedAsync(
+        [FromQuery] AdminPlaceQuery query,
+        [FromServices] IValidator<AdminPlaceQuery> queryValidator,
         CancellationToken cancellationToken)
     {
-        var response = await adminPlaceService.GetAllAsync(cancellationToken);
+        var validationResult = await queryValidator.ValidateAsync(query, cancellationToken);
+        if (!validationResult.IsValid)
+        {
+            return BadRequest(CreateInvalidPlaceProblem(
+                validationResult.ToDictionary().ToDictionary(k => k.Key, v => v.Value)));
+        }
+
+        var response = await adminPlaceService.GetPagedAsync(query, cancellationToken);
         return Ok(response);
     }
 

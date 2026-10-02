@@ -1,3 +1,4 @@
+using LocalMateAI.Application.DTOs.Common;
 using LocalMateAI.Application.DTOs.Places;
 
 namespace LocalMateAI.Application.Interfaces.Services;
@@ -9,6 +10,10 @@ public interface IAdminPlaceService
         CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<AdminPlaceResponse>> GetAllAsync(
+        CancellationToken cancellationToken = default);
+
+    Task<PagedResult<AdminPlaceResponse>> GetPagedAsync(
+        AdminPlaceQuery query,
         CancellationToken cancellationToken = default);
 
     Task<AdminPlaceResponse?> GetByIdAsync(
