@@ -95,22 +95,29 @@ public sealed class PaymentEvidencePostgresTests
                 """);
         var legacy = new UserSubscription { UserId = user.Id, PlanCode = PlanCode.TripPass, StartsAt = Now.AddDays(-2), EndsAt = Now.AddDays(5) };
         c.UserSubscriptions.Add(legacy);
-        c.SubscriptionPeriods.Add(new() { UserId = user.Id, PlanId = SubscriptionBaseline.PlanId(PlanCode.TripPass),
-            PlanVersionId = SubscriptionBaseline.VersionId(PlanCode.TripPass), StartsAt = Now.AddDays(-2), EndsAt = Now.AddDays(5), LegacyUserSubscriptionId = legacy.Id });
         c.UsageEvents.Add(new() { UserId = user.Id, TripId = trip.Id, Type = UsageEventType.Generate });
         await c.SaveChangesAsync();
+        // Insert only columns available at the pinned historical schema.
+        await c.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO "SubscriptionPeriods" ("Id","UserId","PlanId","PlanVersionId","StartsAt","EndsAt",
+            "LegacyUserSubscriptionId","CreatedAt","UpdatedAt")
+            VALUES ({Guid.NewGuid()},{user.Id},{SubscriptionBaseline.PlanId(PlanCode.TripPass)},
+            {SubscriptionBaseline.VersionId(PlanCode.TripPass)},{Now.AddDays(-2)},{Now.AddDays(5)},{legacy.Id},{Now},{Now})
+            """);
         string[] tables = ["PaymentOrders", "SubscriptionPeriods", "UserSubscriptions", "UsageEvents", "Users", "Roles", "RolePermissions",
             "SubscriptionPlans", "SubscriptionPlanVersions", "PlanFeatures", "SubscriptionPlanVersionFeatures"];
         var before = new Dictionary<string, string>();
         async Task<string> Snapshot(string table)
         {
             if (!tables.Contains(table)) throw new ArgumentException("Not a snapshot table.");
-            var sql = $"SELECT COALESCE(jsonb_agg(to_jsonb(t)-'ProductKind'-'CheckoutAttemptId'-'SingleItineraryProductVersionId' ORDER BY to_jsonb(t)::text),'[]'::jsonb)::text AS \"Value\" FROM \"{table}\" t";
+            var sql = $"SELECT COALESCE(jsonb_agg(to_jsonb(t)-'ProductKind'-'CheckoutAttemptId'-'SingleItineraryProductVersionId'-'CreditAmount'-'TerminatedAt'-'TerminatedByOrderId' ORDER BY to_jsonb(t)::text),'[]'::jsonb)::text AS \"Value\" FROM \"{table}\" t";
             return await c.Database.SqlQueryRaw<string>(sql).SingleAsync();
         }
         foreach (var table in tables) before[table] = await Snapshot(table);
         await c.Database.MigrateAsync();
         foreach (var table in tables) Assert.Equal(before[table], await Snapshot(table));
+        Assert.All(await c.PaymentOrders.ToListAsync(), o => Assert.Equal(0, o.CreditAmount));
+        Assert.All(await c.SubscriptionPeriods.ToListAsync(), p => { Assert.Null(p.TerminatedAt); Assert.Null(p.TerminatedByOrderId); });
         Assert.Empty(await c.PaymentOrderStatusHistories.ToListAsync());
         Assert.Empty(await c.PaymentWebhookReceipts.ToListAsync());
         Assert.False(c.Database.HasPendingModelChanges());

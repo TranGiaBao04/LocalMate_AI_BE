@@ -35,6 +35,15 @@ public sealed class PaymentOrderConfiguration : IEntityTypeConfiguration<Payment
         builder.Property(order => order.Type).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.Property(order => order.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.Property(order => order.Amount).HasColumnType("numeric(12,0)");
+        builder.Property(order => order.CreditAmount).HasColumnType("numeric(12,0)").HasDefaultValue(0m);
+        builder.ToTable("PaymentOrders", t =>
+        {
+            t.HasCheckConstraint("CK_PaymentOrders_Credit",
+                "\"CreditAmount\" >= 0 AND (\"Type\" = 'Upgrade' OR \"CreditAmount\" = 0)");
+            t.HasCheckConstraint("CK_PaymentOrders_Upgrade",
+                "\"Type\" <> 'Upgrade' OR (\"ProductKind\" = 'SubscriptionPlan' AND " +
+                "\"PlanVersionBinding\" = 'Native' AND \"Amount\" > 0)");
+        });
         builder.Property(order => order.ProviderOrderCode)
             .HasDefaultValueSql("nextval('\"PaymentOrderCodeSequence\"')");
         builder.Property(order => order.CheckoutUrl).IsRequired(false);

@@ -376,13 +376,15 @@ public sealed class PlanFeaturesPostgresTests
         {
             // Identifiers cannot be SQL parameters; only these fixed test tables are allowed.
             if (!tables.Contains(table, StringComparer.Ordinal)) throw new ArgumentException("Unknown test table.");
-            var sql = $"SELECT COALESCE(jsonb_agg(to_jsonb(t)-'FeaturePublicationTransactionId'-'ProductKind'-'CheckoutAttemptId'-'SingleItineraryProductVersionId' ORDER BY to_jsonb(t)::text),'[]'::jsonb)::text AS \"Value\" FROM \"{table}\" t";
+            var sql = $"SELECT COALESCE(jsonb_agg(to_jsonb(t)-'FeaturePublicationTransactionId'-'ProductKind'-'CheckoutAttemptId'-'SingleItineraryProductVersionId'-'CreditAmount'-'TerminatedAt'-'TerminatedByOrderId' ORDER BY to_jsonb(t)::text),'[]'::jsonb)::text AS \"Value\" FROM \"{table}\" t";
             return await c.Database.SqlQueryRaw<string>(sql).SingleAsync();
         }
         var before = new Dictionary<string, string>();
         foreach (var table in tables) before[table] = await Snapshot(table);
         await c.Database.MigrateAsync();
         foreach (var table in tables) Assert.Equal(before[table], await Snapshot(table));
+        Assert.All(await c.PaymentOrders.ToListAsync(), o => Assert.Equal(0, o.CreditAmount));
+        Assert.All(await c.SubscriptionPeriods.ToListAsync(), p => { Assert.Null(p.TerminatedAt); Assert.Null(p.TerminatedByOrderId); });
         Assert.Single(await new SubscriptionRepository(c).GetFeatureCatalogAsync());
         Assert.Equal(3, await c.SubscriptionPlanVersionFeatures.CountAsync());
         Assert.Empty(await new SubscriptionRepository(c).GetFeaturesForVersionAsync(preexistingV2));
