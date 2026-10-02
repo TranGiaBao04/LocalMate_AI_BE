@@ -195,9 +195,9 @@ public sealed class SubscriptionCheckoutQuoteTests
         target.CurrentVersionId = v.Id; f.Subscriptions.Plans.Add(target); f.Subscriptions.Versions.Add(v);
         var q = (await f.Service.GetCheckoutQuoteAsync(UserId, "cheaper")).Response!;
         Assert.Equal("Upgrade", q.Type); Assert.Equal(amount, q.Amount);
-        Assert.Equal(PaymentIntentResultStatus.UpgradeCheckoutNotReady,
+        Assert.Equal(PaymentIntentResultStatus.Success,
             (await f.Service.CheckoutAsync(UserId, "cheaper")).Status);
-        Assert.Empty(f.Orders.Items); Assert.Empty(f.Orders.Histories); Assert.Empty(f.Gateway.Requests);
+        Assert.Equal(amount, Assert.Single(f.Orders.Items).Amount); Assert.Single(f.Gateway.Requests);
     }
 
     [Theory]
@@ -211,9 +211,10 @@ public sealed class SubscriptionCheckoutQuoteTests
         var q = await f.Service.GetCheckoutQuoteAsync(UserId, "Membership");
         var checkout = await f.Service.CheckoutAsync(UserId, "Membership");
         Assert.Equal(terminated ? PaymentIntentResultStatus.Success : PaymentIntentResultStatus.TargetPlanAlreadyScheduled, q.Status);
-        Assert.Equal(terminated ? PaymentIntentResultStatus.UpgradeCheckoutNotReady
+        Assert.Equal(terminated ? PaymentIntentResultStatus.Success
             : PaymentIntentResultStatus.TargetPlanAlreadyScheduled, checkout.Status);
-        Assert.Empty(f.Orders.Items); Assert.Empty(f.Orders.Histories); Assert.Empty(f.Gateway.Requests);
+        Assert.Equal(terminated ? 1 : 0, f.Orders.Items.Count);
+        Assert.Equal(terminated ? 1 : 0, f.Gateway.Requests.Count);
     }
 
     [Theory]
@@ -252,7 +253,7 @@ public sealed class SubscriptionCheckoutQuoteTests
     }
 
     [Fact]
-    public async Task QuoteIgnoresPending_CheckoutExpiresOrdinaryPendingButNeverCreatesUpgrade()
+    public async Task QuoteIgnoresPending_CheckoutExpiresOrdinaryPendingThenCreatesUpgrade()
     {
         var f = Fixture(); var (_, p) = AddNative(f);
         var pending = new PaymentOrder { UserId = UserId, PlanId = SubscriptionBaseline.PlanId(PlanCode.Membership),
@@ -260,10 +261,10 @@ public sealed class SubscriptionCheckoutQuoteTests
         f.Orders.Items.Add(pending);
         var end = p.EndsAt;
         Assert.Equal(PaymentIntentResultStatus.Success, (await f.Service.GetCheckoutQuoteAsync(UserId, "Membership")).Status);
-        Assert.Equal(PaymentIntentResultStatus.UpgradeCheckoutNotReady, (await f.Service.CheckoutAsync(UserId, "Membership")).Status);
-        Assert.Single(f.Orders.Items); Assert.Single(f.Orders.Histories);
+        Assert.Equal(PaymentIntentResultStatus.Success, (await f.Service.CheckoutAsync(UserId, "Membership")).Status);
+        Assert.Equal(2, f.Orders.Items.Count); Assert.Single(f.Orders.Histories);
         Assert.Equal(PaymentOrderStatus.Expired, pending.Status); Assert.Equal(end, p.EndsAt);
-        Assert.Empty(f.Gateway.Requests); Assert.Equal(0, f.Gateway.LookupCalls);
+        Assert.Single(f.Gateway.Requests); Assert.Equal(0, f.Gateway.LookupCalls);
     }
 
     [Fact]

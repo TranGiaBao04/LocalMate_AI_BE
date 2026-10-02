@@ -5,5 +5,6 @@ public enum PaymentOrderStatus
     Pending,
     Paid,
     Failed,
-    Expired
+    Expired,
+    ReviewRequired
 }

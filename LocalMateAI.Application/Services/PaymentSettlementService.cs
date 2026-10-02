@@ -3,6 +3,7 @@ using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Payments;
 using LocalMateAI.Domain.Entities;
 using LocalMateAI.Domain.Enums;
+using LocalMateAI.Domain.Services;
 using Microsoft.Extensions.Logging;
 
 namespace LocalMateAI.Application.Services;
@@ -14,7 +15,8 @@ public sealed class PaymentSettlementService(
     IEmailOutboxRepository emailOutboxRepository,
     TimeProvider timeProvider,
     ILogger<PaymentSettlementService> logger,
-    ISingleItineraryRepository? singleRepository = null) : IPaymentSettlementService
+    ISingleItineraryRepository? singleRepository = null,
+    IPaymentCreditRepository? creditRepository = null) : IPaymentSettlementService
 {
     public Task<PaymentSettlementResult> ApplyVerifiedPaymentAsync(
         VerifiedPaymentNotification notification,
@@ -50,9 +52,8 @@ public sealed class PaymentSettlementService(
             return new PaymentSettlementResult(PaymentSettlementStatus.AlreadyPaid);
         }
 
-        // Foundation only: no Upgrade grant before reservation/replacement settlement is implemented.
-        if (order.Type == PaymentOrderType.Upgrade)
-            return new PaymentSettlementResult(PaymentSettlementStatus.InvalidPaidPlan);
+        if (order.Status == PaymentOrderStatus.ReviewRequired)
+            return new(PaymentSettlementStatus.CreditConflict);
 
         if (!notification.IsSuccessful)
         {
@@ -75,6 +76,9 @@ public sealed class PaymentSettlementService(
 
         if (order.ProductKind == PaymentProductKind.SingleItinerary)
             return await SettleSingleAsync(order, context, cancellationToken);
+
+        if (order.Type == PaymentOrderType.Upgrade)
+            return await SettleUpgradeAsync(order, context, cancellationToken);
 
         if (order.PlanVersionBinding == PlanVersionBinding.LegacyUnresolved)
         {
@@ -99,7 +103,8 @@ public sealed class PaymentSettlementService(
         var periods = await subscriptionRepository.GetPeriodsAsync(order.UserId, cancellationToken);
         if (periods.Any(p => p.SourcePaymentOrderId == order.Id))
             return new PaymentSettlementResult(PaymentSettlementStatus.AlreadyPaid);
-        var tail = periods.Where(p => p.PlanId == plan.Id).Select(p => p.EndsAt)
+        var tail = periods.Where(p => p.PlanId == plan.Id && SubscriptionPeriodLifecycle.HasEffectiveDuration(p))
+            .Select(SubscriptionPeriodLifecycle.EffectiveEnd)
             .DefaultIfEmpty(nowUtc).Max();
         var start = tail > nowUtc ? tail : nowUtc;
         var subscription = new SubscriptionPeriod
@@ -118,6 +123,48 @@ public sealed class PaymentSettlementService(
         await EnqueueReceiptAsync(order, subscription, plan, version, nowUtc, cancellationToken);
         return new PaymentSettlementResult(PaymentSettlementStatus.Settled)
         { TransitionReasonCode = context.ReasonCode ?? "verified_success" };
+    }
+
+    private async Task<PaymentSettlementResult> SettleUpgradeAsync(PaymentOrder order,
+        PaymentTransitionContext context, CancellationToken ct)
+    {
+        var plan = order.PlanId is { } planId ? await subscriptionRepository.GetPlanAsync(planId, ct) : null;
+        var version = order.PlanVersionId is { } versionId ? await subscriptionRepository.GetVersionAsync(versionId, ct) : null;
+        if (order.ProductKind != PaymentProductKind.SubscriptionPlan || order.PlanVersionBinding != PlanVersionBinding.Native
+            || plan is null || version is null || version.PlanId != plan.Id || plan.Code == PlanIdentity.Free
+            || version.DurationDays is not > 0 || version.Price <= 0 || order.Amount <= 0 || order.CreditAmount < 0
+            || order.Amount + order.CreditAmount != version.Price)
+            return new(PaymentSettlementStatus.InvalidPaidPlan);
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        var sources = creditRepository is null ? [] : await creditRepository.LoadForSettlementAsync(order.Id, ct);
+        if (sources.Count == 0 || sources.Any(s => s.Claim.OrderId != order.Id || s.Claim.UserId != order.UserId
+            || s.Claim.ReleasedAt is not null || s.Period is not { } p || p.Id != s.Claim.PeriodId
+            || p.UserId != order.UserId || p.EndsAt != s.Claim.OriginalEndsAt
+            || p.TerminatedAt is not null || p.TerminatedByOrderId is not null))
+            return Conflict();
+        var end = now.AddDays(version.DurationDays.Value);
+        var periods = await subscriptionRepository.GetPeriodsAsync(order.UserId, ct);
+        if (periods.Any(p => p.PlanId == plan.Id && SubscriptionPeriodLifecycle.HasEffectiveDuration(p)
+            && p.StartsAt < end && now < SubscriptionPeriodLifecycle.EffectiveEnd(p)))
+            return Conflict();
+        foreach (var source in sources) source.Period!.Terminate(now, order.Id);
+        await subscriptionRepository.AddPeriodAsync(new SubscriptionPeriod
+        {
+            UserId = order.UserId, PlanId = plan.Id, PlanVersionId = version.Id,
+            StartsAt = now, EndsAt = end, SourcePaymentOrderId = order.Id
+        }, ct);
+        order.Status = PaymentOrderStatus.Paid;
+        order.PaidAt = now;
+        // Upgrade receipt content belongs to UP-S5; never enqueue the generic purchase receipt.
+        return new(PaymentSettlementStatus.Settled)
+        { TransitionReasonCode = context.ReasonCode ?? "verified_success", OccurredAt = now };
+
+        PaymentSettlementResult Conflict()
+        {
+            order.Status = PaymentOrderStatus.ReviewRequired;
+            return new(PaymentSettlementStatus.CreditConflict)
+            { TransitionReasonCode = "upgrade_credit_conflict", OccurredAt = now };
+        }
     }
 
     private async Task<PaymentSettlementResult> SettleSingleAsync(PaymentOrder order,

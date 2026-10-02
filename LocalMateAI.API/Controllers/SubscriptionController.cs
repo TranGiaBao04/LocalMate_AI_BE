@@ -187,6 +187,7 @@ public sealed class SubscriptionController(
             PaymentIntentResultStatus.PendingOrderExists => Conflict(
                 CreatePendingOrderProblem(result.Response!)),
             PaymentIntentResultStatus.AnotherPendingOrder => Conflict(CreateAnotherPendingOrderProblem(result.Response!)),
+            PaymentIntentResultStatus.PaymentReviewRequired => Conflict(CreateReviewRequiredProblem(result.Response!)),
             PaymentIntentResultStatus.NoActiveSubscription => Conflict(CreateProblem(
                 StatusCodes.Status409Conflict,
                 "No active paid subscription is available to renew.",
@@ -236,6 +237,14 @@ public sealed class SubscriptionController(
         var problem = CreatePendingOrderProblem(response);
         problem.Title = "Another subscription payment order is still unresolved.";
         problem.Extensions["code"] = "another_pending_order";
+        return problem;
+    }
+
+    private ProblemDetails CreateReviewRequiredProblem(PaymentIntentResponse response)
+    {
+        var problem = CreatePendingOrderProblem(response);
+        problem.Title = "A subscription payment requires manual review.";
+        problem.Extensions["code"] = "payment_review_required";
         return problem;
     }
 

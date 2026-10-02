@@ -9,6 +9,24 @@ namespace LocalMateAI.Infrastructure.Repositories;
 
 public sealed class PaymentCreditRepository(AppDbContext db, TimeProvider clock) : IPaymentCreditRepository
 {
+    public async Task<IReadOnlyList<UpgradeSettlementSource>> LoadForSettlementAsync(Guid orderId,
+        CancellationToken cancellationToken = default)
+    {
+        if (db.Database.CurrentTransaction is null)
+            throw new InvalidOperationException("Credit settlement requires the shared locked transaction.");
+        await db.Database.SqlQuery<Guid>($"SELECT \"PeriodId\" AS \"Value\" FROM \"PaymentOrderCredits\" WHERE \"OrderId\"={orderId} ORDER BY \"PeriodId\" FOR UPDATE")
+            .ToListAsync(cancellationToken);
+        await db.Database.SqlQuery<Guid>($"SELECT \"Id\" AS \"Value\" FROM \"SubscriptionPeriods\" WHERE \"Id\" IN (SELECT \"PeriodId\" FROM \"PaymentOrderCredits\" WHERE \"OrderId\"={orderId}) ORDER BY \"Id\" FOR UPDATE")
+            .ToListAsync(cancellationToken);
+        var claims = await db.PaymentOrderCredits.Where(c => c.OrderId == orderId).OrderBy(c => c.PeriodId)
+            .ToListAsync(cancellationToken);
+        var ids = claims.Select(c => c.PeriodId).ToArray();
+        var periods = await db.SubscriptionPeriods.Where(p => ids.Contains(p.Id)).OrderBy(p => p.Id)
+            .ToListAsync(cancellationToken);
+        foreach (var claim in claims) await db.Entry(claim).ReloadAsync(cancellationToken);
+        foreach (var period in periods) await db.Entry(period).ReloadAsync(cancellationToken);
+        return claims.Select(c => new UpgradeSettlementSource(c, periods.SingleOrDefault(p => p.Id == c.PeriodId))).ToArray();
+    }
     public async Task AddClaimsAsync(IReadOnlyList<PaymentOrderCredit> claims, CancellationToken cancellationToken = default)
     {
         db.PaymentOrderCredits.AddRange(claims);

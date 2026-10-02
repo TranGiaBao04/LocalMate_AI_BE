@@ -25,6 +25,7 @@ public sealed record RepairOrderEvidence(Guid Id, Guid UserId, Guid? PlanId, Gui
     PlanVersionBinding? Binding, PaymentOrderStatus Status, decimal Amount, DateTime? PaidAt)
 {
     public PaymentProductKind ProductKind { get; init; } = PaymentProductKind.SubscriptionPlan;
+    public PaymentOrderType Type { get; init; } = PaymentOrderType.Purchase;
 }
 public sealed record RepairVersionEvidence(Guid Id, Guid PlanId, string PlanCode, decimal Price, int? DurationDays);
 public sealed record RepairPurchaseEvidence(RepairOrderEvidence Order, RepairVersionEvidence? Version);

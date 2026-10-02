@@ -1,12 +1,13 @@
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Domain.Entities;
 using LocalMateAI.Domain.Enums;
+using LocalMateAI.Domain.Services;
 namespace LocalMateAI.Application.Services;
 
 public sealed record EffectiveSubscription(SubscriptionPlan Plan, SubscriptionPlanVersion Version,
     SubscriptionPeriod? Period, DateTime? PaidThrough)
 {
-    public DateTime? EffectiveUntil => Period?.EndsAt;
+    public DateTime? EffectiveUntil => Period is { } period ? SubscriptionPeriodLifecycle.EffectiveEnd(period) : null;
 }
 public static class EffectiveSubscriptionResolver
 {
@@ -14,7 +15,7 @@ public static class EffectiveSubscriptionResolver
         Guid userId, DateTime nowUtc, CancellationToken ct = default)
     {
         var periods = await repository.GetPeriodsAsync(userId, ct);
-        var active = periods.Where(p => p.StartsAt <= nowUtc && nowUtc < p.EndsAt).ToArray();
+        var active = periods.Where(p => SubscriptionPeriodLifecycle.IsEffectiveAt(p, nowUtc)).ToArray();
         var candidates = new List<EffectiveSubscription>();
         foreach (var period in active)
         {
@@ -24,12 +25,13 @@ public static class EffectiveSubscriptionResolver
                 ?? throw new InvalidOperationException("Missing purchased version.");
             if (version.PlanId != plan.Id || plan.Code == PlanIdentity.Free)
                 throw new InvalidOperationException("Invalid paid entitlement binding.");
-            var paidThrough = period.EndsAt;
-            foreach (var next in periods.Where(p => p.PlanId == plan.Id && p.StartsAt >= period.EndsAt)
+            var paidThrough = SubscriptionPeriodLifecycle.EffectiveEnd(period);
+            foreach (var next in periods.Where(p => p.PlanId == plan.Id && p.Id != period.Id
+                         && p.StartsAt >= paidThrough && SubscriptionPeriodLifecycle.HasEffectiveDuration(p))
                          .OrderBy(p => p.StartsAt))
             {
                 if (next.StartsAt != paidThrough) break;
-                paidThrough = next.EndsAt;
+                paidThrough = SubscriptionPeriodLifecycle.EffectiveEnd(next);
             }
             candidates.Add(new(plan, version, period, paidThrough));
         }

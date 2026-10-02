@@ -73,11 +73,39 @@ public sealed class SubscriptionCheckoutQuoteHttpTests
         var row = Assert.Single(root.GetProperty("credits").EnumerateArray());
         Assert.Equal(new[] { "creditAmount", "planCode", "planName", "remainingDays" },
             row.EnumerateObject().Select(p => p.Name).Order().ToArray());
+        var checkout = await host.Client.PostAsJsonAsync("/api/subscription/checkout", new { planCode = "Membership" });
+        Assert.Equal(HttpStatusCode.Created, checkout.StatusCode);
+        using var intent = JsonDocument.Parse(await checkout.Content.ReadAsStringAsync());
+        Assert.Equal("Upgrade", intent.RootElement.GetProperty("type").GetString());
+        Assert.Equal(49000, intent.RootElement.GetProperty("amount").GetDecimal());
+        Assert.Equal(59000, intent.RootElement.GetProperty("listPrice").GetDecimal());
+        Assert.Single(f.Orders.Items); Assert.Single(f.Gateway.Requests);
         await SubscriptionHttpContractTests.AssertProblemAsync(
             await host.Client.PostAsJsonAsync("/api/subscription/checkout", new { planCode = "Membership" }),
-            HttpStatusCode.Conflict, "upgrade_checkout_not_ready");
-        Assert.Empty(f.Orders.Items); Assert.Empty(f.Orders.Histories); Assert.Empty(f.Gateway.Requests);
+            HttpStatusCode.Conflict, "pending_order_exists");
+        Assert.Single(f.Gateway.Requests);
         Assert.Equal(0, f.Gateway.LookupCalls);
+    }
+
+    [Fact]
+    public async Task ReviewRequiredIs409ForCheckoutAndRenewal_OwnerMetadataOnly()
+    {
+        var f = new PaymentServiceTests.Fixture(now: SubscriptionCheckoutQuoteTests.Now);
+        SubscriptionCheckoutQuoteTests.AddNative(f);
+        var result = await f.Service.CheckoutAsync(SubscriptionCheckoutQuoteTests.UserId, "Membership");
+        var order = Assert.Single(f.Orders.Items);
+        order.Status = PaymentOrderStatus.ReviewRequired;
+        using var host = new SubscriptionHttpContractTests.ContractTestHost(f.Service);
+        host.Client.DefaultRequestHeaders.Add("X-Test-User-Id", SubscriptionCheckoutQuoteTests.UserId.ToString());
+        host.Client.DefaultRequestHeaders.Add("X-Test-Role", "User");
+        await SubscriptionHttpContractTests.AssertProblemAsync(
+            await host.Client.PostAsJsonAsync("/api/subscription/checkout", new { planCode = "TripPass" }),
+            HttpStatusCode.Conflict, "payment_review_required");
+        await SubscriptionHttpContractTests.AssertProblemAsync(
+            await host.Client.PostAsJsonAsync("/api/subscription/renew", new { }),
+            HttpStatusCode.Conflict, "payment_review_required");
+        Assert.Single(f.Orders.Items); Assert.Single(f.Gateway.Requests); Assert.Equal(0, f.Gateway.LookupCalls);
+        Assert.Equal(PaymentIntentResultStatus.Success, result.Status);
     }
 
     [Fact]
