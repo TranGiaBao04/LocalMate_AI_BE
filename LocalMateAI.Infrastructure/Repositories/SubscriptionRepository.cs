@@ -1,4 +1,5 @@
 using LocalMateAI.Application.Interfaces.Repositories;
+using LocalMateAI.Application.Payments;
 using LocalMateAI.Domain.Entities;
 using LocalMateAI.Domain.Enums;
 using LocalMateAI.Infrastructure.Persistence;
@@ -13,7 +14,7 @@ public sealed class SubscriptionRepository(AppDbContext dbContext) : ISubscripti
             .ToListAsync(cancellationToken);
 
     public Task<SubscriptionPlan?> GetPlanByCodeAsync(string code, CancellationToken cancellationToken = default) =>
-        dbContext.SubscriptionPlans.AsNoTracking().SingleOrDefaultAsync(p => p.Code == code, cancellationToken);
+        dbContext.SubscriptionPlans.AsNoTracking().SingleOrDefaultAsync(p => p.Code.ToLower() == code.ToLowerInvariant(), cancellationToken);
 
     public Task<SubscriptionPlan?> GetPlanAsync(Guid id, CancellationToken cancellationToken = default) =>
         dbContext.SubscriptionPlans.AsNoTracking().SingleOrDefaultAsync(p => p.Id == id, cancellationToken);
@@ -23,6 +24,26 @@ public sealed class SubscriptionRepository(AppDbContext dbContext) : ISubscripti
 
     public async Task<IReadOnlyList<SubscriptionPeriod>> GetPeriodsAsync(Guid userId, CancellationToken cancellationToken = default) =>
         await dbContext.SubscriptionPeriods.AsNoTracking().Where(p => p.UserId == userId).ToListAsync(cancellationToken);
+
+    public async Task<IReadOnlyList<SubscriptionQuoteSource>> GetQuoteSourcesAsync(
+        Guid userId, CancellationToken cancellationToken = default) =>
+        await (from period in dbContext.SubscriptionPeriods.AsNoTracking()
+               join plan in dbContext.SubscriptionPlans.AsNoTracking() on period.PlanId equals plan.Id
+               join version in dbContext.SubscriptionPlanVersions.AsNoTracking()
+                   on period.PlanVersionId equals version.Id into versions
+               from version in versions.DefaultIfEmpty()
+               join order in dbContext.PaymentOrders.AsNoTracking()
+                   on period.SourcePaymentOrderId equals (Guid?)order.Id into orders
+               from order in orders.DefaultIfEmpty()
+               where period.UserId == userId
+               select new SubscriptionQuoteSource(period, plan, version, order == null ? null : new PaymentOrder
+               {
+                   Id = order.Id, UserId = order.UserId, ProductKind = order.ProductKind,
+                   PlanId = order.PlanId, PlanVersionId = order.PlanVersionId,
+                   PlanVersionBinding = order.PlanVersionBinding, Status = order.Status,
+                   PaidAt = order.PaidAt, Type = order.Type, Amount = order.Amount, CreditAmount = order.CreditAmount
+               }))
+            .ToListAsync(cancellationToken);
 
     public Task AddPeriodAsync(SubscriptionPeriod period, CancellationToken cancellationToken = default) =>
         dbContext.SubscriptionPeriods.AddAsync(period, cancellationToken).AsTask();

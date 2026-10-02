@@ -423,6 +423,8 @@ public sealed class PlanFeaturesPostgresTests
 
     private sealed class UnusedPaymentService : IPaymentService
     {
+        public Task<CheckoutQuoteResult> GetCheckoutQuoteAsync(Guid userId, string? planCode,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<PaymentIntentResult> CheckoutAsync(Guid userId, string? code, CancellationToken ct = default) =>
             throw new NotSupportedException();
         public Task<PaymentIntentResult> RenewAsync(Guid userId, CancellationToken ct = default) =>

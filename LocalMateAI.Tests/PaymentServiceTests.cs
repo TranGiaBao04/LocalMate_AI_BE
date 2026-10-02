@@ -19,7 +19,6 @@ public sealed class PaymentServiceTests
     [InlineData("")]
     [InlineData("Free")]
     [InlineData("Unknown")]
-    [InlineData("membership")]
     public async Task Checkout_InvalidOrFreePlan_IsRejected(string? planCode)
     {
         var fixture = new Fixture();
@@ -82,7 +81,7 @@ public sealed class PaymentServiceTests
     }
 
     [Fact]
-    public async Task Checkout_ActiveTripPassAllowsMembershipUpgradeWithoutMutatingSubscription()
+    public async Task Checkout_ActiveTripPassBlocksPayableUpgradeWithoutMutatingSubscription()
     {
         var subscription = Active(PlanCode.TripPass);
         var originalEndsAt = subscription.EndsAt;
@@ -90,8 +89,9 @@ public sealed class PaymentServiceTests
 
         var result = await fixture.Service.CheckoutAsync(UserId, "Membership");
 
-        Assert.Equal(PaymentIntentResultStatus.Success, result.Status);
-        Assert.Equal(PlanCode.Membership, Assert.Single(fixture.Orders.Items).PlanCode);
+        Assert.Equal(PaymentIntentResultStatus.UpgradeCheckoutNotReady, result.Status);
+        Assert.Empty(fixture.Orders.Items);
+        Assert.Empty(fixture.Gateway.Requests);
         Assert.Equal(originalEndsAt, subscription.EndsAt);
     }
 
@@ -394,33 +394,36 @@ public sealed class PaymentServiceTests
             CreatedAt = Now.AddMinutes(-1)
         };
 
-    private sealed class Fixture
+    internal sealed class Fixture
     {
         public Fixture(
             bool persistedUser = true,
             IReadOnlyList<UserSubscription>? subscriptions = null,
             IReadOnlyList<PaymentOrder>? existingOrders = null,
             FakeGateway? gateway = null,
-            IPaymentSettlementService? settlementService = null)
+            IPaymentSettlementService? settlementService = null,
+            DateTime? now = null)
         {
             Orders = new FakePaymentOrderRepository(existingOrders ?? []);
             Gateway = gateway ?? new FakeGateway(_ =>
                 PaymentLinkResult.Succeeded("https://checkout.test/new", "new-qr"));
+            Subscriptions = new FakeSubscriptionRepository(subscriptions ?? []);
             Service = new PaymentService(
                 new FakeUserRepository(persistedUser),
-                new FakeSubscriptionRepository(subscriptions ?? []),
+                Subscriptions,
                 Orders,
                 new FakePaymentOperationExecutor(persistedUser),
                 Gateway,
                 new PaymentReconciliationService(Orders, Gateway, settlementService ?? new FakeSettlementService(),
-                    new FixedTimeProvider(Now), NullLogger<PaymentReconciliationService>.Instance),
-                new FixedTimeProvider(Now),
+                    new FixedTimeProvider(now ?? Now), NullLogger<PaymentReconciliationService>.Instance),
+                new FixedTimeProvider(now ?? Now),
                 NullLogger<PaymentService>.Instance);
         }
 
         public PaymentService Service { get; }
         public FakePaymentOrderRepository Orders { get; }
         public FakeGateway Gateway { get; }
+        public TestSubscriptionRepository Subscriptions { get; }
     }
 
     private sealed class FixedTimeProvider(DateTime now) : TimeProvider
@@ -439,7 +442,7 @@ public sealed class PaymentServiceTests
                 : new PaymentOperationExecution<T>(false, default);
     }
 
-    private sealed class FakePaymentOrderRepository(IReadOnlyList<PaymentOrder> existing)
+    internal sealed class FakePaymentOrderRepository(IReadOnlyList<PaymentOrder> existing)
         : IPaymentOrderRepository
     {
         private long nextProviderCode = 1000;
@@ -518,7 +521,7 @@ public sealed class PaymentServiceTests
         }
     }
 
-    private sealed class FakeGateway(
+    internal sealed class FakeGateway(
         Func<PaymentLinkRequest, PaymentLinkResult> create,
         Func<long, PaymentGatewayOrderResult>? lookup = null)
         : IPaymentGateway

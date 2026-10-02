@@ -1,5 +1,6 @@
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Services;
+using LocalMateAI.Application.Payments;
 using LocalMateAI.Domain.Entities;
 using LocalMateAI.Domain.Enums;
 using LocalMateAI.Infrastructure.Persistence;
@@ -11,6 +12,7 @@ public abstract class TestSubscriptionRepository : ISubscriptionRepository
     public List<SubscriptionPlan> Plans { get; } = [.. SubscriptionBaseline.Plans()];
     public List<SubscriptionPlanVersion> Versions { get; } = [.. SubscriptionBaseline.Versions()];
     public List<SubscriptionPeriod> Periods { get; } = [];
+    public List<PaymentOrder> QuoteOrders { get; } = [];
     public List<PlanFeature> Features { get; } = [PlanFeatureBaseline.MetroGoogleMaps()];
     public List<SubscriptionPlanVersionFeature> VersionFeatures { get; } =
         SubscriptionBaseline.Versions().Select(v => new SubscriptionPlanVersionFeature
@@ -21,7 +23,7 @@ public abstract class TestSubscriptionRepository : ISubscriptionRepository
     public Task<IReadOnlyList<SubscriptionPlan>> GetPlansAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<SubscriptionPlan>>(Plans);
     public Task<SubscriptionPlan?> GetPlanByCodeAsync(string code, CancellationToken cancellationToken = default) =>
-        Task.FromResult(Plans.SingleOrDefault(p => p.Code == code));
+        Task.FromResult(Plans.SingleOrDefault(p => string.Equals(p.Code, code, StringComparison.OrdinalIgnoreCase)));
     public Task<SubscriptionPlan?> GetPlanAsync(Guid id, CancellationToken cancellationToken = default) =>
         Task.FromResult(Plans.SingleOrDefault(p => p.Id == id));
     public Task<SubscriptionPlanVersion?> GetVersionAsync(Guid id, CancellationToken cancellationToken = default) =>
@@ -48,6 +50,11 @@ public abstract class TestSubscriptionRepository : ISubscriptionRepository
         Periods.Add(period);
         return Task.CompletedTask;
     }
+    public async Task<IReadOnlyList<SubscriptionQuoteSource>> GetQuoteSourcesAsync(
+        Guid userId, CancellationToken cancellationToken = default) =>
+        (await GetPeriodsAsync(userId, cancellationToken)).Select(p => new SubscriptionQuoteSource(
+            p, Plans.Single(x => x.Id == p.PlanId), Versions.SingleOrDefault(v => v.Id == p.PlanVersionId),
+            QuoteOrders.SingleOrDefault(o => o.Id == p.SourcePaymentOrderId))).ToArray();
     public Task<IReadOnlyList<PlanFeature>> GetFeatureCatalogAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<PlanFeature>>(Features.OrderBy(f => f.Code).ToArray());
     public Task<IReadOnlyList<PlanFeature>> GetFeaturesForVersionAsync(Guid versionId, CancellationToken cancellationToken = default) =>

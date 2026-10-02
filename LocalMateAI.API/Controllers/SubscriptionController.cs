@@ -47,6 +47,24 @@ public sealed class SubscriptionController(
         return Ok(response);
     }
 
+    [HttpGet("checkout-quote")]
+    [Authorize(Policy = AppPolicies.RegisteredUser)]
+    [ProducesResponseType<CheckoutQuoteResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<CheckoutQuoteResponse>> GetCheckoutQuoteAsync(
+        [FromQuery] string? planCode, CancellationToken cancellationToken)
+    {
+        if (!TryGetUserId(out var userId))
+            return Unauthorized(CreateProblem(401, "Authentication identity is invalid.", "invalid_identity"));
+        var result = await paymentService.GetCheckoutQuoteAsync(userId, planCode, cancellationToken);
+        if (result.Status == PaymentIntentResultStatus.Success) return Ok(result.Response);
+        var error = ToPaymentIntentActionResult(new(result.Status));
+        return error.Result!;
+    }
+
     [HttpPost("checkout")]
     [Authorize(Policy = AppPolicies.RegisteredUser)]
     [ProducesResponseType<PaymentIntentResponse>(StatusCodes.Status201Created)]
@@ -150,7 +168,7 @@ public sealed class SubscriptionController(
                 result.Response),
             PaymentIntentResultStatus.InvalidPlanCode => BadRequest(CreateProblem(
                 StatusCodes.Status400BadRequest,
-                "Plan code must be TripPass or Membership.",
+                "A valid active paid plan and current version are required.",
                 "invalid_plan_code")),
             PaymentIntentResultStatus.PlanAlreadyActive => Conflict(CreateProblem(
                 StatusCodes.Status409Conflict,
@@ -160,6 +178,12 @@ public sealed class SubscriptionController(
                 StatusCodes.Status409Conflict,
                 "The requested plan is covered by a higher active plan.",
                 "already_covered_by_higher_plan")),
+            PaymentIntentResultStatus.TargetPlanAlreadyScheduled => Conflict(CreateProblem(
+                StatusCodes.Status409Conflict, "The target plan already has a future period.",
+                "target_plan_already_scheduled")),
+            PaymentIntentResultStatus.UpgradeCheckoutNotReady => Conflict(CreateProblem(
+                StatusCodes.Status409Conflict, "Upgrade payment checkout is not enabled in this phase.",
+                "upgrade_checkout_not_ready")),
             PaymentIntentResultStatus.PendingOrderExists => Conflict(
                 CreatePendingOrderProblem(result.Response!)),
             PaymentIntentResultStatus.NoActiveSubscription => Conflict(CreateProblem(
@@ -200,6 +224,9 @@ public sealed class SubscriptionController(
         problem.Extensions["checkoutUrl"] = response.CheckoutUrl;
         problem.Extensions["amount"] = response.Amount;
         problem.Extensions["expiresAt"] = response.ExpiresAt;
+        problem.Extensions["type"] = response.Type;
+        problem.Extensions["listPrice"] = response.ListPrice;
+        problem.Extensions["creditAmount"] = response.CreditAmount;
         return problem;
     }
 
