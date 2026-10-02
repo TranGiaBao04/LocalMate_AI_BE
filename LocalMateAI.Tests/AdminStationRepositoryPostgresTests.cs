@@ -40,7 +40,7 @@ public sealed class AdminStationRepositoryPostgresTests
         await c.SaveChangesAsync();
         c.ChangeTracker.Clear();
 
-        var response = await new AdminStationService(new AdminStationRepository(c), new FixedSettings(5)).GetStationsAsync();
+        var response = await new AdminStationService(new AdminStationRepository(c), new FakeSystemSettingProvider()).GetStationsAsync();
 
         Assert.Equal([1, 2, 3], response.Stations.Select(station => station.Order));
         Assert.Equal(new PlaceStatusCounts(0, 2, 0, 2), response.Stations[0].Totals);
@@ -62,7 +62,7 @@ public sealed class AdminStationRepositoryPostgresTests
         c.Places.Add(Place("Lẻ loi", Station1Lng, PlaceCategory.Cafe, PlaceStatus.Pending));
         await c.SaveChangesAsync();
 
-        var response = await new AdminStationService(new AdminStationRepository(c), new FixedSettings(5)).GetStationsAsync();
+        var response = await new AdminStationService(new AdminStationRepository(c), new FakeSystemSettingProvider()).GetStationsAsync();
 
         Assert.Empty(response.Stations);
         Assert.Equal(new PlaceStatusCounts(1, 0, 0, 1), response.OutsideCoverage);
@@ -72,14 +72,6 @@ public sealed class AdminStationRepositoryPostgresTests
         station.Categories.Single(item => item.Category == category);
 
     private static Point Point(double lng, double lat) => new(lng, lat) { SRID = 4326 };
-
-    private sealed class FixedSettings(int minActive) : ISystemSettingProvider
-    {
-        public Task<int> GetIntAsync(string key, CancellationToken cancellationToken = default) =>
-            Task.FromResult(minActive);
-
-        public void Invalidate() { }
-    }
 
     private static Place Place(string name, double lng, PlaceCategory category, PlaceStatus status,
         DateTime? deletedAt = null) => new()

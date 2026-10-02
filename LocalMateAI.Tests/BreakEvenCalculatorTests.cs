@@ -1,8 +1,6 @@
-using LocalMateAI.Application.Dashboard;
 using LocalMateAI.Application.DTOs.Dashboard;
 using LocalMateAI.Application.Services;
 using LocalMateAI.Application.Validators.Dashboard;
-using LocalMateAI.Infrastructure.Dashboard;
 
 namespace LocalMateAI.Tests;
 
@@ -111,18 +109,6 @@ public sealed class BreakEvenCalculatorTests
         var error = Assert.Single(MonthValidator().Validate(new DashboardBreakEvenQuery { Month = month }).Errors);
 
         Assert.Equal("Month", error.PropertyName);
-    }
-
-    [Theory]
-    [InlineData(0, false)]
-    [InlineData(-1, false)]
-    [InlineData(5_000_000, true)]
-    public void OptionsValidator_RequiresPositiveTarget(decimal target, bool valid)
-    {
-        var result = new DashboardOptionsValidator().Validate(null,
-            new DashboardOptions { BreakEvenMonthlyRevenue = target });
-
-        Assert.Equal(valid, result.Succeeded);
     }
 
     private static DashboardBreakEvenQueryValidator MonthValidator() =>

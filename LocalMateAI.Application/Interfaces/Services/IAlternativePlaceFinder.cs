@@ -10,5 +10,6 @@ public interface IAlternativePlaceFinder
         IReadOnlyList<PlaceCandidateDto> candidates,
         IReadOnlyDictionary<Guid, IReadOnlyList<Guid>> placeTagIdsByPlaceId,
         IReadOnlyCollection<Guid> excludedPlaceIds,
-        int limit);
+        int limit,
+        int maxCostIncreasePercent);
 }

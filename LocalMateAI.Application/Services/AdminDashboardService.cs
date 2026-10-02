@@ -1,12 +1,11 @@
 using System.Globalization;
 using FluentValidation;
 using FluentValidation.Results;
-using LocalMateAI.Application.Dashboard;
 using LocalMateAI.Application.DTOs.Dashboard;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Interfaces.Services;
+using LocalMateAI.Application.Settings;
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Options;
 
 namespace LocalMateAI.Application.Services;
 
@@ -15,7 +14,7 @@ public sealed class AdminDashboardService(
     IValidator<DashboardDateRangeQuery> rangeValidator,
     IValidator<DashboardTopStationsQuery> topStationsValidator,
     IValidator<DashboardBreakEvenQuery> breakEvenValidator,
-    IOptions<DashboardOptions> options,
+    ISystemSettingProvider settings,
     IMemoryCache cache,
     TimeProvider timeProvider) : IAdminDashboardService
 {
@@ -112,14 +111,16 @@ public sealed class AdminDashboardService(
 
         var today = DashboardDateRules.Today(timeProvider);
         var firstDay = DashboardDateRules.ResolveMonth(query, today)!.Value;
+        // Mục tiêu do admin chỉnh (SystemSettings) nằm trong key ⇒ đổi mục tiêu thì thấy ngay, không chờ cache.
+        var target = await settings.GetDecimalAsync(SystemSettingKeys.BreakEvenMonthlyRevenue, cancellationToken);
         // Key kèm ngày hôm nay vì daysElapsed/projected đổi theo ngày.
         var key = string.Create(CultureInfo.InvariantCulture,
-            $"admin-dashboard:break-even:{firstDay:yyyy-MM}:{today:yyyy-MM-dd}");
+            $"admin-dashboard:break-even:{firstDay:yyyy-MM}:{today:yyyy-MM-dd}:{target}");
         var response = await GetOrCreateAsync(key, async () =>
         {
             var totals = await repository.GetPaidRevenueAsync(DashboardDateRules.StartOfDayUtc(firstDay),
                 DashboardDateRules.StartOfDayUtc(firstDay.AddMonths(1)), cancellationToken);
-            return BreakEvenCalculator.Calculate(firstDay, today, options.Value.BreakEvenMonthlyRevenue, totals,
+            return BreakEvenCalculator.Calculate(firstDay, today, target, totals,
                 timeProvider.GetUtcNow().UtcDateTime);
         });
 

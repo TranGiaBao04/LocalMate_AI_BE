@@ -24,7 +24,7 @@ public sealed class AdminStationServiceTests
                 new(null, PlaceCategory.CheckIn, PlaceStatus.Active, 3)
             ]));
 
-        var response = await new AdminStationService(repository, new FakeSettings(5)).GetStationsAsync();
+        var response = await new AdminStationService(repository, new FakeSystemSettingProvider()).GetStationsAsync();
 
         Assert.Equal(800, response.RadiusMeters);
         Assert.Equal(new PlaceStatusCounts(0, 3, 0, 3), response.OutsideCoverage);
@@ -52,7 +52,7 @@ public sealed class AdminStationServiceTests
         var repository = new FakeRepository(new AdminStationSnapshot(
             [Station(OperaHouse, 2, "Nhà hát Thành phố"), Station(BenThanh, 1, "Bến Thành")], []));
 
-        var response = await new AdminStationService(repository, new FakeSettings(5)).GetStationsAsync();
+        var response = await new AdminStationService(repository, new FakeSystemSettingProvider()).GetStationsAsync();
 
         Assert.Equal([1, 2], response.Stations.Select(station => station.Order));
         Assert.Equal(MetroClusterMatchingService.CandidateRadiusMeters, repository.LastRadius);
@@ -64,7 +64,7 @@ public sealed class AdminStationServiceTests
         var repository = new FakeRepository(new AdminStationSnapshot(
             [], [new(null, PlaceCategory.Cafe, PlaceStatus.Pending, 2)]));
 
-        var response = await new AdminStationService(repository, new FakeSettings(5)).GetStationsAsync();
+        var response = await new AdminStationService(repository, new FakeSystemSettingProvider()).GetStationsAsync();
 
         Assert.Empty(response.Stations);
         Assert.Equal(new PlaceStatusCounts(2, 0, 0, 2), response.OutsideCoverage);
@@ -84,7 +84,7 @@ public sealed class AdminStationServiceTests
                 new(OperaHouse, PlaceCategory.CheckIn, PlaceStatus.Active, 2)
             ]));
 
-        var response = await new AdminStationService(repository, new FakeSettings(5)).GetStationsAsync();
+        var response = await new AdminStationService(repository, new FakeSystemSettingProvider()).GetStationsAsync();
 
         Assert.Equal(5, response.MinActivePlacesPerStation);
         Assert.Equal(1, response.UnderstockedStationCount);
@@ -104,7 +104,7 @@ public sealed class AdminStationServiceTests
     public async Task EmptyStation_IsUnderstockedByFullThreshold_AndMissesEveryCategory()
     {
         var repository = new FakeRepository(new AdminStationSnapshot([Station(BenThanh, 1, "Bến Thành")], []));
-        var settings = new FakeSettings(8);
+        var settings = new FakeSystemSettingProvider().Set(SystemSettingKeys.MinActivePlacesPerStation, 8);
 
         var response = await new AdminStationService(repository, settings).GetStationsAsync();
 
@@ -112,24 +112,11 @@ public sealed class AdminStationServiceTests
         Assert.True(station.IsUnderstocked);
         Assert.Equal(8, station.Shortfall);
         Assert.Equal(Enum.GetValues<PlaceCategory>(), station.MissingCategories);
-        Assert.Equal(SystemSettingKeys.MinActivePlacesPerStation, settings.LastKey);
+        Assert.Equal([SystemSettingKeys.MinActivePlacesPerStation], settings.RequestedKeys);
     }
 
     private static AdminStationReadModel Station(Guid id, int order, string name) =>
         new(id, order, name, 10.77, 106.70);
-
-    private sealed class FakeSettings(int minActive) : ISystemSettingProvider
-    {
-        public string? LastKey { get; private set; }
-
-        public Task<int> GetIntAsync(string key, CancellationToken cancellationToken = default)
-        {
-            LastKey = key;
-            return Task.FromResult(minActive);
-        }
-
-        public void Invalidate() { }
-    }
 
     private sealed class FakeRepository(AdminStationSnapshot snapshot) : IAdminStationRepository
     {

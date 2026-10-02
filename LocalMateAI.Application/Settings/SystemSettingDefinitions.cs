@@ -22,6 +22,9 @@ public sealed record SystemSettingDefinition(
 public static class SystemSettingKeys
 {
     public const string MinActivePlacesPerStation = "Stations.MinActivePlacesPerStation";
+    public const string BreakEvenMonthlyRevenue = "Dashboard.BreakEvenMonthlyRevenue";
+    public const string MaxServiceAreaDistanceMeters = "Trips.MaxServiceAreaDistanceMeters";
+    public const string AlternativeMaxCostIncreasePercent = "Trips.AlternativeMaxCostIncreasePercent";
 }
 
 /// <summary>
@@ -34,7 +37,18 @@ public static class SystemSettingDefinitions
     [
         new(SystemSettingKeys.MinActivePlacesPerStation, "Stations", "Số địa điểm tối thiểu mỗi ga",
             "Ga có ít địa điểm đang hoạt động hơn số này bị đánh dấu thiếu dữ liệu trên màn quản lý ga.",
-            SystemSettingValueType.Integer, "địa điểm", DefaultValue: 5, MinValue: 1, MaxValue: 100)
+            SystemSettingValueType.Integer, "địa điểm", DefaultValue: 5, MinValue: 1, MaxValue: 100),
+        new(SystemSettingKeys.BreakEvenMonthlyRevenue, "Dashboard", "Mục tiêu doanh thu hoà vốn mỗi tháng",
+            "Doanh thu (VNĐ, chưa trừ phí cổng thanh toán) cần đạt mỗi tháng; dùng cho tiến độ hoà vốn trên dashboard.",
+            SystemSettingValueType.Integer, "VNĐ", DefaultValue: 5_000_000, MinValue: 1, MaxValue: 10_000_000_000),
+        new(SystemSettingKeys.MaxServiceAreaDistanceMeters, "Trips", "Bán kính vùng phục vụ",
+            "Khoảng cách đường chim bay tối đa từ điểm xuất phát tới ga Metro gần nhất để còn tạo được lịch trình. "
+            + "12.000 m phủ các quận nội thành, TP Thủ Đức và Nhà Bè.",
+            SystemSettingValueType.Integer, "m", DefaultValue: 12_000, MinValue: 1_000, MaxValue: 50_000),
+        new(SystemSettingKeys.AlternativeMaxCostIncreasePercent, "Trips", "Mức đắt hơn tối đa khi gợi ý thay thế",
+            "Địa điểm gợi ý thay thế được đắt hơn địa điểm hiện tại tối đa bao nhiêu phần trăm. "
+            + "Địa điểm miễn phí chỉ được thay bằng địa điểm miễn phí.",
+            SystemSettingValueType.Integer, "%", DefaultValue: 25, MinValue: 0, MaxValue: 200)
     ];
 
     public static SystemSettingDefinition? Find(string key) =>

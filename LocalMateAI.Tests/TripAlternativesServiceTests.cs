@@ -5,6 +5,7 @@ using LocalMateAI.Application.DTOs.Trips;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Interfaces.Services;
 using LocalMateAI.Application.Services;
+using LocalMateAI.Application.Settings;
 using LocalMateAI.Domain.Entities;
 using LocalMateAI.Domain.Enums;
 using NetTopologySuite.Geometries;
@@ -117,6 +118,24 @@ public sealed class TripAlternativesServiceTests
     }
 
     [Fact]
+    public async Task GetAlternativesAsync_UsesCostIncreasePercentFromSettings()
+    {
+        var current = MakeCandidate(distance: 50);
+        var plus40 = MakeCandidate(distance: 100, costMax: 140);
+        var item = MakeItem(current.PlaceId);
+
+        var defaultResult = await CreateSut(UserId, item, Station(), [current, plus40])
+            .GetAlternativesAsync(UserId, TripId, ItemId, null);
+        var settings = new FakeSystemSettingProvider()
+            .Set(SystemSettingKeys.AlternativeMaxCostIncreasePercent, 50);
+        var widenedResult = await CreateSut(UserId, item, Station(), [current, plus40], settings)
+            .GetAlternativesAsync(UserId, TripId, ItemId, null);
+
+        Assert.Empty(defaultResult.Alternatives!);
+        Assert.Equal(plus40.PlaceId, Assert.Single(widenedResult.Alternatives!).PlaceId);
+    }
+
+    [Fact]
     public async Task GetAlternativesAsync_NoLimit_UsesDefaultOfFive()
     {
         var current = MakeCandidate(distance: 50);
@@ -136,14 +155,16 @@ public sealed class TripAlternativesServiceTests
         Guid? userId = null,
         OwnedItemAlternativesReadModel? item = null,
         NearestStationResult? station = null,
-        IReadOnlyList<PlaceCandidateDto>? candidates = null) =>
+        IReadOnlyList<PlaceCandidateDto>? candidates = null,
+        FakeSystemSettingProvider? settings = null) =>
         new(
             new FakeUserRepository(userId),
             new FakeItineraryItemRepository(item),
             new FakeGeoService(station),
             new FakeClusterMatchingService(candidates ?? []),
             new FakePlaceRepository(),
-            new AlternativePlaceFinder(new TagSimilarityScorer()));
+            new AlternativePlaceFinder(new TagSimilarityScorer()),
+            settings ?? new FakeSystemSettingProvider());
 
     private static NearestStationResult Station() =>
         new(StationA, "Bến Thành", 10.77, 106.69, 100);
@@ -154,7 +175,7 @@ public sealed class TripAlternativesServiceTests
         params Guid[] tripPlaceIds) =>
         new(ItemId, TripId, status, placeId, tripPlaceIds);
 
-    private static PlaceCandidateDto MakeCandidate(double distance) =>
+    private static PlaceCandidateDto MakeCandidate(double distance, decimal costMax = 100) =>
         new(
             Guid.NewGuid(),
             "Place",
@@ -163,7 +184,7 @@ public sealed class TripAlternativesServiceTests
             106.69,
             "Food",
             0,
-            100,
+            costMax,
             null,
             StationA,
             "Bến Thành",
