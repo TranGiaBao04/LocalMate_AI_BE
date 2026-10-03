@@ -38,4 +38,18 @@ public interface IAdminPlaceService
     Task<DeleteAdminPlaceResult> DeleteAsync(
         Guid placeId,
         CancellationToken cancellationToken = default);
+
+    Task<AdminPlaceTagResult> AssignTagAsync(
+        Guid placeId,
+        Guid tagId,
+        CancellationToken cancellationToken = default);
+
+    Task<AdminPlaceTagResult> RemoveTagAsync(
+        Guid placeId,
+        Guid tagId,
+        CancellationToken cancellationToken = default);
+
+    Task<DuplicatePlaceDetectionResult> DetectDuplicatesAsync(
+        DetectDuplicatePlaceRequest request,
+        CancellationToken cancellationToken = default);
 }
