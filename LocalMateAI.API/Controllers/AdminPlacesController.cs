@@ -194,6 +194,48 @@ public sealed class AdminPlacesController(IAdminPlaceService adminPlaceService) 
         };
     }
 
+    [HttpPost("validate-distance")]
+    [ProducesResponseType<PlaceDistanceValidationResult>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<PlaceDistanceValidationResult>> ValidateDistanceAsync(
+        [FromBody] ValidatePlaceDistanceRequest request,
+        [FromServices] IValidator<ValidatePlaceDistanceRequest> validator,
+        [FromServices] IPlaceDistanceValidationService distanceValidationService,
+        CancellationToken cancellationToken)
+    {
+        var validationResult = await validator.ValidateAsync(request, cancellationToken);
+        if (!validationResult.IsValid)
+        {
+            return BadRequest(CreateInvalidPlaceProblem(
+                validationResult.ToDictionary().ToDictionary(k => k.Key, v => v.Value)));
+        }
+
+        var result = await distanceValidationService.ValidateDistanceAsync(request, cancellationToken);
+        return result is null
+            ? NotFound(CreateProblem(StatusCodes.Status404NotFound, "Station or coordinates was not found in Metro service area.", "station_not_found"))
+            : Ok(result);
+    }
+
+    [HttpGet("{id:guid}/validate-distance")]
+    [ProducesResponseType<PlaceDistanceValidationResult>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<PlaceDistanceValidationResult>> ValidatePlaceDistanceAsync(
+        Guid id,
+        [FromQuery] Guid? stationId,
+        [FromServices] IPlaceDistanceValidationService distanceValidationService,
+        CancellationToken cancellationToken)
+    {
+        var result = await distanceValidationService.ValidatePlaceDistanceAsync(id, stationId, cancellationToken);
+        return result is null
+            ? NotFound(CreatePlaceNotFoundProblem())
+            : Ok(result);
+    }
+
     private ValidationProblemDetails CreateInvalidPlaceProblem(
         IReadOnlyDictionary<string, string[]> errors)
     {

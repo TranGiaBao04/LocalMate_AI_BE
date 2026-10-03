@@ -230,6 +230,7 @@ builder.Services.AddScoped<IPlaceReviewRepository, PlaceReviewRepository>();
 builder.Services.AddScoped<IGeoService, GeoService>();
 builder.Services.AddScoped<IPlaceQueryService, PlaceQueryService>();
 builder.Services.AddScoped<IAdminPlaceService, AdminPlaceService>();
+builder.Services.AddScoped<IPlaceDistanceValidationService, PlaceDistanceValidationService>();
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<IMasterDataService, MasterDataService>();
 // Đọc + kiểm tra metro-timetable.json ngay lúc khởi động: file sai thì app không chạy.
