@@ -21,13 +21,14 @@ public sealed class PlaceDistanceValidationServiceTests
         var geoService = new FakeGeoService(stationRepo);
         var placeRepo = new FakePlaceRepository();
         var coordService = new CoordinatesValidationService();
+        var settings = new TestSystemSettings();
 
-        var service = new PlaceDistanceValidationService(stationRepo, geoService, placeRepo, coordService);
+        var service = new PlaceDistanceValidationService(stationRepo, geoService, placeRepo, coordService, settings);
         var request = new ValidatePlaceDistanceRequest(10.7769, 106.7009);
 
         var result = await service.ValidateDistanceAsync(request);
 
-        Assert.NotNull(result);
+        Assert.Equal(PlaceDistanceValidationStatus.Success, result.Status);
         Assert.True(result.IsWithinThreshold);
         Assert.False(result.HasWarning);
         Assert.Null(result.WarningMessage);
@@ -41,13 +42,14 @@ public sealed class PlaceDistanceValidationServiceTests
         var geoService = new FakeGeoService(stationRepo);
         var placeRepo = new FakePlaceRepository();
         var coordService = new CoordinatesValidationService();
+        var settings = new TestSystemSettings();
 
-        var service = new PlaceDistanceValidationService(stationRepo, geoService, placeRepo, coordService);
+        var service = new PlaceDistanceValidationService(stationRepo, geoService, placeRepo, coordService, settings);
         var request = new ValidatePlaceDistanceRequest(10.7769, 106.7009);
 
         var result = await service.ValidateDistanceAsync(request);
 
-        Assert.NotNull(result);
+        Assert.Equal(PlaceDistanceValidationStatus.Success, result.Status);
         Assert.False(result.IsWithinThreshold);
         Assert.True(result.HasWarning);
         Assert.NotNull(result.WarningMessage);
@@ -62,32 +64,34 @@ public sealed class PlaceDistanceValidationServiceTests
         var geoService = new FakeGeoService(stationRepo);
         var placeRepo = new FakePlaceRepository();
         var coordService = new CoordinatesValidationService();
+        var settings = new TestSystemSettings();
 
-        var service = new PlaceDistanceValidationService(stationRepo, geoService, placeRepo, coordService);
+        var service = new PlaceDistanceValidationService(stationRepo, geoService, placeRepo, coordService, settings);
         var request = new ValidatePlaceDistanceRequest(10.7769, 106.7009, Station1Id);
 
         var result = await service.ValidateDistanceAsync(request);
 
-        Assert.NotNull(result);
+        Assert.Equal(PlaceDistanceValidationStatus.Success, result.Status);
         Assert.Equal(Station1Id, result.StationId);
         Assert.True(result.IsWithinThreshold);
         Assert.False(result.HasWarning);
     }
 
     [Fact]
-    public async Task ValidateDistance_InvalidHcmcCoordinates_ReturnsNull()
+    public async Task ValidateDistance_InvalidHcmcCoordinates_ReturnsInvalidCoordinatesStatus()
     {
         var stationRepo = new FakeStationRepository(stationDistance: 500.0);
         var geoService = new FakeGeoService(stationRepo);
         var placeRepo = new FakePlaceRepository();
         var coordService = new CoordinatesValidationService();
+        var settings = new TestSystemSettings();
 
-        var service = new PlaceDistanceValidationService(stationRepo, geoService, placeRepo, coordService);
+        var service = new PlaceDistanceValidationService(stationRepo, geoService, placeRepo, coordService, settings);
         var request = new ValidatePlaceDistanceRequest(21.0285, 105.8542);
 
         var result = await service.ValidateDistanceAsync(request);
 
-        Assert.Null(result);
+        Assert.Equal(PlaceDistanceValidationStatus.InvalidCoordinates, result.Status);
     }
 
     [Fact]
@@ -100,27 +104,29 @@ public sealed class PlaceDistanceValidationServiceTests
         placeRepo.Locations[placeId] = new Point(106.7009, 10.7769) { SRID = 4326 };
 
         var coordService = new CoordinatesValidationService();
-        var service = new PlaceDistanceValidationService(stationRepo, geoService, placeRepo, coordService);
+        var settings = new TestSystemSettings();
+        var service = new PlaceDistanceValidationService(stationRepo, geoService, placeRepo, coordService, settings);
 
         var result = await service.ValidatePlaceDistanceAsync(placeId);
 
-        Assert.NotNull(result);
+        Assert.Equal(PlaceDistanceValidationStatus.Success, result.Status);
         Assert.Equal(600.0, result.DistanceMeters);
         Assert.True(result.IsWithinThreshold);
     }
 
     [Fact]
-    public async Task ValidatePlaceDistance_NonExistentPlace_ReturnsNull()
+    public async Task ValidatePlaceDistance_NonExistentPlace_ReturnsPlaceNotFoundStatus()
     {
         var stationRepo = new FakeStationRepository(stationDistance: 600.0);
         var geoService = new FakeGeoService(stationRepo);
         var placeRepo = new FakePlaceRepository();
         var coordService = new CoordinatesValidationService();
-        var service = new PlaceDistanceValidationService(stationRepo, geoService, placeRepo, coordService);
+        var settings = new TestSystemSettings();
+        var service = new PlaceDistanceValidationService(stationRepo, geoService, placeRepo, coordService, settings);
 
         var result = await service.ValidatePlaceDistanceAsync(Guid.NewGuid());
 
-        Assert.Null(result);
+        Assert.Equal(PlaceDistanceValidationStatus.PlaceNotFound, result.Status);
     }
 
     private sealed class FakeStationRepository(double stationDistance) : IMetroStationRepository
@@ -201,4 +207,12 @@ public sealed class PlaceDistanceValidationServiceTests
         public Task<PlaceReadModel?> GetActiveByIdAsync(Guid id, CancellationToken cancellationToken = default)
             => Task.FromResult<PlaceReadModel?>(null);
     }
+
+    private sealed class TestSystemSettings : ISystemSettingProvider
+    {
+        public Task<int> GetIntAsync(string key, CancellationToken cancellationToken = default) => Task.FromResult(1500);
+        public Task<decimal> GetDecimalAsync(string key, CancellationToken cancellationToken = default) => Task.FromResult(1500m);
+        public void Invalidate() { }
+    }
 }
+

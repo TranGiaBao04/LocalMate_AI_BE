@@ -216,9 +216,15 @@ public sealed class AdminPlacesController(
         }
 
         var result = await distanceValidationService.ValidateDistanceAsync(request, cancellationToken);
-        return result is null
-            ? NotFound(CreateProblem(StatusCodes.Status404NotFound, "Station or coordinates was not found in Metro service area.", "station_not_found"))
-            : Ok(result);
+        return result.Status switch
+        {
+            PlaceDistanceValidationStatus.Success => Ok(result),
+            PlaceDistanceValidationStatus.StationNotFound => NotFound(CreateProblem(
+                StatusCodes.Status404NotFound, "Station was not found.", "station_not_found")),
+            PlaceDistanceValidationStatus.InvalidCoordinates => BadRequest(CreateInvalidPlaceProblem(
+                new Dictionary<string, string[]> { { "Latitude", new[] { "Coordinates are outside valid HCMC area." } } })),
+            _ => BadRequest(CreateProblem(StatusCodes.Status400BadRequest, "Invalid distance validation request.", "invalid_request"))
+        };
     }
 
     [HttpGet("{id:guid}/validate-distance")]
@@ -233,9 +239,14 @@ public sealed class AdminPlacesController(
         CancellationToken cancellationToken)
     {
         var result = await distanceValidationService.ValidatePlaceDistanceAsync(id, stationId, cancellationToken);
-        return result is null
-            ? NotFound(CreatePlaceNotFoundProblem())
-            : Ok(result);
+        return result.Status switch
+        {
+            PlaceDistanceValidationStatus.Success => Ok(result),
+            PlaceDistanceValidationStatus.PlaceNotFound => NotFound(CreatePlaceNotFoundProblem()),
+            PlaceDistanceValidationStatus.StationNotFound => NotFound(CreateProblem(
+                StatusCodes.Status404NotFound, "Station was not found.", "station_not_found")),
+            _ => NotFound(CreatePlaceNotFoundProblem())
+        };
     }
 
     [HttpPost("upload-image")]
