@@ -23,6 +23,9 @@ public sealed class User : BaseEntity
     // Ghi chú nội bộ của admin khi khoá, không trả ra cho user.
     public string? LockReason { get; set; }
 
+    // BE-134: admin đã khoá tài khoản (thay audit log đã bỏ). Null khi chưa khoá, hoặc người khoá đã bị xoá.
+    public Guid? LockedByUserId { get; set; }
+
     public ICollection<UserPreferenceTag> PreferenceTags { get; set; } = [];
 
     // Tên role để hiển thị. User đọc từ DB phải kèm Include(user => user.Role); thiếu thì ném lỗi để lộ bug sớm.

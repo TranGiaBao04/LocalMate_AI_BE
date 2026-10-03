@@ -3,6 +3,7 @@ using System;
 using LocalMateAI.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NetTopologySuite.Geometries;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace LocalMateAI.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261003024304_AddUnaccentExtension")]
+    partial class AddUnaccentExtension
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -567,7 +570,7 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("CK_OrderCredits_Days", "\"RemainingDays\" >= 0");
 
-                            t.HasCheckConstraint("CK_OrderCredits_ReleaseProof", "(\"ReleasedAt\" IS NULL AND \"ReleaseProviderCheckedAt\" IS NULL AND \"ReleaseProviderStatus\" IS NULL\n AND \"ReleaseProviderRequestedAmount\" IS NULL AND \"ReleaseProviderAmountPaid\" IS NULL\n AND \"ReleaseProviderAmountRemaining\" IS NULL AND \"ReleaseReasonCode\" IS NULL) OR\n(\"ReleasedAt\" IS NOT NULL AND \"ReleaseProviderCheckedAt\" IS NOT NULL AND \"ReleaseProviderStatus\" IS NOT NULL\n AND \"ReleaseProviderRequestedAmount\" IS NOT NULL AND \"ReleaseProviderAmountPaid\" IS NOT NULL\n AND \"ReleaseProviderAmountRemaining\" IS NOT NULL AND \"ReleaseReasonCode\" IS NOT NULL\n AND \"ReleaseProviderStatus\" = 'Cancelled' AND \"ReleaseProviderRequestedAmount\" > 0\n AND \"ReleaseProviderAmountPaid\" = 0 AND \"ReleaseProviderAmountRemaining\" = \"ReleaseProviderRequestedAmount\"\n AND \"ReleaseReasonCode\" = 'provider_cancelled_no_funds'\n AND \"ReleaseProviderCheckedAt\" <= \"ReleasedAt\"\n AND \"ReleasedAt\" - \"ReleaseProviderCheckedAt\" <= interval '1 minute')");
+                            t.HasCheckConstraint("CK_OrderCredits_ReleaseProof", "(\"ReleasedAt\" IS NULL AND \"ReleaseProviderCheckedAt\" IS NULL AND \"ReleaseProviderStatus\" IS NULL\r\n AND \"ReleaseProviderRequestedAmount\" IS NULL AND \"ReleaseProviderAmountPaid\" IS NULL\r\n AND \"ReleaseProviderAmountRemaining\" IS NULL AND \"ReleaseReasonCode\" IS NULL) OR\r\n(\"ReleasedAt\" IS NOT NULL AND \"ReleaseProviderCheckedAt\" IS NOT NULL AND \"ReleaseProviderStatus\" IS NOT NULL\r\n AND \"ReleaseProviderRequestedAmount\" IS NOT NULL AND \"ReleaseProviderAmountPaid\" IS NOT NULL\r\n AND \"ReleaseProviderAmountRemaining\" IS NOT NULL AND \"ReleaseReasonCode\" IS NOT NULL\r\n AND \"ReleaseProviderStatus\" = 'Cancelled' AND \"ReleaseProviderRequestedAmount\" > 0\r\n AND \"ReleaseProviderAmountPaid\" = 0 AND \"ReleaseProviderAmountRemaining\" = \"ReleaseProviderRequestedAmount\"\r\n AND \"ReleaseReasonCode\" = 'provider_cancelled_no_funds'\r\n AND \"ReleaseProviderCheckedAt\" <= \"ReleasedAt\"\r\n AND \"ReleasedAt\" - \"ReleaseProviderCheckedAt\" <= interval '1 minute')");
                         });
                 });
 

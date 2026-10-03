@@ -153,6 +153,8 @@ builder.Services.AddScoped<IAdminDashboardRepository, AdminDashboardRepository>(
 builder.Services.AddScoped<IAdminDashboardService, AdminDashboardService>();
 builder.Services.AddScoped<IAdminStationRepository, AdminStationRepository>();
 builder.Services.AddScoped<IAdminStationService, AdminStationService>();
+builder.Services.AddScoped<IAdminUserRepository, AdminUserRepository>();
+builder.Services.AddScoped<IAdminUserService, AdminUserService>();
 builder.Services.AddScoped<ISystemSettingRepository, SystemSettingRepository>();
 builder.Services.AddScoped<ISystemSettingProvider, SystemSettingProvider>();
 builder.Services.AddScoped<IAdminSystemSettingService, AdminSystemSettingService>();
