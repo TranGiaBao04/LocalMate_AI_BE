@@ -1,3 +1,4 @@
+using LocalMateAI.Application.DTOs.Common;
 using LocalMateAI.Application.DTOs.Geo;
 using LocalMateAI.Application.DTOs.MasterData;
 using LocalMateAI.Application.DTOs.Places;
@@ -109,6 +110,11 @@ public sealed class MetroClusterMatchingServiceTests
 
         public Task<IReadOnlyList<AdminPlaceResponse>> GetAllForAdminAsync(
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task<PagedResult<AdminPlaceResponse>> GetPagedForAdminAsync(
+            AdminPlaceQuery query,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
 
         public Task<AdminPlaceResponse?> GetAdminByIdAsync(Guid placeId,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
