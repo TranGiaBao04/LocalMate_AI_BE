@@ -11,6 +11,7 @@ using LocalMateAI.Application.Interfaces.Payments;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Interfaces.Services;
 using LocalMateAI.Application.Services;
+using LocalMateAI.Application.Settings;
 using LocalMateAI.Application.Validators.Trips;
 using LocalMateAI.Domain.Enums;
 using LocalMateAI.Infrastructure.Email;
@@ -231,6 +232,17 @@ builder.Services.AddScoped<IGeoService, GeoService>();
 builder.Services.AddScoped<IPlaceQueryService, PlaceQueryService>();
 builder.Services.AddScoped<IAdminPlaceService, AdminPlaceService>();
 builder.Services.AddScoped<IPlaceDistanceValidationService, PlaceDistanceValidationService>();
+var imageUploadOptions = new ImageUploadOptions(
+    builder.Configuration.GetValue($"{ImageUploadOptions.SectionName}:MaxFileBytes", ImageUploadOptions.Default.MaxFileBytes),
+    builder.Configuration.GetSection($"{ImageUploadOptions.SectionName}:AllowedContentTypes").Get<string[]>()
+        ?? ImageUploadOptions.Default.AllowedContentTypes,
+    Path.Combine(
+        builder.Environment.WebRootPath ?? Path.Combine(builder.Environment.ContentRootPath, "wwwroot"),
+        "uploads",
+        "places"),
+    ImageUploadOptions.Default.PublicUrlPrefix);
+builder.Services.AddSingleton(imageUploadOptions);
+builder.Services.AddScoped<IImageStorageService, LocalImageStorageService>();
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<IMasterDataService, MasterDataService>();
 // Đọc + kiểm tra metro-timetable.json ngay lúc khởi động: file sai thì app không chạy.
@@ -336,6 +348,7 @@ if (app.Environment.IsDevelopment())
 app.UseSerilogRequestLogging();
 app.UseExceptionHandler();
 app.UseHttpsRedirection();
+app.UseStaticFiles();
 app.UseCors(frontendClientPolicy);
 app.UseRateLimiter();
 app.UseAuthentication();

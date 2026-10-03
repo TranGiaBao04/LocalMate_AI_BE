@@ -11,7 +11,9 @@ namespace LocalMateAI.API.Controllers;
 [ApiController]
 [Route("api/admin/places")]
 [HasPermission(Permissions.ManagePlaces)]
-public sealed class AdminPlacesController(IAdminPlaceService adminPlaceService) : ControllerBase
+public sealed class AdminPlacesController(
+    IAdminPlaceService adminPlaceService,
+    IImageStorageService imageStorageService) : ControllerBase
 {
     private const string GetByIdRouteName = "GetAdminPlaceById";
 
@@ -234,6 +236,39 @@ public sealed class AdminPlacesController(IAdminPlaceService adminPlaceService) 
         return result is null
             ? NotFound(CreatePlaceNotFoundProblem())
             : Ok(result);
+    }
+
+    [HttpPost("upload-image")]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType<ImageUploadResult>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<ImageUploadResult>> UploadImageAsync(
+        IFormFile file,
+        CancellationToken cancellationToken)
+    {
+        await using var stream = file.OpenReadStream();
+        var result = await imageStorageService.SaveAsync(
+            stream,
+            file.FileName,
+            file.ContentType,
+            file.Length,
+            cancellationToken);
+
+        return result.Status switch
+        {
+            ImageUploadResultStatus.Success => Ok(result),
+            ImageUploadResultStatus.InvalidContentType => BadRequest(CreateProblem(
+                StatusCodes.Status400BadRequest,
+                "Unsupported image type. Allowed: JPEG, PNG, WebP.",
+                "invalid_image_type")),
+            ImageUploadResultStatus.TooLarge => BadRequest(CreateProblem(
+                StatusCodes.Status400BadRequest,
+                "Image exceeds the maximum allowed size.",
+                "image_too_large")),
+            _ => throw new InvalidOperationException("Unknown image upload result.")
+        };
     }
 
     private ValidationProblemDetails CreateInvalidPlaceProblem(
