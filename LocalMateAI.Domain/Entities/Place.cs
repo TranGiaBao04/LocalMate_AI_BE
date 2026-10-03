@@ -25,4 +25,5 @@ public sealed class Place : BaseEntity
 
     public ICollection<PlaceTag> Tags { get; set; } = [];
     public ICollection<PlaceImage> Images { get; set; } = [];
+    public ICollection<PlaceOpeningHour> OpeningHours { get; set; } = [];
 }

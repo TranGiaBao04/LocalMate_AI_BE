@@ -37,6 +37,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, TimePro
     public DbSet<TripTag> TripTags => Set<TripTag>();
     public DbSet<PlaceTag> PlaceTags => Set<PlaceTag>();
     public DbSet<PlaceImage> PlaceImages => Set<PlaceImage>();
+    public DbSet<PlaceOpeningHour> PlaceOpeningHours => Set<PlaceOpeningHour>();
         public DbSet<UserExternalLogin> UserExternalLogins => Set<UserExternalLogin>();
     public DbSet<PendingRegistration> PendingRegistrations => Set<PendingRegistration>();
     public DbSet<EmailOtpCode> EmailOtpCodes => Set<EmailOtpCode>();
