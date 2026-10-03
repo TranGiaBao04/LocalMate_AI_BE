@@ -376,7 +376,7 @@ public sealed class PlanFeaturesPostgresTests
         {
             // Identifiers cannot be SQL parameters; only these fixed test tables are allowed.
             if (!tables.Contains(table, StringComparer.Ordinal)) throw new ArgumentException("Unknown test table.");
-            var sql = $"SELECT COALESCE(jsonb_agg(to_jsonb(t)-'FeaturePublicationTransactionId'-'ProductKind'-'CheckoutAttemptId'-'SingleItineraryProductVersionId'-'CreditAmount'-'TerminatedAt'-'TerminatedByOrderId' ORDER BY to_jsonb(t)::text),'[]'::jsonb)::text AS \"Value\" FROM \"{table}\" t";
+            var sql = $"SELECT COALESCE(jsonb_agg(to_jsonb(t)-'FeaturePublicationTransactionId'-'ProductKind'-'CheckoutAttemptId'-'SingleItineraryProductVersionId'-'CreditAmount'-'TerminatedAt'-'TerminatedByOrderId'-'LockedByUserId' ORDER BY to_jsonb(t)::text),'[]'::jsonb)::text AS \"Value\" FROM \"{table}\" t";
             return await c.Database.SqlQueryRaw<string>(sql).SingleAsync();
         }
         var before = new Dictionary<string, string>();

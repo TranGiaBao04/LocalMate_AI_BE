@@ -30,4 +30,17 @@ public static class PostgresTestDatabase
             });
         await context.SaveChangesAsync();
     }
+
+    // Test nâng cấp tạo user khi DB còn ở mốc cũ: chỉ ghi các cột có từ AddRbacAndUserStatus,
+    // để cột mới thêm vào Users sau này không làm vỡ các test đó.
+    public static async Task InsertUserAsync(AppDbContext context, User user)
+    {
+        if (user.CreatedAt == default) user.CreatedAt = DateTime.UtcNow;
+        if (user.UpdatedAt == default) user.UpdatedAt = user.CreatedAt;
+        await context.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO "Users" ("Id","FullName","Email","PasswordHash","RoleId","Status","LockedAt","LockReason","CreatedAt","UpdatedAt")
+            VALUES ({user.Id},{user.FullName},{user.Email},{user.PasswordHash},{user.RoleId},{user.Status.ToString()},
+                    {user.LockedAt},{user.LockReason},{user.CreatedAt},{user.UpdatedAt})
+            """);
+    }
 }

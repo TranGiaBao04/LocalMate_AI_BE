@@ -44,6 +44,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, TimePro
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        // Tìm kiếm không dấu (unaccent(...) ILIKE unaccent(...)), dùng ở danh sách user admin (BE-132).
+        modelBuilder.HasPostgresExtension("unaccent");
         SubscriptionModelConfiguration.Configure(modelBuilder);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
 
