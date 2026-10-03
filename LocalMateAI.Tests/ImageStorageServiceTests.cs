@@ -1,41 +1,19 @@
 using LocalMateAI.Application.DTOs.Places;
-using LocalMateAI.Application.Services;
 using LocalMateAI.Application.Settings;
+using LocalMateAI.Infrastructure.Services;
 using Xunit;
 
 namespace LocalMateAI.Tests;
 
-public sealed class ImageStorageServiceTests : IDisposable
+public sealed class ImageStorageServiceTests
 {
-    private readonly string _uploadFolder;
-
-    public ImageStorageServiceTests()
+    private static CloudinaryImageStorageService CreateService() => new(new CloudinaryUploadOptions
     {
-        _uploadFolder = Path.Combine(Path.GetTempPath(), "localmate-upload-tests", Guid.NewGuid().ToString("N"));
-    }
-
-    private LocalImageStorageService CreateService() => new(new ImageUploadOptions(
-        5 * 1024 * 1024,
-        ["image/jpeg", "image/png", "image/webp"],
-        _uploadFolder,
-        "/uploads/places"));
-
-    [Fact]
-    public async Task SaveAsync_ValidImage_ReturnsSuccessAndUrl()
-    {
-        var service = CreateService();
-        var content = new byte[] { 0xFF, 0xD8, 0xFF, 0xE0 };
-        await using var stream = new MemoryStream(content);
-
-        var result = await service.SaveAsync(stream, "photo.jpg", "image/jpeg", content.Length);
-
-        Assert.Equal(ImageUploadResultStatus.Success, result.Status);
-        Assert.NotNull(result.Url);
-        Assert.StartsWith("/uploads/places/", result.Url);
-
-        var fileName = result.Url!.Split('/').Last();
-        Assert.True(File.Exists(Path.Combine(_uploadFolder, fileName)));
-    }
+        CloudName = "demo",
+        ApiKey = "123456789012345",
+        ApiSecret = "demo_secret",
+        Folder = "localmate/places"
+    });
 
     [Fact]
     public async Task SaveAsync_UnsupportedContentType_ReturnsInvalidContentType()
@@ -74,11 +52,15 @@ public sealed class ImageStorageServiceTests : IDisposable
         Assert.Equal(ImageUploadResultStatus.TooLarge, result.Status);
     }
 
-    public void Dispose()
+    [Fact]
+    public async Task SaveAsync_InvalidMagicBytes_ReturnsInvalidContentType()
     {
-        if (Directory.Exists(_uploadFolder))
-        {
-            Directory.Delete(_uploadFolder, recursive: true);
-        }
+        var service = CreateService();
+        var content = new byte[] { 0x00, 0x00, 0x00, 0x00 };
+        await using var stream = new MemoryStream(content);
+
+        var result = await service.SaveAsync(stream, "photo.jpg", "image/jpeg", content.Length);
+
+        Assert.Equal(ImageUploadResultStatus.InvalidContentType, result.Status);
     }
 }
