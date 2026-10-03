@@ -18,6 +18,7 @@ using LocalMateAI.Infrastructure.Email;
 using LocalMateAI.Infrastructure.Metro;
 using LocalMateAI.Infrastructure.Persistence;
 using LocalMateAI.Infrastructure.Payments;
+using LocalMateAI.Infrastructure.Services;
 using LocalMateAI.Infrastructure.Repositories;
 using LocalMateAI.Infrastructure.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -232,17 +233,15 @@ builder.Services.AddScoped<IGeoService, GeoService>();
 builder.Services.AddScoped<IPlaceQueryService, PlaceQueryService>();
 builder.Services.AddScoped<IAdminPlaceService, AdminPlaceService>();
 builder.Services.AddScoped<IPlaceDistanceValidationService, PlaceDistanceValidationService>();
-var imageUploadOptions = new ImageUploadOptions(
-    builder.Configuration.GetValue($"{ImageUploadOptions.SectionName}:MaxFileBytes", ImageUploadOptions.Default.MaxFileBytes),
-    builder.Configuration.GetSection($"{ImageUploadOptions.SectionName}:AllowedContentTypes").Get<string[]>()
-        ?? ImageUploadOptions.Default.AllowedContentTypes,
-    Path.Combine(
-        builder.Environment.WebRootPath ?? Path.Combine(builder.Environment.ContentRootPath, "wwwroot"),
-        "uploads",
-        "places"),
-    ImageUploadOptions.Default.PublicUrlPrefix);
-builder.Services.AddSingleton(imageUploadOptions);
-builder.Services.AddScoped<IImageStorageService, LocalImageStorageService>();
+var cloudinaryOptions = new CloudinaryUploadOptions
+{
+    CloudName = builder.Configuration["Cloudinary:CloudName"] ?? string.Empty,
+    ApiKey = builder.Configuration["Cloudinary:ApiKey"] ?? string.Empty,
+    ApiSecret = builder.Configuration["Cloudinary:ApiSecret"] ?? string.Empty,
+    Folder = builder.Configuration["Cloudinary:Folder"] ?? "localmate/places"
+};
+builder.Services.AddSingleton(cloudinaryOptions);
+builder.Services.AddScoped<IImageStorageService, CloudinaryImageStorageService>();
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<IMasterDataService, MasterDataService>();
 // Đọc + kiểm tra metro-timetable.json ngay lúc khởi động: file sai thì app không chạy.
