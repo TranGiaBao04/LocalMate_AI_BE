@@ -24,4 +24,5 @@ public sealed class Place : BaseEntity
     public string? ImageUrl { get; set; }
 
     public ICollection<PlaceTag> Tags { get; set; } = [];
+    public ICollection<PlaceImage> Images { get; set; } = [];
 }
