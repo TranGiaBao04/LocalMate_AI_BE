@@ -10,6 +10,12 @@ public interface IMetroStationRepository
         double longitude,
         CancellationToken cancellationToken = default);
 
+    Task<NearestStationResult?> GetDistanceToStationAsync(
+        Guid stationId,
+        double latitude,
+        double longitude,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<MetroStationSummaryResponse>> GetAllAsync(
         CancellationToken cancellationToken = default);
 }

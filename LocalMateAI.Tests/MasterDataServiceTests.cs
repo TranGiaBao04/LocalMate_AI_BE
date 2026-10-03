@@ -44,6 +44,10 @@ public sealed class MasterDataServiceTests
             double latitude, double longitude, CancellationToken cancellationToken = default)
             => Task.FromResult<NearestStationResult?>(null);
 
+        public Task<NearestStationResult?> GetDistanceToStationAsync(
+            Guid stationId, double latitude, double longitude, CancellationToken cancellationToken = default)
+            => Task.FromResult<NearestStationResult?>(null);
+
         public Task<IReadOnlyList<MetroStationSummaryResponse>> GetAllAsync(
             CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<MetroStationSummaryResponse>>([]);

@@ -77,6 +77,10 @@ public sealed class MetroClusterMatchingServiceTests
         public Task<NearestStationResult?> FindNearestAsync(double latitude, double longitude,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
+        public Task<NearestStationResult?> GetDistanceToStationAsync(
+            Guid stationId, double latitude, double longitude, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         public Task<IReadOnlyList<MetroStationSummaryResponse>> GetAllAsync(
             CancellationToken cancellationToken = default) => Task.FromResult(Stations);
     }
