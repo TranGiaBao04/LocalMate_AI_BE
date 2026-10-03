@@ -12,3 +12,6 @@
 .env
 .env.*
 !.env.example
+
+# Runtime uploads (place images)
+wwwroot/uploads/
