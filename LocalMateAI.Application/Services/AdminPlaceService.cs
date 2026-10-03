@@ -10,11 +10,13 @@ namespace LocalMateAI.Application.Services;
 
 public sealed class AdminPlaceService(
     IPlaceRepository placeRepository,
-    ICoordinatesValidationService coordinatesValidationService) : IAdminPlaceService
+    ICoordinatesValidationService coordinatesValidationService,
+    ITagRepository tagRepository) : IAdminPlaceService
 {
     private const int MaxNameLength = 200;
     private const int MaxAddressLength = 300;
     private const decimal MaxStoredCost = 999_999_999_999m;
+    private const double DuplicateRadiusMeters = 50.0;
 
     public async Task<AdminPlaceOperationResult> CreateAsync(
         CreateAdminPlaceRequest request,
@@ -202,6 +204,70 @@ public sealed class AdminPlaceService(
         }
 
         return AdminPlaceModerationResult.Succeeded(Map(place));
+    }
+
+    public async Task<AdminPlaceTagResult> AssignTagAsync(
+        Guid placeId,
+        Guid tagId,
+        CancellationToken cancellationToken = default)
+    {
+        var place = await placeRepository.GetByIdAsync(placeId, cancellationToken);
+        if (place is null || place.DeletedAt is not null)
+        {
+            return new AdminPlaceTagResult(AdminPlaceTagResultStatus.PlaceNotFound);
+        }
+
+        var tags = await tagRepository.GetByIdsAsync([tagId], cancellationToken);
+        if (tags.Count == 0)
+        {
+            return new AdminPlaceTagResult(AdminPlaceTagResultStatus.TagNotFound);
+        }
+
+        await placeRepository.AddTagAsync(placeId, tagId, cancellationToken);
+        var tagIds = await placeRepository.GetTagIdsAsync(placeId, cancellationToken);
+
+        return new AdminPlaceTagResult(AdminPlaceTagResultStatus.Success, tagIds);
+    }
+
+    public async Task<AdminPlaceTagResult> RemoveTagAsync(
+        Guid placeId,
+        Guid tagId,
+        CancellationToken cancellationToken = default)
+    {
+        var place = await placeRepository.GetByIdAsync(placeId, cancellationToken);
+        if (place is null || place.DeletedAt is not null)
+        {
+            return new AdminPlaceTagResult(AdminPlaceTagResultStatus.PlaceNotFound);
+        }
+
+        await placeRepository.RemoveTagAsync(placeId, tagId, cancellationToken);
+        var tagIds = await placeRepository.GetTagIdsAsync(placeId, cancellationToken);
+
+        return new AdminPlaceTagResult(AdminPlaceTagResultStatus.Success, tagIds);
+    }
+
+    public async Task<DuplicatePlaceDetectionResult> DetectDuplicatesAsync(
+        DetectDuplicatePlaceRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (string.IsNullOrWhiteSpace(request.Name))
+        {
+            return new DuplicatePlaceDetectionResult([]);
+        }
+
+        var nearby = await placeRepository.FindNearbyPlacesAsync(
+            request.Latitude,
+            request.Longitude,
+            DuplicateRadiusMeters,
+            cancellationToken);
+
+        var candidates = nearby
+            .Where(candidate => PlaceDuplicateMatcher.IsSimilarName(candidate.Name, request.Name))
+            .ToList();
+
+        return new DuplicatePlaceDetectionResult(candidates);
     }
 
     private static bool IsAllowedStatusTransition(PlaceStatus current, PlaceStatus requested) =>

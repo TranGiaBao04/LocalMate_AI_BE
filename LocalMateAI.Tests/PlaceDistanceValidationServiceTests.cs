@@ -167,6 +167,11 @@ public sealed class PlaceDistanceValidationServiceTests
 
     private sealed class FakePlaceRepository : IPlaceRepository
     {
+        public Task<IReadOnlyList<Guid>> GetTagIdsAsync(Guid placeId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task AddTagAsync(Guid placeId, Guid tagId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<bool> RemoveTagAsync(Guid placeId, Guid tagId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<IReadOnlyList<DuplicatePlaceCandidate>> FindNearbyPlacesAsync(double latitude, double longitude, double radiusMeters, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
         public Dictionary<Guid, Point> Locations { get; } = [];
 
         public Task<Point?> GetLocationAsync(Guid placeId, CancellationToken cancellationToken = default)

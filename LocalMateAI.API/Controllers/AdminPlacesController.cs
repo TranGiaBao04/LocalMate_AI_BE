@@ -271,6 +271,63 @@ public sealed class AdminPlacesController(
         };
     }
 
+    [HttpPost("{id:guid}/tags")]
+    [ProducesResponseType<AdminPlaceTagResult>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<AdminPlaceTagResult>> AssignTagAsync(
+        Guid id,
+        [FromBody] AssignPlaceTagRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await adminPlaceService.AssignTagAsync(id, request.TagId, cancellationToken);
+
+        return result.Status switch
+        {
+            AdminPlaceTagResultStatus.Success => Ok(result),
+            AdminPlaceTagResultStatus.PlaceNotFound => NotFound(CreatePlaceNotFoundProblem()),
+            AdminPlaceTagResultStatus.TagNotFound => BadRequest(CreateProblem(
+                StatusCodes.Status400BadRequest,
+                "Tag was not found.",
+                "tag_not_found")),
+            _ => throw new InvalidOperationException("Unknown Admin Place tag result.")
+        };
+    }
+
+    [HttpDelete("{id:guid}/tags/{tagId:guid}")]
+    [ProducesResponseType<AdminPlaceTagResult>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<AdminPlaceTagResult>> RemoveTagAsync(
+        Guid id,
+        Guid tagId,
+        CancellationToken cancellationToken)
+    {
+        var result = await adminPlaceService.RemoveTagAsync(id, tagId, cancellationToken);
+
+        return result.Status switch
+        {
+            AdminPlaceTagResultStatus.Success => Ok(result),
+            AdminPlaceTagResultStatus.PlaceNotFound => NotFound(CreatePlaceNotFoundProblem()),
+            _ => throw new InvalidOperationException("Unknown Admin Place tag result.")
+        };
+    }
+
+    [HttpPost("detect-duplicates")]
+    [ProducesResponseType<DuplicatePlaceDetectionResult>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<DuplicatePlaceDetectionResult>> DetectDuplicatesAsync(
+        [FromBody] DetectDuplicatePlaceRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await adminPlaceService.DetectDuplicatesAsync(request, cancellationToken);
+        return Ok(result);
+    }
+
     private ValidationProblemDetails CreateInvalidPlaceProblem(
         IReadOnlyDictionary<string, string[]> errors)
     {

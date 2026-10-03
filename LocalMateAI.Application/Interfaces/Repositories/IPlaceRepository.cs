@@ -27,6 +27,26 @@ public interface IPlaceRepository
         IReadOnlyList<Guid> placeIds,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<Guid>> GetTagIdsAsync(
+        Guid placeId,
+        CancellationToken cancellationToken = default);
+
+    Task AddTagAsync(
+        Guid placeId,
+        Guid tagId,
+        CancellationToken cancellationToken = default);
+
+    Task<bool> RemoveTagAsync(
+        Guid placeId,
+        Guid tagId,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<DuplicatePlaceCandidate>> FindNearbyPlacesAsync(
+        double latitude,
+        double longitude,
+        double radiusMeters,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<AdminPlaceResponse>> GetAllForAdminAsync(
         CancellationToken cancellationToken = default);
 
