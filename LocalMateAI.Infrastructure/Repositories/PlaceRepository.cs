@@ -246,7 +246,8 @@ public sealed class PlaceRepository(AppDbContext dbContext) : IPlaceRepository
 
             if (stationLocation is not null)
             {
-                places = places.Where(place => place.Location.IsWithinDistance(stationLocation, 1500));
+                const double distanceInDegrees = 1500.0 / 111320.0;
+                places = places.Where(place => place.Location.IsWithinDistance(stationLocation, distanceInDegrees));
             }
         }
 
