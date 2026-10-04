@@ -339,6 +339,19 @@ public sealed class AdminPlacesController(
         return Ok(result);
     }
 
+    [HttpGet("import-template")]
+    [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetImportTemplateAsync(
+        [FromQuery] string? format,
+        [FromServices] IPlaceImportService importService,
+        CancellationToken cancellationToken)
+    {
+        var file = await importService.GetImportTemplateAsync(format, cancellationToken);
+        return File(file.Content, file.ContentType, file.FileName);
+    }
+
     private ValidationProblemDetails CreateInvalidPlaceProblem(
         IReadOnlyDictionary<string, string[]> errors)
     {

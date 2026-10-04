@@ -233,6 +233,12 @@ builder.Services.AddScoped<IGeoService, GeoService>();
 builder.Services.AddScoped<IPlaceQueryService, PlaceQueryService>();
 builder.Services.AddScoped<IAdminPlaceService, AdminPlaceService>();
 builder.Services.AddScoped<IPlaceDistanceValidationService, PlaceDistanceValidationService>();
+builder.Services.AddScoped<IPlaceImportService, PlaceImportService>();
+builder.Services.AddScoped<IPlaceImportParser, PlaceImportParser>();
+builder.Services.AddScoped<IPriceNormalizer, PriceNormalizer>();
+builder.Services.AddScoped<ICoordinateNormalizer, CoordinateNormalizer>();
+builder.Services.AddScoped<IStationMapperService, StationMapperService>();
+builder.Services.AddScoped<ICategoryValidationService, CategoryValidationService>();
 var cloudinaryOptions = new CloudinaryUploadOptions
 {
     CloudName = builder.Configuration["Cloudinary:CloudName"] ?? string.Empty,

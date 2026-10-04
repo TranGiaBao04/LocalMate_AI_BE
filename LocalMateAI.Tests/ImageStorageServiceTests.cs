@@ -13,7 +13,7 @@ public sealed class ImageStorageServiceTests
         ApiKey = "123456789012345",
         ApiSecret = "demo_secret",
         Folder = "localmate/places"
-    });
+    }, Microsoft.Extensions.Logging.Abstractions.NullLogger<CloudinaryImageStorageService>.Instance);
 
     [Fact]
     public async Task SaveAsync_UnsupportedContentType_ReturnsInvalidContentType()
