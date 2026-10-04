@@ -68,17 +68,31 @@ public sealed class PlaceOpeningHoursSchemaTests
     }
 
     [Fact]
-    public void Validate_OpenTimeAfterCloseTime_ReturnsFalse()
+    public void Validate_OvernightOpeningHours_ReturnsTrue()
     {
         var openingHour = new PlaceOpeningHour
         {
             DayOfWeek = DayOfWeek.Monday,
-            OpenTime = new TimeOnly(22, 0),
-            CloseTime = new TimeOnly(8, 0)
+            OpenTime = new TimeOnly(18, 0),
+            CloseTime = new TimeOnly(2, 0)
+        };
+
+        Assert.True(openingHour.Validate(out var error));
+        Assert.Equal(string.Empty, error);
+    }
+
+    [Fact]
+    public void Validate_EqualOpenAndCloseTime_ReturnsFalse()
+    {
+        var openingHour = new PlaceOpeningHour
+        {
+            DayOfWeek = DayOfWeek.Monday,
+            OpenTime = new TimeOnly(10, 0),
+            CloseTime = new TimeOnly(10, 0)
         };
 
         Assert.False(openingHour.Validate(out var error));
-        Assert.Equal("Giờ mở phải trước giờ đóng.", error);
+        Assert.Equal("Giờ mở và giờ đóng không được bằng nhau.", error);
     }
 
     [Fact]

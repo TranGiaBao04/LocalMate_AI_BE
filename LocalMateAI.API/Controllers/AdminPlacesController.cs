@@ -216,9 +216,15 @@ public sealed class AdminPlacesController(
         }
 
         var result = await distanceValidationService.ValidateDistanceAsync(request, cancellationToken);
-        return result is null
-            ? NotFound(CreateProblem(StatusCodes.Status404NotFound, "Station or coordinates was not found in Metro service area.", "station_not_found"))
-            : Ok(result);
+        return result.Status switch
+        {
+            PlaceDistanceValidationStatus.Success => Ok(result),
+            PlaceDistanceValidationStatus.StationNotFound => NotFound(CreateProblem(
+                StatusCodes.Status404NotFound, "Station was not found.", "station_not_found")),
+            PlaceDistanceValidationStatus.InvalidCoordinates => BadRequest(CreateInvalidPlaceProblem(
+                new Dictionary<string, string[]> { { "Latitude", new[] { "Coordinates are outside valid HCMC area." } } })),
+            _ => BadRequest(CreateProblem(StatusCodes.Status400BadRequest, "Invalid distance validation request.", "invalid_request"))
+        };
     }
 
     [HttpGet("{id:guid}/validate-distance")]
@@ -233,9 +239,14 @@ public sealed class AdminPlacesController(
         CancellationToken cancellationToken)
     {
         var result = await distanceValidationService.ValidatePlaceDistanceAsync(id, stationId, cancellationToken);
-        return result is null
-            ? NotFound(CreatePlaceNotFoundProblem())
-            : Ok(result);
+        return result.Status switch
+        {
+            PlaceDistanceValidationStatus.Success => Ok(result),
+            PlaceDistanceValidationStatus.PlaceNotFound => NotFound(CreatePlaceNotFoundProblem()),
+            PlaceDistanceValidationStatus.StationNotFound => NotFound(CreateProblem(
+                StatusCodes.Status404NotFound, "Station was not found.", "station_not_found")),
+            _ => NotFound(CreatePlaceNotFoundProblem())
+        };
     }
 
     [HttpPost("upload-image")]
@@ -269,6 +280,146 @@ public sealed class AdminPlacesController(
                 "image_too_large")),
             _ => throw new InvalidOperationException("Unknown image upload result.")
         };
+    }
+
+    [HttpPost("{id:guid}/tags")]
+    [ProducesResponseType<AdminPlaceTagResult>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<AdminPlaceTagResult>> AssignTagAsync(
+        Guid id,
+        [FromBody] AssignPlaceTagRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await adminPlaceService.AssignTagAsync(id, request.TagId, cancellationToken);
+
+        return result.Status switch
+        {
+            AdminPlaceTagResultStatus.Success => Ok(result),
+            AdminPlaceTagResultStatus.PlaceNotFound => NotFound(CreatePlaceNotFoundProblem()),
+            AdminPlaceTagResultStatus.TagNotFound => BadRequest(CreateProblem(
+                StatusCodes.Status400BadRequest,
+                "Tag was not found.",
+                "tag_not_found")),
+            _ => throw new InvalidOperationException("Unknown Admin Place tag result.")
+        };
+    }
+
+    [HttpDelete("{id:guid}/tags/{tagId:guid}")]
+    [ProducesResponseType<AdminPlaceTagResult>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<AdminPlaceTagResult>> RemoveTagAsync(
+        Guid id,
+        Guid tagId,
+        CancellationToken cancellationToken)
+    {
+        var result = await adminPlaceService.RemoveTagAsync(id, tagId, cancellationToken);
+
+        return result.Status switch
+        {
+            AdminPlaceTagResultStatus.Success => Ok(result),
+            AdminPlaceTagResultStatus.PlaceNotFound => NotFound(CreatePlaceNotFoundProblem()),
+            _ => throw new InvalidOperationException("Unknown Admin Place tag result.")
+        };
+    }
+
+    [HttpPost("detect-duplicates")]
+    [ProducesResponseType<DuplicatePlaceDetectionResult>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<DuplicatePlaceDetectionResult>> DetectDuplicatesAsync(
+        [FromBody] DetectDuplicatePlaceRequest request,
+        CancellationToken cancellationToken)
+    {
+        var result = await adminPlaceService.DetectDuplicatesAsync(request, cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpGet("import-template")]
+    [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> GetImportTemplateAsync(
+        [FromQuery] string? format,
+        [FromServices] IPlaceImportService importService,
+        CancellationToken cancellationToken)
+    {
+        var file = await importService.GetImportTemplateAsync(format, cancellationToken);
+        return File(file.Content, file.ContentType, file.FileName);
+    }
+
+    [HttpPost("import/preview")]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType<PlaceImportPreviewResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<PlaceImportPreviewResponse>> PreviewImportAsync(
+        IFormFile file,
+        [FromServices] IPlaceImportEngineService importEngineService,
+        CancellationToken cancellationToken)
+    {
+        if (file is null || file.Length == 0)
+        {
+            return BadRequest(CreateProblem(StatusCodes.Status400BadRequest, "File upload không được để trống.", "empty_file"));
+        }
+
+        var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+        if (ext is not (".xlsx" or ".csv"))
+        {
+            return BadRequest(CreateProblem(StatusCodes.Status400BadRequest, "Định dạng file không hỗ trợ. Chỉ chấp nhận file .xlsx hoặc .csv.", "unsupported_file_format"));
+        }
+
+        await using var stream = file.OpenReadStream();
+        var result = await importEngineService.PreviewAsync(stream, file.FileName, cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpPost("import/commit")]
+    [ProducesResponseType<PlaceImportCommitResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<PlaceImportCommitResponse>> CommitImportAsync(
+        [FromBody] CommitPlaceImportRequest request,
+        [FromServices] IPlaceImportEngineService importEngineService,
+        CancellationToken cancellationToken)
+    {
+        var result = await importEngineService.CommitAsync(request, cancellationToken);
+
+        return result.Status switch
+        {
+            PlaceImportCommitResultStatus.Success => Ok(result.Response),
+            PlaceImportCommitResultStatus.SessionNotFoundOrExpired => NotFound(CreateProblem(StatusCodes.Status404NotFound, result.ErrorMessage!, "import_session_expired")),
+            PlaceImportCommitResultStatus.AlreadyCommittedOrInProgress => Conflict(CreateProblem(StatusCodes.Status409Conflict, result.ErrorMessage!, "import_already_committed")),
+            PlaceImportCommitResultStatus.AbortedDueToErrors => BadRequest(CreateProblem(StatusCodes.Status400BadRequest, result.ErrorMessage!, "import_aborted_errors")),
+            PlaceImportCommitResultStatus.TransactionFailed => BadRequest(CreateProblem(StatusCodes.Status400BadRequest, result.ErrorMessage!, "import_transaction_failed")),
+            _ => throw new InvalidOperationException("Unknown import commit result status.")
+        };
+    }
+
+    [HttpGet("import/error-report/{importId}")]
+    [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    public IActionResult DownloadErrorReportCsvAsync(
+        string importId,
+        [FromServices] IPlaceImportEngineService importEngineService)
+    {
+        var fileBytes = importEngineService.ExportErrorReportCsv(importId);
+        if (fileBytes is null || fileBytes.Length == 0)
+        {
+            return NotFound(CreateProblem(StatusCodes.Status404NotFound, "Không tìm thấy báo cáo lỗi cho phiên import này hoặc không có dòng bị lỗi.", "error_report_not_found"));
+        }
+
+        return File(fileBytes, "text/csv; charset=utf-8", $"Import_Errors_{importId}.csv");
     }
 
     private ValidationProblemDetails CreateInvalidPlaceProblem(

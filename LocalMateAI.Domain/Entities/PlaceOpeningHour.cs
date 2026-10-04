@@ -35,9 +35,9 @@ public sealed class PlaceOpeningHour : BaseEntity
             return false;
         }
 
-        if (OpenTime >= CloseTime)
+        if (OpenTime == CloseTime)
         {
-            error = "Giờ mở phải trước giờ đóng.";
+            error = "Giờ mở và giờ đóng không được bằng nhau.";
             return false;
         }
 

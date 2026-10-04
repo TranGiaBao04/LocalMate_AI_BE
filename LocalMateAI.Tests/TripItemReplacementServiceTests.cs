@@ -410,6 +410,11 @@ public sealed class TripItemReplacementServiceTests
 
     private sealed class FakePlaceRepository(PlaceReadModel? newPlace, decimal currentCostMax) : IPlaceRepository
     {
+        public Task<IReadOnlyList<Guid>> GetTagIdsAsync(Guid placeId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task AddTagAsync(Guid placeId, Guid tagId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<bool> RemoveTagAsync(Guid placeId, Guid tagId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<IReadOnlyList<DuplicatePlaceCandidate>> FindNearbyPlacesAsync(double latitude, double longitude, double radiusMeters, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
         public Task<PlaceReadModel?> GetActiveByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
             Task.FromResult(id == NewPlaceId ? newPlace : null);
 
