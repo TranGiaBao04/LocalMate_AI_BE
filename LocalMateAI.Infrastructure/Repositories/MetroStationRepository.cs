@@ -37,7 +37,7 @@ public sealed class MetroStationRepository(AppDbContext dbContext) : IMetroStati
                         ms."Location"::geography
                     ) AS "DistanceMeters"
              FROM "MetroStations" ms
-             ORDER BY "DistanceMeters"
+             ORDER BY "DistanceMeters", ms."Order"
              LIMIT 1
              """)
             .FirstOrDefaultAsync(cancellationToken);

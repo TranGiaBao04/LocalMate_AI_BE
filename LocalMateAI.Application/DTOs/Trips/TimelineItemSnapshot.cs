@@ -6,4 +6,6 @@ public sealed record TimelineItemSnapshot(
     TimeOnly ScheduledTime,
     int EstimatedDurationMinutes,
     double Latitude,
-    double Longitude);
+    double Longitude,
+    int? StationOrder = null, // chỉ cần cho trip Metro: ga gần địa điểm nhất
+    double DistanceFromStationMeters = 0);

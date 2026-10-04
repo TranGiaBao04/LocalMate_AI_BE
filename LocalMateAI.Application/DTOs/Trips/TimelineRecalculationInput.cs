@@ -8,4 +8,5 @@ namespace LocalMateAI.Application.DTOs.Trips;
 public sealed record TimelineRecalculationInput(
     IReadOnlyList<TimelineItemSnapshot> RemainingItems,
     TimeOnly TripStartTime,
-    TravelMode TravelMode);
+    TravelMode TravelMode,
+    DateOnly? PlannedDate = null); // ngày đi của trip, để lấy lịch tàu khi TravelMode là Metro

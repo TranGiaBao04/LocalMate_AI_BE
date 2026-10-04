@@ -62,11 +62,6 @@ public sealed class ItinerariesController(
                     "invalid_start_location")),
             ApplyCuratedItineraryResultStatus.ValidationFailed =>
                 CreateValidationProblem(result.ValidationErrors!),
-            ApplyCuratedItineraryResultStatus.OutOfServiceArea =>
-                Conflict(CreateProblem(
-                    StatusCodes.Status409Conflict,
-                    "The start location is outside the Metro Line 1 service area.",
-                    "out_of_service_area")),
             ApplyCuratedItineraryResultStatus.UserNotFound =>
                 StatusCode(StatusCodes.Status403Forbidden, CreateProblem(
                     StatusCodes.Status403Forbidden,

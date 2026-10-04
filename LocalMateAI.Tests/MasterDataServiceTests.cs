@@ -19,7 +19,7 @@ public sealed class MasterDataServiceTests
         Assert.Equal(ReviewQuickTags.All, result.ReviewQuickTags.Select(tag => tag.Code));
         Assert.All(result.ReviewQuickTags, tag => Assert.NotEqual(tag.Code, tag.Label));
         Assert.Equal(["Draft", "Finalized"], result.TripStatuses);
-        Assert.Equal(["Auto", "Walking", "Motorbike"], result.TravelModes);
+        Assert.Equal(["Auto", "Walking", "Motorbike", "Metro"], result.TravelModes);
         Assert.Equal(new TripLimitsResponse(1, 24), result.TripLimits);
     }
 

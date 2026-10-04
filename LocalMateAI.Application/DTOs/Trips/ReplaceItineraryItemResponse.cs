@@ -10,4 +10,5 @@ public sealed record ReplaceItineraryItemResponse(
     int EstimatedDurationMinutes,
     decimal EstimatedBudget,
     PlaceSummaryResponse Place,
-    IReadOnlyList<string> Warnings);
+    IReadOnlyList<string> Warnings,
+    IReadOnlyList<ItineraryTimelineItemResponse> Items); // mọi chặng của trip với giờ đã tính lại sau khi thay

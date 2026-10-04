@@ -193,7 +193,7 @@ public sealed class PlanVersionFoundationPostgresTests
         var orderId = Guid.NewGuid();
         var historicalId = Guid.NewGuid();
         var usageId = Guid.NewGuid();
-        var trip = await TripAsync(c, user.Id);
+        var trip = await PostgresTestDatabase.InsertTripAsync(c, user.Id);
         await c.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO "UserSubscriptions" ("Id","UserId","PlanCode","StartsAt","EndsAt","CreatedAt","UpdatedAt")
             VALUES ({legacyId},{user.Id},'Membership',{Now},{Now.AddDays(60)},{Now},{Now});

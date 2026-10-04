@@ -19,4 +19,5 @@ public sealed record TripItemResponse(
     int? TravelMinutesFromPrevious, // suy ra từ khoảng trống giờ của lịch; null ở chặng đầu
     int? DistanceMetersFromPrevious,
     int? WalkingMinutes,
-    int? MotorbikeMinutes);
+    int? MotorbikeMinutes,
+    TripLegResponse? Leg = null); // cách đi tới chặng này; null khi không có đoạn đi (chặng đầu của trip không đặt giờ)

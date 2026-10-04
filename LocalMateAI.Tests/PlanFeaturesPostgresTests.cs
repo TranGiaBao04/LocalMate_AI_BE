@@ -337,7 +337,7 @@ public sealed class PlanFeaturesPostgresTests
         await using var c = db.Context();
         Assert.Equal(Foundation, (await c.Database.GetAppliedMigrationsAsync()).Last());
         var user = await PlanVersionFoundationPostgresTests.UserAsync(c);
-        var trip = await PlanVersionFoundationPostgresTests.TripAsync(c, user.Id);
+        var trip = await PostgresTestDatabase.InsertTripAsync(c, user.Id);
         var periodId = Guid.NewGuid();
         var paidOrderId = Guid.NewGuid();
         await using (var tx = await c.Database.BeginTransactionAsync())

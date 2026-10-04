@@ -1,4 +1,3 @@
-using LocalMateAI.Application.DTOs.Geo;
 using LocalMateAI.Application.DTOs.Itineraries;
 using LocalMateAI.Application.DTOs.Trips;
 using LocalMateAI.Application.Interfaces.Repositories;
@@ -115,19 +114,6 @@ public sealed class CuratedTripServiceTests
     }
 
     [Fact]
-    public async Task Apply_CoordinateFarFromAnyStation_ReturnsOutOfServiceAreaWithoutReadingItinerary()
-    {
-        var fixture = new Fixture(source: Source([Place(0)]), withinServiceArea: false);
-
-        var result = await fixture.Service.ApplyAsync(
-            UserId, Guid.NewGuid(), new ApplyCuratedItineraryRequest(10.80, 106.65, null));
-
-        Assert.Equal(ApplyCuratedItineraryResultStatus.OutOfServiceArea, result.Status);
-        Assert.Equal(0, fixture.Curated.ReadCalls);
-        Assert.Empty(fixture.Trips.Added);
-    }
-
-    [Fact]
     public async Task Apply_PastPlannedDate_ReturnsValidationErrorOnPlannedDate()
     {
         var fixture = new Fixture(source: Source([Place(0)]));
@@ -193,6 +179,19 @@ public sealed class CuratedTripServiceTests
     }
 
     [Fact]
+    public async Task Apply_MetroTravelMode_IsNotSupportedYet()
+    {
+        var fixture = new Fixture(source: Source([Place(0)]));
+
+        var result = await fixture.Service.ApplyAsync(
+            UserId, Guid.NewGuid(), new ApplyCuratedItineraryRequest(null, null, null, null, TravelMode.Metro));
+
+        Assert.Equal(ApplyCuratedItineraryResultStatus.ValidationFailed, result.Status);
+        Assert.Equal(["Lịch trình mẫu chưa hỗ trợ đi Metro."], result.ValidationErrors!["TravelMode"]);
+        Assert.Empty(fixture.Trips.Added);
+    }
+
+    [Fact]
     public async Task Apply_UnknownTravelMode_ReturnsValidationErrorOnTravelMode()
     {
         var fixture = new Fixture(source: Source([Place(0)]));
@@ -215,8 +214,7 @@ public sealed class CuratedTripServiceTests
     {
         public Fixture(
             bool userExists = true,
-            CuratedItineraryForApplyReadModel? source = null,
-            bool withinServiceArea = true)
+            CuratedItineraryForApplyReadModel? source = null)
         {
             Curated = new FakeCuratedRepository(source);
             Trips = new FakeTripRepository();
@@ -227,7 +225,6 @@ public sealed class CuratedTripServiceTests
                 Trips,
                 Detail,
                 new CoordinatesValidationService(),
-                new FakeOrigin(withinServiceArea),
                 Clock, new FakeSystemSettingProvider());
         }
 
@@ -235,19 +232,6 @@ public sealed class CuratedTripServiceTests
         public FakeCuratedRepository Curated { get; }
         public FakeTripRepository Trips { get; }
         public FakeTripDetailService Detail { get; }
-    }
-
-    private sealed class FakeOrigin(bool withinServiceArea) : ITripOriginResolverService
-    {
-        public Task<TripOriginResolution?> ResolveAsync(
-            TripRequestDto request, CancellationToken cancellationToken = default) =>
-            ResolveAsync(request.StartLatitude, request.StartLongitude, cancellationToken);
-
-        public Task<TripOriginResolution?> ResolveAsync(
-            double latitude, double longitude, CancellationToken cancellationToken = default) =>
-            Task.FromResult<TripOriginResolution?>(new TripOriginResolution(
-                new NearestStationResult(Guid.NewGuid(), "Bến Thành", 10.7721, 106.6980, withinServiceArea ? 300 : 50_000),
-                withinServiceArea));
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider

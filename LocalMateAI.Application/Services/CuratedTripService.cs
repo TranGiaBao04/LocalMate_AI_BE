@@ -13,7 +13,6 @@ public sealed class CuratedTripService(
     ITripRepository tripRepository,
     ITripDetailService tripDetailService,
     ICoordinatesValidationService coordinatesValidationService,
-    ITripOriginResolverService tripOriginResolverService,
     TimeProvider timeProvider,
     ISystemSettingProvider settings) : ICuratedTripService
 {
@@ -49,6 +48,11 @@ public sealed class CuratedTripService(
         {
             errors["TravelMode"] = ["Phương tiện không hợp lệ."];
         }
+        else if (travelMode == TravelMode.Metro)
+        {
+            // Lịch mẫu giữ thứ tự của Admin và chưa có thông tin ga lên, nên chưa tính được đoạn đi tàu.
+            errors["TravelMode"] = ["Lịch trình mẫu chưa hỗ trợ đi Metro."];
+        }
 
         if (errors.Count > 0)
         {
@@ -59,17 +63,6 @@ public sealed class CuratedTripService(
         if (user is null)
         {
             return ApplyCuratedItineraryResult.MissingUser();
-        }
-
-        // Cùng ngưỡng vùng phục vụ với generate; chỉ kiểm tra khi user gửi toạ độ xuất phát.
-        if (latitude.HasValue)
-        {
-            var origin = await tripOriginResolverService.ResolveAsync(latitude.Value, longitude!.Value, cancellationToken)
-                ?? throw new InvalidOperationException("No metro stations found.");
-            if (!origin.IsWithinServiceArea)
-            {
-                return ApplyCuratedItineraryResult.OutsideServiceArea();
-            }
         }
 
         var source = await curatedItineraryRepository.GetForApplyAsync(curatedItineraryId, cancellationToken);

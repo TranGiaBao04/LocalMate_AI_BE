@@ -35,6 +35,16 @@ public sealed class TripConfiguration : IEntityTypeConfiguration<Trip>
             .OnDelete(DeleteBehavior.Restrict)
             .HasConstraintName("FK_Trips_Users_UserId");
 
+        builder.HasOne<MetroStation>()
+            .WithMany()
+            .HasForeignKey(trip => trip.StartStationId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne<MetroStation>()
+            .WithMany()
+            .HasForeignKey(trip => trip.DestinationStationId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         builder.HasMany(trip => trip.Items)
             .WithOne(item => item.Trip)
             .HasForeignKey(item => item.TripId)

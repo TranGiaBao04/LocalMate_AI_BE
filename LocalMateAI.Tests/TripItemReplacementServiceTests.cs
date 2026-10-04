@@ -220,6 +220,55 @@ public sealed class TripItemReplacementServiceTests
         Assert.Equal(ReplaceItineraryItemResultStatus.PlaceAlreadyInTrip, result.Status);
     }
 
+    [Fact]
+    public async Task ReplaceAsync_RecalculatesTimesOfStopsAfterTheReplacedOne()
+    {
+        // Địa điểm mới cách chặng kế 2,89 km: Tự động ⇒ xe máy 8'. Chặng kế dời từ 09:31 sang 08:00 + 90' + 8' = 09:38.
+        var next = new TimelineItemSnapshot(Guid.NewGuid(), 1, new TimeOnly(9, 31), 90, 10.79, 106.69);
+        var (sut, items) = Create(snapshots: [FirstStop(new TimeOnly(8, 0)), next]);
+
+        var result = await sut.ReplaceAsync(UserId, TripId, ItemId, NewPlaceId);
+
+        Assert.Equal(ReplaceItineraryItemResultStatus.Success, result.Status);
+        Assert.Equal([new TimelineItemUpdate(next.ItemId, 1, new TimeOnly(9, 38))], items.RecalculatedUpdates);
+        Assert.Same(items.Timeline, result.Response!.Items);
+    }
+
+    [Theory]
+    [InlineData(3, true)]  // rời 07:50, rảnh 3 giờ ⇒ phải xong trước 10:50, lịch mới xong 11:08
+    [InlineData(4, false)] // rảnh 4 giờ ⇒ tới 11:50, vẫn vừa
+    public async Task ReplaceAsync_TimelineLongerThanFreeTime_WarnsButStillReplaces(int durationHours, bool warns)
+    {
+        var next = new TimelineItemSnapshot(Guid.NewGuid(), 1, new TimeOnly(9, 31), 90, 10.79, 106.69);
+        var context = MakeContext(TripStatus.Draft) with
+        {
+            TripPlannedStartAt = new DateTime(2026, 10, 10, 7, 50, 0),
+            TripDurationHours = durationHours
+        };
+        var (sut, items) = Create(contexts: [context], snapshots: [FirstStop(new TimeOnly(8, 0)), next]);
+
+        var result = await sut.ReplaceAsync(UserId, TripId, ItemId, NewPlaceId);
+
+        Assert.Equal(ReplaceItineraryItemResultStatus.Success, result.Status);
+        Assert.Equal(NewPlaceId, items.ReplacedPlaceId);
+        Assert.Equal(warns, result.Response!.Warnings.Contains(TripItemReplacementService.ExceedsDurationWarning));
+    }
+
+    [Fact]
+    public async Task ReplaceAsync_TimelineWouldCrossMidnight_IsRejectedWithoutReplacing()
+    {
+        // 22:00 + 90' + 8' đi + 90' = 01:08 hôm sau: giờ lưu kiểu TimeOnly sẽ quay vòng nên không cho thay.
+        var next = new TimelineItemSnapshot(Guid.NewGuid(), 1, new TimeOnly(23, 31), 90, 10.79, 106.69);
+        var (sut, items) = Create(snapshots: [FirstStop(new TimeOnly(22, 0)), next]);
+
+        var result = await sut.ReplaceAsync(UserId, TripId, ItemId, NewPlaceId);
+
+        Assert.Equal(ReplaceItineraryItemResultStatus.CrossesMidnight, result.Status);
+        Assert.Null(items.ReplacedPlaceId);
+    }
+
+    private static TimelineItemSnapshot FirstStop(TimeOnly time) => new(ItemId, 0, time, 90, 10.77, 106.69);
+
     private static (TripItemReplacementService Sut, FakeItineraryItemRepository Items) Create(
         Guid? userId = null,
         IReadOnlyList<OwnedItemAlternativesReadModel?>? contexts = null,
@@ -228,16 +277,22 @@ public sealed class TripItemReplacementServiceTests
         decimal currentCostMax = 100,
         Guid? newStation = null,
         bool replaceSucceeds = true,
-        FakeSystemSettingProvider? settings = null)
+        FakeSystemSettingProvider? settings = null,
+        IReadOnlyList<TimelineItemSnapshot>? snapshots = null)
     {
-        var items = new FakeItineraryItemRepository(contexts ?? [MakeContext(TripStatus.Draft)], replaceSucceeds);
+        var items = new FakeItineraryItemRepository(
+            contexts ?? [MakeContext(TripStatus.Draft)],
+            replaceSucceeds,
+            snapshots ?? [FirstStop(new TimeOnly(8, 0))]);
         var resolvedNewPlace = hasNewPlace ? newPlace ?? MakeNewPlace(costMax: 100) : null;
         var sut = new TripItemReplacementService(
             new FakeUserRepository(userId ?? UserId),
             items,
             new FakePlaceRepository(resolvedNewPlace, currentCostMax),
             new FakeGeoService(newStation ?? StationA),
-            settings ?? new FakeSystemSettingProvider());
+            settings ?? new FakeSystemSettingProvider(),
+            new ItineraryTimelineRecalculator(),
+            new StubMetroTimetableSource());
 
         return (sut, items);
     }
@@ -276,13 +331,18 @@ public sealed class TripItemReplacementServiceTests
 
     private sealed class FakeItineraryItemRepository(
         IReadOnlyList<OwnedItemAlternativesReadModel?> contexts,
-        bool replaceSucceeds) : IItineraryItemRepository
+        bool replaceSucceeds,
+        IReadOnlyList<TimelineItemSnapshot> snapshots) : IItineraryItemRepository
     {
         private int _reads;
 
         public decimal? ReplacedBudget { get; private set; }
 
         public Guid? ReplacedPlaceId { get; private set; }
+
+        public IReadOnlyList<TimelineItemUpdate>? RecalculatedUpdates { get; private set; }
+
+        public IReadOnlyList<ItineraryTimelineItemResponse> Timeline { get; } = [];
 
         public Task<OwnedItemAlternativesReadModel?> GetOwnedItemForAlternativesAsync(
             Guid tripId,
@@ -291,28 +351,34 @@ public sealed class TripItemReplacementServiceTests
             CancellationToken cancellationToken = default) =>
             Task.FromResult(contexts[Math.Min(_reads++, contexts.Count - 1)]);
 
-        public Task<ReplacedItemReadModel?> ReplaceItemPlaceIfEligibleAsync(
+        public Task<ReplaceItemPersistenceResult> ReplaceItemPlaceAndRecalculateTimelineAsync(
             Guid tripId,
             Guid itemId,
             Guid userId,
             Guid newPlaceId,
             decimal newEstimatedBudget,
+            Func<TimelineRecalculationInput, IReadOnlyList<TimelineItemUpdate>?> recalculateTimeline,
             CancellationToken cancellationToken = default)
         {
             if (!replaceSucceeds)
             {
-                return Task.FromResult<ReplacedItemReadModel?>(null);
+                return Task.FromResult(new ReplaceItemPersistenceResult(ReplaceItemPersistenceStatus.NotEligible));
+            }
+
+            // Như repository thật: đưa các chặng sau khi thay cho bộ tính lại giờ; null nghĩa là bị từ chối, không ghi gì.
+            RecalculatedUpdates = recalculateTimeline(new TimelineRecalculationInput(
+                snapshots, snapshots[0].ScheduledTime, TravelMode.Auto));
+            if (RecalculatedUpdates is null)
+            {
+                return Task.FromResult(new ReplaceItemPersistenceResult(ReplaceItemPersistenceStatus.CrossesMidnight));
             }
 
             ReplacedPlaceId = newPlaceId;
             ReplacedBudget = newEstimatedBudget;
-            return Task.FromResult<ReplacedItemReadModel?>(new ReplacedItemReadModel(
-                itemId,
-                tripId,
-                0,
-                new TimeOnly(8, 0),
-                90,
-                newEstimatedBudget));
+            return Task.FromResult(new ReplaceItemPersistenceResult(
+                ReplaceItemPersistenceStatus.Replaced,
+                new ReplacedItemReadModel(itemId, tripId, 0, new TimeOnly(8, 0), 90, newEstimatedBudget),
+                Timeline));
         }
 
         public Task<DeleteItineraryItemPersistenceResult> DeleteItemAndRecalculateTimelineAsync(

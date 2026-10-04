@@ -11,6 +11,7 @@ public static class GeneratedTripBuilder
     public static Trip Build(
         Guid userId,
         TripRequestDto request,
+        TripOriginResolution origin,
         IReadOnlyList<FallbackStopDto> stops,
         IReadOnlyList<Guid> tagIds,
         DateTime plannedStartAt)
@@ -27,8 +28,10 @@ public static class GeneratedTripBuilder
         {
             Id = tripId,
             UserId = userId,
-            StartLatitude = request.StartLatitude,
-            StartLongitude = request.StartLongitude,
+            StartLatitude = origin.StartLatitude,
+            StartLongitude = origin.StartLongitude,
+            StartStationId = origin.StartStationId,
+            DestinationStationId = origin.DestinationStationId,
             DurationHours = request.DurationHours,
             BudgetMin = request.BudgetMin,
             BudgetMax = request.BudgetMax,

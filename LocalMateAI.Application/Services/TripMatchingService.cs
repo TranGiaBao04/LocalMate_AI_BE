@@ -38,23 +38,27 @@ public sealed class TripMatchingService(
         var origin = await tripOriginResolverService.ResolveAsync(request, cancellationToken)
             ?? throw new InvalidOperationException("No metro stations found.");
 
+        var anchorStation = new StationRefDto(origin.AnchorStation.Order, origin.AnchorStation.Name);
+
         if (!origin.IsWithinServiceArea)
         {
             return new TripMatchingResult(
                 TripMatchingResultStatus.Success,
                 Response: new TripMatchingResponse(
                     false,
-                    "OutOfServiceArea",
+                    origin.ServiceAreaFailure,
                     origin.NearestStation.StationName,
                     0,
                     criteria.BudgetTier.ToString(),
                     [],
-                    []));
+                    [],
+                    anchorStation),
+                Origin: origin);
         }
 
-        // BE-31: lọc địa điểm theo cụm ga Metro (PostGIS)
+        // BE-31: lọc địa điểm theo cụm ga Metro (PostGIS), quanh ga cột mốc (ga muốn chơi, hoặc ga lên).
         var candidates = await metroClusterMatchingService.GetCandidatesAsync(
-            origin.NearestStation.StationId,
+            origin.AnchorStation.Id,
             cancellationToken);
 
         // BE-32: lọc ứng viên theo ngân sách
@@ -67,10 +71,11 @@ public sealed class TripMatchingService(
 
         var scored = tagSimilarityScorer.Score(filtered.Passed, placeTagIds, request.TagIds);
 
-        // Xếp hạng: MatchScore giảm dần, khoảng cách tăng dần
+        // Xếp hạng: MatchScore giảm dần, gần ga cột mốc trước, PlaceId để thứ tự luôn ổn định.
         var ranked = scored
             .OrderByDescending(place => place.MatchScore)
-            .ThenBy(place => place.Candidate.DistanceFromStationMeters)
+            .ThenBy(place => CandidateRanking.DistanceToAnchorKm(place.Candidate, origin.AnchorStation))
+            .ThenBy(place => place.Candidate.PlaceId)
             .ToList();
 
         // ItineraryScheduler là nơi duy nhất quyết định số chặng: chọn theo thứ hạng tới khi hết thời lượng hoặc ngân sách.
@@ -81,7 +86,7 @@ public sealed class TripMatchingService(
             request.DurationHours,
             request.TravelMode,
             request.BudgetMax,
-            new ScheduleOrigin(request.StartLatitude, request.StartLongitude),
+            origin.ToScheduleOrigin(),
             planning);
 
         var selected = slots
@@ -92,15 +97,24 @@ public sealed class TripMatchingService(
 
         var isSufficient = selected.Count >= 1;
 
+        // Không có ứng viên nào trong ngân sách = thiếu địa điểm; có ứng viên mà không chặng nào vừa = thiếu giờ.
+        var insufficiencyReason = isSufficient
+            ? null
+            : filtered.Passed.Count == 0
+                ? TripInsufficiencyReasons.InsufficientCandidates
+                : TripInsufficiencyReasons.DurationTooShort;
+
         return new TripMatchingResult(
             TripMatchingResultStatus.Success,
             Response: new TripMatchingResponse(
                 isSufficient,
-                isSufficient ? null : "InsufficientCandidates",
+                insufficiencyReason,
                 origin.NearestStation.StationName,
                 selected.Count,
                 criteria.BudgetTier.ToString(),
                 selected,
-                filtered.Excluded));
+                filtered.Excluded,
+                anchorStation),
+            Origin: origin);
     }
 }

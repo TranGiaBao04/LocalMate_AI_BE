@@ -46,6 +46,7 @@ public sealed class TripGenerationServiceTests
     [Theory]
     [InlineData("OutOfServiceArea", "OutOfServiceArea")]
     [InlineData("InsufficientCandidates", "InsufficientCandidates")]
+    [InlineData("DurationTooShort", "DurationTooShort")]
     [InlineData(null, "InsufficientCandidates")]
     public async Task Generate_NotSufficient_ReturnsNoPlacesWithReasonAndSavesNothing(
         string? engineReason, string expectedReason)
@@ -58,6 +59,52 @@ public sealed class TripGenerationServiceTests
         Assert.Equal(expectedReason, result.Reason);
         Assert.Empty(fixture.Trips.Added);
         Assert.Empty(fixture.Usage.Added);
+    }
+
+    [Fact]
+    public async Task Generate_InsufficientCandidates_ReturnsSuggestedStations()
+    {
+        var fixture = new Fixture(Sufficient(isSufficient: false, reason: "InsufficientCandidates"));
+
+        var result = await fixture.Service.GenerateAsync(UserId, Request());
+
+        Assert.Equal([new SuggestedStationDto(2, "Nhà hát Thành phố", 31)], result.SuggestedStations);
+        Assert.Equal(1, fixture.Suggestions.Calls);
+    }
+
+    [Theory]
+    [InlineData("OutOfServiceArea")]
+    [InlineData("DurationTooShort")]
+    public async Task Generate_OtherFailureReasons_DoNotSuggestStations(string reason)
+    {
+        var fixture = new Fixture(Sufficient(isSufficient: false, reason: reason));
+
+        var result = await fixture.Service.GenerateAsync(UserId, Request());
+
+        Assert.Empty(result.SuggestedStations!);
+        Assert.Equal(0, fixture.Suggestions.Calls);
+    }
+
+    [Fact]
+    public async Task Generate_SavesStartCoordinatesAndStationsFromResolvedOrigin()
+    {
+        var startStationId = Guid.NewGuid();
+        var destinationStationId = Guid.NewGuid();
+        var origin = TestTripOrigins.At(
+            startLatitude: 10.8664, startLongitude: 106.8013,
+            startStationId: startStationId, destinationStationId: destinationStationId);
+        var fixture = new Fixture(Sufficient(origin: origin));
+        var request = new TripRequestDto(null, null, 6, 0m, 900_000m, [], TravelMode.Motorbike,
+            StartStationOrder: 13, DestinationStationOrder: 2);
+
+        var result = await fixture.Service.GenerateAsync(UserId, request);
+
+        Assert.Equal(GenerateTripResultStatus.Success, result.Status);
+        var saved = Assert.Single(fixture.Trips.Added);
+        Assert.Equal(10.8664, saved.StartLatitude);
+        Assert.Equal(106.8013, saved.StartLongitude);
+        Assert.Equal(startStationId, saved.StartStationId);
+        Assert.Equal(destinationStationId, saved.DestinationStationId);
     }
 
     [Fact]
@@ -272,7 +319,8 @@ public sealed class TripGenerationServiceTests
         IReadOnlyList<Guid>? tagIds = null, DateOnly? plannedDate = null, TimeOnly? startTime = null) =>
         new(10.77, 106.69, 6, 0m, 900_000m, tagIds ?? [], TravelMode.Motorbike, plannedDate, startTime);
 
-    private static FallbackItineraryResult Sufficient(bool isSufficient = true, string? reason = null) =>
+    private static FallbackItineraryResult Sufficient(
+        bool isSufficient = true, string? reason = null, TripOriginResolution? origin = null) =>
         new(
             FallbackItineraryStatus.Success,
             new FallbackItineraryPayload(
@@ -282,7 +330,9 @@ public sealed class TripGenerationServiceTests
                 "Bến Thành",
                 isSufficient ? 2 : 0,
                 "Standard",
-                isSufficient ? [Stop(0, 8, 0), Stop(1, 9, 5)] : []));
+                isSufficient ? [Stop(0, 8, 0), Stop(1, 9, 5)] : [],
+                new StationRefDto(1, "Bến Thành")),
+            Origin: origin ?? TestTripOrigins.At(startLatitude: 10.77, startLongitude: 106.69));
 
     private static FallbackStopDto Stop(int order, int hour, int minute) =>
         new(
@@ -319,6 +369,7 @@ public sealed class TripGenerationServiceTests
             Trips = new FakeTripRepository();
             Usage = new FakeUsageRepository(usageCount);
             Detail = new FakeTripDetailService();
+            Suggestions = new FakeStationSuggestionService(new SuggestedStationDto(2, "Nhà hát Thành phố", 31));
             Service = new TripGenerationService(
                 new FakeUserRepository(userExists ? UserId : null),
                 new TripRequestValidator(effectiveClock),
@@ -329,6 +380,7 @@ public sealed class TripGenerationServiceTests
                 Usage,
                 new FakeQuotaExecutor(lockedUserExists),
                 Detail,
+                Suggestions,
                 effectiveClock);
         }
 
@@ -337,6 +389,7 @@ public sealed class TripGenerationServiceTests
         public FakeTripRepository Trips { get; }
         public FakeUsageRepository Usage { get; }
         public FakeTripDetailService Detail { get; }
+        public FakeStationSuggestionService Suggestions { get; }
     }
 
     private sealed class FakeEngine(FallbackItineraryResult result) : IHeuristicFallbackEngine

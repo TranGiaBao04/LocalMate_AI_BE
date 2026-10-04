@@ -23,4 +23,6 @@ public sealed record TripDetailResponse(
     DateTime? FinalizedAt,
     DateOnly? PlannedDate = null, // null với trip cũ chưa đặt ngày
     TimeOnly? StartTime = null, // giờ RỜI điểm xuất phát
-    int? TravelMinutesFromOrigin = null); // thời gian đi từ điểm xuất phát tới chặng đầu
+    int? TravelMinutesFromOrigin = null, // thời gian đi từ điểm xuất phát tới chặng đầu
+    StationRefDto? StartStation = null, // ga người dùng chọn xuất phát; null = xuất phát từ toạ độ
+    StationRefDto? DestinationStation = null); // ga người dùng chọn để chơi quanh đó; null = "gần tôi"
