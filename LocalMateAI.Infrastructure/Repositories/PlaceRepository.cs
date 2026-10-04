@@ -113,6 +113,75 @@ public sealed class PlaceRepository(AppDbContext dbContext) : IPlaceRepository
                 group => (IReadOnlyList<Guid>)group.Select(row => row.TagId).ToList());
     }
 
+    public async Task<IReadOnlyList<Guid>> GetTagIdsAsync(
+        Guid placeId,
+        CancellationToken cancellationToken = default) =>
+        await dbContext.PlaceTags
+            .Where(placeTag => placeTag.PlaceId == placeId)
+            .Select(placeTag => placeTag.TagId)
+            .ToListAsync(cancellationToken);
+
+    public async Task AddTagAsync(
+        Guid placeId,
+        Guid tagId,
+        CancellationToken cancellationToken = default)
+    {
+        var exists = await dbContext.PlaceTags
+            .AnyAsync(placeTag => placeTag.PlaceId == placeId && placeTag.TagId == tagId, cancellationToken);
+
+        if (exists)
+        {
+            return;
+        }
+
+        dbContext.PlaceTags.Add(new PlaceTag { PlaceId = placeId, TagId = tagId });
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<bool> RemoveTagAsync(
+        Guid placeId,
+        Guid tagId,
+        CancellationToken cancellationToken = default)
+    {
+        var placeTag = await dbContext.PlaceTags
+            .SingleOrDefaultAsync(placeTag => placeTag.PlaceId == placeId && placeTag.TagId == tagId, cancellationToken);
+
+        if (placeTag is null)
+        {
+            return false;
+        }
+
+        dbContext.PlaceTags.Remove(placeTag);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
+    public async Task<IReadOnlyList<DuplicatePlaceCandidate>> FindNearbyPlacesAsync(
+        double latitude,
+        double longitude,
+        double radiusMeters,
+        CancellationToken cancellationToken = default)
+    {
+        return await dbContext.Database.SqlQuery<DuplicatePlaceCandidate>(
+            $"""
+             SELECT p."Id", p."Name", p."Address",
+                    ST_Y(p."Location") AS "Latitude", ST_X(p."Location") AS "Longitude",
+                    ST_Distance(
+                        p."Location"::geography,
+                        ST_SetSRID(ST_MakePoint({longitude}, {latitude}), 4326)::geography
+                    ) AS "DistanceMeters"
+             FROM "Places" p
+             WHERE p."DeletedAt" IS NULL
+               AND ST_DWithin(
+                   p."Location"::geography,
+                   ST_SetSRID(ST_MakePoint({longitude}, {latitude}), 4326)::geography,
+                   {radiusMeters}
+               )
+             ORDER BY "DistanceMeters"
+             """)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<AdminPlaceResponse>> GetAllForAdminAsync(
         CancellationToken cancellationToken = default)
     {

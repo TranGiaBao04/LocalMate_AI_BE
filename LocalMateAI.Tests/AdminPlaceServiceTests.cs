@@ -39,7 +39,7 @@ public sealed class AdminPlaceServiceTests
     public async Task Create_ValidRequest_CreatesPendingPlaceWithCorrectCoordinates()
     {
         var repository = new FakePlaceRepository();
-        var service = new AdminPlaceService(repository, new CoordinatesValidationService());
+        var service = new AdminPlaceService(repository, new CoordinatesValidationService(), new FakeTagRepository());
 
         var result = await service.CreateAsync(ValidCreateRequest());
 
@@ -59,7 +59,7 @@ public sealed class AdminPlaceServiceTests
     {
         var place = ExistingPlace(PlaceStatus.Active);
         var repository = new FakePlaceRepository(place);
-        var service = new AdminPlaceService(repository, new CoordinatesValidationService());
+        var service = new AdminPlaceService(repository, new CoordinatesValidationService(), new FakeTagRepository());
         var query = new AdminPlaceQuery { Page = 1, PageSize = 10, Search = "Test" };
 
         var result = await service.GetPagedAsync(query);
@@ -78,7 +78,7 @@ public sealed class AdminPlaceServiceTests
         CreateAdminPlaceRequest request)
     {
         var repository = new FakePlaceRepository();
-        var service = new AdminPlaceService(repository, new CoordinatesValidationService());
+        var service = new AdminPlaceService(repository, new CoordinatesValidationService(), new FakeTagRepository());
 
         var result = await service.CreateAsync(request);
 
@@ -108,7 +108,7 @@ public sealed class AdminPlaceServiceTests
             Tags = [tag]
         };
         var repository = new FakePlaceRepository(place);
-        var service = new AdminPlaceService(repository, new CoordinatesValidationService());
+        var service = new AdminPlaceService(repository, new CoordinatesValidationService(), new FakeTagRepository());
         var request = new UpdateAdminPlaceRequest(
             "Updated",
             "Description",
@@ -143,7 +143,7 @@ public sealed class AdminPlaceServiceTests
     {
         var place = ExistingPlace(current, isVerified: true);
         var repository = new FakePlaceRepository(place);
-        var service = new AdminPlaceService(repository, new CoordinatesValidationService());
+        var service = new AdminPlaceService(repository, new CoordinatesValidationService(), new FakeTagRepository());
 
         var result = await service.UpdateStatusAsync(
             place.Id,
@@ -165,7 +165,7 @@ public sealed class AdminPlaceServiceTests
     {
         var place = ExistingPlace(current);
         var repository = new FakePlaceRepository(place);
-        var service = new AdminPlaceService(repository, new CoordinatesValidationService());
+        var service = new AdminPlaceService(repository, new CoordinatesValidationService(), new FakeTagRepository());
 
         var result = await service.UpdateStatusAsync(
             place.Id,
@@ -181,7 +181,7 @@ public sealed class AdminPlaceServiceTests
     {
         var place = ExistingPlace(PlaceStatus.Active, isVerified: true);
         var repository = new FakePlaceRepository(place);
-        var service = new AdminPlaceService(repository, new CoordinatesValidationService());
+        var service = new AdminPlaceService(repository, new CoordinatesValidationService(), new FakeTagRepository());
 
         var result = await service.UpdateStatusAsync(
             place.Id,
@@ -197,7 +197,7 @@ public sealed class AdminPlaceServiceTests
     {
         var place = ExistingPlace(PlaceStatus.Active);
         var repository = new FakePlaceRepository(place);
-        var service = new AdminPlaceService(repository, new CoordinatesValidationService());
+        var service = new AdminPlaceService(repository, new CoordinatesValidationService(), new FakeTagRepository());
 
         var result = await service.UpdateStatusAsync(
             place.Id,
@@ -211,7 +211,7 @@ public sealed class AdminPlaceServiceTests
     public async Task UpdateStatus_MissingPlace_ReturnsNotFoundWithoutWrite()
     {
         var repository = new FakePlaceRepository();
-        var service = new AdminPlaceService(repository, new CoordinatesValidationService());
+        var service = new AdminPlaceService(repository, new CoordinatesValidationService(), new FakeTagRepository());
 
         var result = await service.UpdateStatusAsync(
             Guid.NewGuid(),
@@ -226,7 +226,7 @@ public sealed class AdminPlaceServiceTests
     {
         var place = ExistingPlace(PlaceStatus.Active);
         var repository = new FakePlaceRepository(place);
-        var service = new AdminPlaceService(repository, new CoordinatesValidationService());
+        var service = new AdminPlaceService(repository, new CoordinatesValidationService(), new FakeTagRepository());
 
         var verified = await service.UpdateVerificationAsync(
             place.Id,
@@ -248,7 +248,7 @@ public sealed class AdminPlaceServiceTests
     {
         var place = ExistingPlace(status);
         var repository = new FakePlaceRepository(place);
-        var service = new AdminPlaceService(repository, new CoordinatesValidationService());
+        var service = new AdminPlaceService(repository, new CoordinatesValidationService(), new FakeTagRepository());
 
         var result = await service.UpdateVerificationAsync(
             place.Id,
@@ -264,7 +264,7 @@ public sealed class AdminPlaceServiceTests
     {
         var place = ExistingPlace(PlaceStatus.Inactive, isVerified: true);
         var repository = new FakePlaceRepository(place);
-        var service = new AdminPlaceService(repository, new CoordinatesValidationService());
+        var service = new AdminPlaceService(repository, new CoordinatesValidationService(), new FakeTagRepository());
 
         var result = await service.UpdateVerificationAsync(
             place.Id,
@@ -280,7 +280,7 @@ public sealed class AdminPlaceServiceTests
     {
         var place = ExistingPlace(PlaceStatus.Inactive, isVerified: true);
         var repository = new FakePlaceRepository(place);
-        var service = new AdminPlaceService(repository, new CoordinatesValidationService());
+        var service = new AdminPlaceService(repository, new CoordinatesValidationService(), new FakeTagRepository());
 
         var result = await service.UpdateVerificationAsync(
             place.Id,
@@ -295,7 +295,7 @@ public sealed class AdminPlaceServiceTests
     public async Task UpdateVerification_MissingPlace_ReturnsNotFoundWithoutWrite()
     {
         var repository = new FakePlaceRepository();
-        var service = new AdminPlaceService(repository, new CoordinatesValidationService());
+        var service = new AdminPlaceService(repository, new CoordinatesValidationService(), new FakeTagRepository());
 
         var result = await service.UpdateVerificationAsync(
             Guid.NewGuid(),
@@ -309,7 +309,7 @@ public sealed class AdminPlaceServiceTests
     public async Task Update_MissingPlace_ReturnsNotFoundWithoutWrite()
     {
         var repository = new FakePlaceRepository();
-        var service = new AdminPlaceService(repository, new CoordinatesValidationService());
+        var service = new AdminPlaceService(repository, new CoordinatesValidationService(), new FakeTagRepository());
 
         var result = await service.UpdateAsync(
             Guid.NewGuid(),
@@ -336,7 +336,7 @@ public sealed class AdminPlaceServiceTests
         DeleteAdminPlaceResultStatus expectedStatus)
     {
         var repository = new FakePlaceRepository(deleteResult: persistenceResult);
-        var service = new AdminPlaceService(repository, new CoordinatesValidationService());
+        var service = new AdminPlaceService(repository, new CoordinatesValidationService(), new FakeTagRepository());
 
         var result = await service.DeleteAsync(Guid.NewGuid());
 
@@ -348,7 +348,7 @@ public sealed class AdminPlaceServiceTests
     {
         var place = DeletedPlace();
         var repository = new FakePlaceRepository(place);
-        var service = new AdminPlaceService(repository, new CoordinatesValidationService());
+        var service = new AdminPlaceService(repository, new CoordinatesValidationService(), new FakeTagRepository());
 
         var result = await service.UpdateAsync(
             place.Id,
@@ -363,7 +363,7 @@ public sealed class AdminPlaceServiceTests
     {
         var place = DeletedPlace();
         var repository = new FakePlaceRepository(place);
-        var service = new AdminPlaceService(repository, new CoordinatesValidationService());
+        var service = new AdminPlaceService(repository, new CoordinatesValidationService(), new FakeTagRepository());
 
         var result = await service.UpdateStatusAsync(place.Id, new UpdatePlaceStatusRequest(PlaceStatus.Active));
 
@@ -377,7 +377,7 @@ public sealed class AdminPlaceServiceTests
     {
         var place = DeletedPlace();
         var repository = new FakePlaceRepository(place);
-        var service = new AdminPlaceService(repository, new CoordinatesValidationService());
+        var service = new AdminPlaceService(repository, new CoordinatesValidationService(), new FakeTagRepository());
 
         var result = await service.UpdateVerificationAsync(place.Id, new UpdatePlaceVerificationRequest(false));
 
@@ -438,7 +438,7 @@ public sealed class AdminPlaceServiceTests
     {
         var place = ExistingPlace(PlaceStatus.Active);
         var repository = new FakePlaceRepository(place) { ThrowConcurrencyOnSave = true };
-        var service = new AdminPlaceService(repository, new CoordinatesValidationService());
+        var service = new AdminPlaceService(repository, new CoordinatesValidationService(), new FakeTagRepository());
         var request = new UpdateAdminPlaceRequest(
             "Updated",
             "Description",
@@ -459,6 +459,11 @@ public sealed class AdminPlaceServiceTests
         Place? place = null,
         DeletePlacePersistenceResult deleteResult = DeletePlacePersistenceResult.Deleted) : IPlaceRepository
     {
+        public Task<IReadOnlyList<Guid>> GetTagIdsAsync(Guid placeId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task AddTagAsync(Guid placeId, Guid tagId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<bool> RemoveTagAsync(Guid placeId, Guid tagId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<IReadOnlyList<DuplicatePlaceCandidate>> FindNearbyPlacesAsync(double latitude, double longitude, double radiusMeters, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
         public Place? AddedPlace { get; private set; }
 
         public int SaveChangesCalls { get; private set; }
@@ -568,5 +573,19 @@ public sealed class AdminPlaceServiceTests
             Guid id,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
+    }
+
+    private sealed class FakeTagRepository : ITagRepository
+    {
+        public IReadOnlyList<Tag>? Tags { get; set; }
+
+        public Task<IReadOnlyList<Tag>> GetByIdsAsync(IReadOnlyCollection<Guid> tagIds, CancellationToken cancellationToken = default)
+        {
+            var tags = Tags ?? Array.Empty<Tag>();
+            return Task.FromResult<IReadOnlyList<Tag>>(tags.Where(t => tagIds.Contains(t.Id)).ToList());
+        }
+
+        public Task<IReadOnlyList<Tag>> GetActiveAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<Tag>>(Tags ?? Array.Empty<Tag>());
     }
 }
