@@ -106,6 +106,20 @@ public sealed class AdminPlacesHttpTests
         Assert.Equal("place_not_found", json.RootElement.GetProperty("code").GetString());
     }
 
+    [Fact]
+    public async Task GetImportTemplate_Returns200WithFile()
+    {
+        using var host = new Host();
+        host.Authenticate();
+
+        var response = await host.Client.GetAsync("/api/admin/places/import-template?format=xlsx");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", response.Content.Headers.ContentType?.MediaType);
+        var bytes = await response.Content.ReadAsByteArrayAsync();
+        Assert.True(bytes.Length > 0);
+    }
+
     internal sealed class Host : IDisposable
     {
         private readonly WebApplication app;
@@ -126,13 +140,15 @@ public sealed class AdminPlacesHttpTests
             var placeRepo = new FakePlaceRepo();
             var coordService = new CoordinatesValidationService();
             var settings = new TestSystemSettings();
-            var adminPlaceService = new AdminPlaceService(placeRepo, coordService);
+            var tagRepo = new FakeTagRepo();
+            var adminPlaceService = new AdminPlaceService(placeRepo, coordService, tagRepo);
             var distanceValidationService = new PlaceDistanceValidationService(stationRepo, geoService, placeRepo, coordService, settings);
             var imageStorageService = new FakeCloudinaryImageStorageService();
 
             builder.Services.AddSingleton<IAdminPlaceService>(adminPlaceService);
             builder.Services.AddSingleton<IPlaceDistanceValidationService>(distanceValidationService);
             builder.Services.AddSingleton<IImageStorageService>(imageStorageService);
+            builder.Services.AddSingleton<IPlaceImportService>(new PlaceImportService());
             builder.Services.AddSingleton<ICoordinatesValidationService>(coordService);
             builder.Services.AddSingleton<ISystemSettingProvider>(settings);
             builder.Services.AddSingleton<IUserAccessService>(new TestUserAccessService());
@@ -225,8 +241,18 @@ public sealed class AdminPlacesHttpTests
         public Task<IReadOnlyList<MetroClusterPlaceReadModel>> GetMetroClusterPlacesAsync(double radiusMeters, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<MetroClusterPlaceReadModel>>([]);
         public Task<PagedResult<AdminPlaceResponse>> GetPagedForAdminAsync(AdminPlaceQuery query, CancellationToken cancellationToken = default) => Task.FromResult(new PagedResult<AdminPlaceResponse>([], 1, 10, 0, 0));
         public Task<IReadOnlyDictionary<Guid, IReadOnlyList<Guid>>> GetPlaceTagIdsByPlaceIdsAsync(IReadOnlyList<Guid> placeIds, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyDictionary<Guid, IReadOnlyList<Guid>>>(new Dictionary<Guid, IReadOnlyList<Guid>>());
+        public Task<IReadOnlyList<Guid>> GetTagIdsAsync(Guid placeId, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<Guid>>([]);
+        public Task AddTagAsync(Guid placeId, Guid tagId, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<bool> RemoveTagAsync(Guid placeId, Guid tagId, CancellationToken cancellationToken = default) => Task.FromResult(true);
+        public Task<IReadOnlyList<DuplicatePlaceCandidate>> FindNearbyPlacesAsync(double latitude, double longitude, double radiusMeters, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<DuplicatePlaceCandidate>>([]);
         public Task SaveChangesAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task<bool> TrySaveChangesAsync(CancellationToken cancellationToken = default) => Task.FromResult(true);
+    }
+
+    private sealed class FakeTagRepo : ITagRepository
+    {
+        public Task<IReadOnlyList<Tag>> GetByIdsAsync(IReadOnlyCollection<Guid> tagIds, CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<Tag>>([]);
+        public Task<IReadOnlyList<Tag>> GetActiveAsync(CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<Tag>>([]);
     }
 
     private sealed class TestSystemSettings : ISystemSettingProvider
