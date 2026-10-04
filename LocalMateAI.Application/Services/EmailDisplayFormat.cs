@@ -30,4 +30,9 @@ public static class EmailDisplayFormat
     public static string VietnamDateTime(DateTime utc) =>
         (DateTime.SpecifyKind(utc, DateTimeKind.Utc) + VietnamTime.Offset)
             .ToString("dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture);
+
+    // Thời điểm UTC → ngày theo giờ Việt Nam "dd/MM/yyyy".
+    public static string VietnamDate(DateTime utc) =>
+        (DateTime.SpecifyKind(utc, DateTimeKind.Utc) + VietnamTime.Offset)
+            .ToString("dd/MM/yyyy", CultureInfo.InvariantCulture);
 }

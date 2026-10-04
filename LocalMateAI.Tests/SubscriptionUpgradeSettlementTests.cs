@@ -24,7 +24,8 @@ public sealed class SubscriptionUpgradeSettlementTests
             new(true, await operation(order, ct));
     }
 
-    private static async Task<(PaymentServiceTests.Fixture Fixture, PaymentOrder Order, PaymentSettlementService Service)> Prepared()
+    private static async Task<(PaymentServiceTests.Fixture Fixture, PaymentOrder Order, PaymentSettlementService Service)> Prepared(
+        INotificationRepository? notifications = null)
     {
         var f = new PaymentServiceTests.Fixture(now: Now);
         SubscriptionCheckoutQuoteTests.AddNative(f);
@@ -35,8 +36,24 @@ public sealed class SubscriptionUpgradeSettlementTests
             new PaymentSettlementServiceTests.FakeUserRepository(new() { Id = User, FullName = "Upgrade buyer", Email = "upgrade@test.invalid" }),
             new PaymentSettlementServiceTests.FakeEmailOutboxRepository(),
             new PlanVersionFoundationPostgresTests.Clock(Now), NullLogger<PaymentSettlementService>.Instance,
-            creditRepository: f.Credits);
+            creditRepository: f.Credits, notificationRepository: notifications);
         return (f, o, service);
+    }
+
+    [Fact]
+    public async Task SuccessfulUpgrade_EnqueuesUpgradeNotification()
+    {
+        var notifications = new RecordingNotificationRepository();
+        var (f, o, service) = await Prepared(notifications);
+
+        await service.ApplyVerifiedPaymentAsync(new(o.ProviderOrderCode, o.Amount, true));
+
+        var (entry, _) = Assert.Single(notifications.Entries);
+        var target = Assert.Single(f.Subscriptions.Periods, p => p.SourcePaymentOrderId == o.Id);
+        Assert.Equal(User, entry.UserId);
+        Assert.Equal($"payment:{o.Id}", entry.DeduplicationKey);
+        Assert.StartsWith("Đã nâng cấp lên gói ", entry.Body);
+        Assert.EndsWith($"có hiệu lực đến {EmailDisplayFormat.VietnamDate(target.EndsAt)}.", entry.Body);
     }
 
     [Fact]
