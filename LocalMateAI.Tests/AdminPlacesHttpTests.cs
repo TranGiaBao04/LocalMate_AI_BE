@@ -120,6 +120,38 @@ public sealed class AdminPlacesHttpTests
         Assert.True(bytes.Length > 0);
     }
 
+    [Fact]
+    public async Task PreviewImport_Returns200WithPreviewResult()
+    {
+        using var host = new Host();
+        host.Authenticate();
+
+        using var content = new MultipartFormDataContent();
+        var fileContent = new ByteArrayContent([0x50, 0x4B, 0x03, 0x04]);
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        content.Add(fileContent, "file", "test.xlsx");
+
+        var response = await host.Client.PostAsync("/api/admin/places/import/preview", content);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("imp_123456789", json.RootElement.GetProperty("importId").GetString());
+    }
+
+    [Fact]
+    public async Task CommitImport_Returns200WithCommitResult()
+    {
+        using var host = new Host();
+        host.Authenticate();
+
+        var body = new CommitPlaceImportRequest("imp_123456789", PlaceImportCommitMode.ValidOnly);
+        var response = await host.Client.PostAsJsonAsync("/api/admin/places/import/commit", body);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal(3, json.RootElement.GetProperty("committedCount").GetInt32());
+    }
+
     internal sealed class Host : IDisposable
     {
         private readonly WebApplication app;
@@ -149,6 +181,7 @@ public sealed class AdminPlacesHttpTests
             builder.Services.AddSingleton<IPlaceDistanceValidationService>(distanceValidationService);
             builder.Services.AddSingleton<IImageStorageService>(imageStorageService);
             builder.Services.AddSingleton<IPlaceImportService>(new PlaceImportService());
+            builder.Services.AddSingleton<IPlaceImportEngineService>(new FakePlaceImportEngineService());
             builder.Services.AddSingleton<ICoordinatesValidationService>(coordService);
             builder.Services.AddSingleton<ISystemSettingProvider>(settings);
             builder.Services.AddSingleton<IUserAccessService>(new TestUserAccessService());
@@ -309,6 +342,17 @@ public sealed class AdminPlacesHttpTests
 
             return new ImageUploadResult(ImageUploadResultStatus.Success, $"https://res.cloudinary.com/localmateai/image/upload/v12345/{Guid.NewGuid():N}.png");
         }
+    }
+
+    private sealed class FakePlaceImportEngineService : IPlaceImportEngineService
+    {
+        public Task<PlaceImportPreviewResponse> PreviewAsync(Stream fileStream, string fileName, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new PlaceImportPreviewResponse("imp_123456789", 3, 3, 0, 0, []));
+
+        public Task<PlaceImportCommitResult> CommitAsync(CommitPlaceImportRequest request, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new PlaceImportCommitResult(PlaceImportCommitResultStatus.Success, new PlaceImportCommitResponse(request.ImportId, 3, 0, 0, DateTime.UtcNow)));
+
+        public byte[]? ExportErrorReportCsv(string importId) => null;
     }
 }
 

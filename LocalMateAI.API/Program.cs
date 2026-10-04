@@ -239,6 +239,7 @@ builder.Services.AddScoped<IPriceNormalizer, PriceNormalizer>();
 builder.Services.AddScoped<ICoordinateNormalizer, CoordinateNormalizer>();
 builder.Services.AddScoped<IStationMapperService, StationMapperService>();
 builder.Services.AddScoped<ICategoryValidationService, CategoryValidationService>();
+builder.Services.AddScoped<IPlaceImportEngineService, PlaceImportEngineService>();
 var cloudinaryOptions = new CloudinaryUploadOptions
 {
     CloudName = builder.Configuration["Cloudinary:CloudName"] ?? string.Empty,
