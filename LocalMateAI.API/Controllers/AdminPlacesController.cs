@@ -352,6 +352,76 @@ public sealed class AdminPlacesController(
         return File(file.Content, file.ContentType, file.FileName);
     }
 
+    [HttpPost("import/preview")]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType<PlaceImportPreviewResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<PlaceImportPreviewResponse>> PreviewImportAsync(
+        IFormFile file,
+        [FromServices] IPlaceImportEngineService importEngineService,
+        CancellationToken cancellationToken)
+    {
+        if (file is null || file.Length == 0)
+        {
+            return BadRequest(CreateProblem(StatusCodes.Status400BadRequest, "File upload không được để trống.", "empty_file"));
+        }
+
+        var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+        if (ext is not (".xlsx" or ".csv"))
+        {
+            return BadRequest(CreateProblem(StatusCodes.Status400BadRequest, "Định dạng file không hỗ trợ. Chỉ chấp nhận file .xlsx hoặc .csv.", "unsupported_file_format"));
+        }
+
+        await using var stream = file.OpenReadStream();
+        var result = await importEngineService.PreviewAsync(stream, file.FileName, cancellationToken);
+        return Ok(result);
+    }
+
+    [HttpPost("import/commit")]
+    [ProducesResponseType<PlaceImportCommitResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<PlaceImportCommitResponse>> CommitImportAsync(
+        [FromBody] CommitPlaceImportRequest request,
+        [FromServices] IPlaceImportEngineService importEngineService,
+        CancellationToken cancellationToken)
+    {
+        var result = await importEngineService.CommitAsync(request, cancellationToken);
+
+        return result.Status switch
+        {
+            PlaceImportCommitResultStatus.Success => Ok(result.Response),
+            PlaceImportCommitResultStatus.SessionNotFoundOrExpired => NotFound(CreateProblem(StatusCodes.Status404NotFound, result.ErrorMessage!, "import_session_expired")),
+            PlaceImportCommitResultStatus.AlreadyCommittedOrInProgress => Conflict(CreateProblem(StatusCodes.Status409Conflict, result.ErrorMessage!, "import_already_committed")),
+            PlaceImportCommitResultStatus.AbortedDueToErrors => BadRequest(CreateProblem(StatusCodes.Status400BadRequest, result.ErrorMessage!, "import_aborted_errors")),
+            PlaceImportCommitResultStatus.TransactionFailed => BadRequest(CreateProblem(StatusCodes.Status400BadRequest, result.ErrorMessage!, "import_transaction_failed")),
+            _ => throw new InvalidOperationException("Unknown import commit result status.")
+        };
+    }
+
+    [HttpGet("import/error-report/{importId}")]
+    [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    public IActionResult DownloadErrorReportCsvAsync(
+        string importId,
+        [FromServices] IPlaceImportEngineService importEngineService)
+    {
+        var fileBytes = importEngineService.ExportErrorReportCsv(importId);
+        if (fileBytes is null || fileBytes.Length == 0)
+        {
+            return NotFound(CreateProblem(StatusCodes.Status404NotFound, "Không tìm thấy báo cáo lỗi cho phiên import này hoặc không có dòng bị lỗi.", "error_report_not_found"));
+        }
+
+        return File(fileBytes, "text/csv; charset=utf-8", $"Import_Errors_{importId}.csv");
+    }
+
     private ValidationProblemDetails CreateInvalidPlaceProblem(
         IReadOnlyDictionary<string, string[]> errors)
     {
