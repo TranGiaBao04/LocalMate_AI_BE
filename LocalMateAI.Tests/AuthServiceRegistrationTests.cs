@@ -1,10 +1,12 @@
 using LocalMateAI.Application.DTOs.Auth;
+using LocalMateAI.Application.DTOs.Notifications;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Interfaces.Services;
 using LocalMateAI.Application.Services;
 using LocalMateAI.Domain.Common;
 using LocalMateAI.Domain.Entities;
 using LocalMateAI.Domain.Enums;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace LocalMateAI.Tests;
 
@@ -303,6 +305,62 @@ public sealed class AuthServiceRegistrationTests
         Assert.Null(result.Response);
     }
 
+    [Fact]
+    public async Task VerifyRegistration_CorrectCode_EnqueuesWelcomeForTheNewUser()
+    {
+        var fixture = new Fixture();
+        fixture.Pending.Existing = Pending();
+
+        var result = await fixture.Service.VerifyRegistrationAsync(VerifyRequest("123456"));
+
+        var (entry, _) = Assert.Single(fixture.Notifications.Entries);
+        Assert.Equal(NotificationBuilder.Welcome(result.Response!.Id), entry);
+    }
+
+    [Fact]
+    public async Task VerifyRegistration_EmailTakenWhileWaiting_DoesNotEnqueueWelcome()
+    {
+        var fixture = new Fixture();
+        fixture.Pending.Existing = Pending();
+        fixture.Pending.CompleteSucceeds = false;
+
+        await fixture.Service.VerifyRegistrationAsync(VerifyRequest("123456"));
+
+        Assert.Empty(fixture.Notifications.Entries);
+    }
+
+    [Fact]
+    public async Task VerifyRegistration_WelcomeStoreFails_RegistrationStillSucceeds()
+    {
+        var fixture = new Fixture(new RecordingNotificationRepository { ThrowOnEnqueue = true });
+        fixture.Pending.Existing = Pending();
+
+        var result = await fixture.Service.VerifyRegistrationAsync(VerifyRequest("123456"));
+
+        Assert.Equal(VerifyRegistrationResultStatus.Success, result.Status);
+    }
+
+    [Fact]
+    public async Task GoogleSignIn_EnqueuesWelcomeOnlyWhenTheAccountIsNew()
+    {
+        var newUser = new Fixture();
+        await newUser.Service.GoogleSignInAsync(new GoogleSignInRequest("google-id-token"));
+
+        var linked = new Fixture();
+        linked.ExternalLogins.LinkedUser = new User
+        {
+            FullName = "Nguyen Van A",
+            Email = Email,
+            Role = new Role { Name = SystemRoles.UserName }
+        };
+        await linked.Service.GoogleSignInAsync(new GoogleSignInRequest("google-id-token"));
+
+        var (entry, _) = Assert.Single(newUser.Notifications.Entries);
+        Assert.Equal(NotificationTypes.Welcome, entry.Type);
+        Assert.Equal($"welcome:{entry.UserId}", entry.DeduplicationKey);
+        Assert.Empty(linked.Notifications.Entries);
+    }
+
     private static RegisterRequest ValidRegisterRequest() => new()
     {
         FullName = "Nguyen Van A",
@@ -326,8 +384,9 @@ public sealed class AuthServiceRegistrationTests
 
     private sealed class Fixture
     {
-        public Fixture()
+        public Fixture(RecordingNotificationRepository? notifications = null)
         {
+            Notifications = notifications ?? new RecordingNotificationRepository();
             Service = new AuthService(
                 Users,
                 ExternalLogins,
@@ -337,9 +396,12 @@ public sealed class AuthServiceRegistrationTests
                 new FakeAccessTokenService(),
                 new FakeGoogleValidator(),
                 new FakeSystemRoleProvider(),
-                new FixedTimeProvider(new DateTimeOffset(Now)));
+                new FixedTimeProvider(new DateTimeOffset(Now)),
+                Notifications,
+                NullLogger<AuthService>.Instance);
         }
 
+        public RecordingNotificationRepository Notifications { get; }
         public FakeUserRepository Users { get; } = new();
         public FakeExternalLoginRepository ExternalLogins { get; } = new();
         public FakePendingRegistrationRepository Pending { get; } = new();

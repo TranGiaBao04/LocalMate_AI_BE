@@ -5,6 +5,7 @@ using LocalMateAI.Application.Interfaces.Services;
 using LocalMateAI.Application.Security;
 using LocalMateAI.Domain.Entities;
 using LocalMateAI.Domain.Enums;
+using Microsoft.Extensions.Logging;
 
 namespace LocalMateAI.Application.Services;
 
@@ -17,7 +18,9 @@ public sealed class AuthService(
     IAccessTokenService accessTokenService,
     IGoogleIdentityTokenValidator googleIdentityTokenValidator,
     ISystemRoleProvider systemRoleProvider,
-    TimeProvider timeProvider) : IAuthService
+    TimeProvider timeProvider,
+    INotificationRepository notificationRepository,
+    ILogger<AuthService> logger) : IAuthService
 {
     private const string GoogleProvider = "Google";
     private const int MaximumFullNameLength = 200;
@@ -132,6 +135,8 @@ public sealed class AuthService(
             // Email vừa được dùng để tạo tài khoản khác (vd. đăng nhập Google) trong lúc chờ OTP.
             return VerifyRegistrationResult.EmailAlreadyExists();
         }
+
+        await EnqueueWelcomeAsync(user.Id);
 
         var response = new RegisterResponse(
             user.Id,
@@ -395,6 +400,7 @@ public sealed class AuthService(
         {
             // Email đã được Google xác nhận: bản đăng ký bằng mật khẩu đang chờ OTP (nếu có) không còn cần nữa.
             await pendingRegistrationRepository.DeleteByEmailAsync(email, cancellationToken);
+            await EnqueueWelcomeAsync(user.Id);
             return GoogleSignInResult.Succeeded(CreateLoginResponse(user, userRole.Name));
         }
 
@@ -569,5 +575,22 @@ public sealed class AuthService(
             accessToken.AccessToken,
             "Bearer",
             accessToken.ExpiresAt);
+    }
+
+    // Lời chào là phụ: tài khoản đã tạo xong nên lỗi khi ghi chỉ được ghi log, không làm hỏng đăng ký.
+    // Không dùng cancellationToken của request để người dùng ngắt kết nối giữa chừng vẫn có lời chào.
+    private async Task EnqueueWelcomeAsync(Guid userId)
+    {
+        try
+        {
+            await notificationRepository.EnqueueAsync(
+                NotificationBuilder.Welcome(userId),
+                timeProvider.GetUtcNow().UtcDateTime,
+                CancellationToken.None);
+        }
+        catch (Exception exception)
+        {
+            logger.LogError(exception, "Welcome notification could not be created for user {UserId}", userId);
+        }
     }
 }
