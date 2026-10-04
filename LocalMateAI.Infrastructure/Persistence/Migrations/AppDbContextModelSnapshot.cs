@@ -1412,6 +1412,9 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("DestinationStationId")
+                        .HasColumnType("uuid");
+
                     b.Property<int>("DurationHours")
                         .HasColumnType("integer");
 
@@ -1426,6 +1429,9 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
 
                     b.Property<double>("StartLongitude")
                         .HasColumnType("double precision");
+
+                    b.Property<Guid?>("StartStationId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -1449,6 +1455,10 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("CreatedAt")
                         .HasDatabaseName("IX_Trips_CreatedAt");
+
+                    b.HasIndex("DestinationStationId");
+
+                    b.HasIndex("StartStationId");
 
                     b.HasIndex("UserId");
 
@@ -1984,6 +1994,16 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("LocalMateAI.Domain.Entities.Trip", b =>
                 {
+                    b.HasOne("LocalMateAI.Domain.Entities.MetroStation", null)
+                        .WithMany()
+                        .HasForeignKey("DestinationStationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("LocalMateAI.Domain.Entities.MetroStation", null)
+                        .WithMany()
+                        .HasForeignKey("StartStationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("LocalMateAI.Domain.Entities.User", null)
                         .WithMany()
                         .HasForeignKey("UserId")

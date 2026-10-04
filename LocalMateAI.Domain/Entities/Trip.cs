@@ -8,6 +8,12 @@ public sealed class Trip : BaseEntity
     public Guid? UserId { get; set; }
     public double StartLatitude { get; set; }
     public double StartLongitude { get; set; }
+
+    // Ga người dùng chọn xuất phát. Null = xuất phát từ toạ độ (StartLatitude/StartLongitude luôn có giá trị).
+    public Guid? StartStationId { get; set; }
+
+    // Ga người dùng chọn để chơi quanh đó. Null = "gần tôi" (quanh ga gần điểm xuất phát nhất).
+    public Guid? DestinationStationId { get; set; }
     public int DurationHours { get; set; }
     public decimal BudgetMin { get; set; }
     public decimal BudgetMax { get; set; }

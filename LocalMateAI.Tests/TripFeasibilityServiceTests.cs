@@ -1,4 +1,4 @@
-using LocalMateAI.Application.DTOs.Geo;
+using LocalMateAI.Application.DTOs.MasterData;
 using LocalMateAI.Application.DTOs.Matching;
 using LocalMateAI.Application.DTOs.Trips;
 using LocalMateAI.Application.Interfaces.Services;
@@ -13,6 +13,10 @@ public sealed class TripFeasibilityServiceTests
     private static readonly FixedTimeProvider Clock = new(new DateTimeOffset(2026, 9, 26, 8, 0, 0, TimeSpan.Zero));
     private static readonly Guid AnchorStationId = Guid.NewGuid();
     private static readonly Guid NeighbourStationId = Guid.NewGuid();
+    private static readonly MetroStationSummaryResponse AnchorStation =
+        new(AnchorStationId, "Bến Thành", 1, 10.7721, 106.6980);
+    private static readonly MetroStationSummaryResponse FarBoardingStation =
+        new(Guid.NewGuid(), "Đại học Quốc gia", 13, 10.8664, 106.8013);
 
     [Fact]
     public async Task Check_CountsCandidatesFromAnchorAndNeighbourStations()
@@ -25,6 +29,24 @@ public sealed class TripFeasibilityServiceTests
         Assert.True(response.IsFeasible);
         Assert.Equal(2, response.CandidatePlaceCount);
         Assert.Equal(AnchorStationId, fixture.Matching.RequestedStationId);
+        Assert.Equal(new StationRefDto(1, "Bến Thành"), response.AnchorStation);
+        Assert.Empty(response.SuggestedStations);
+    }
+
+    [Fact]
+    public async Task Check_DestinationStationChosen_LoadsCandidatesAroundAnchorNotBoardingStation()
+    {
+        // Lên tàu ở ga Đại học Quốc gia nhưng muốn chơi quanh Bến Thành; điểm xuất phát đặt tại Bến Thành cho vừa giờ.
+        var origin = TestTripOrigins.At(boardingStation: FarBoardingStation, anchorStation: AnchorStation,
+            startLatitude: AnchorStation.Latitude, startLongitude: AnchorStation.Longitude);
+        var fixture = new Fixture([Place("A", AnchorStationId, 100)], origin: origin);
+
+        var response = (await fixture.Service.CheckFeasibilityAsync(Request())).Response!;
+
+        Assert.True(response.IsFeasible);
+        Assert.Equal(AnchorStationId, fixture.Matching.RequestedStationId);
+        Assert.Equal("Đại học Quốc gia", response.NearestStation.StationName);
+        Assert.Equal(new StationRefDto(1, "Bến Thành"), response.AnchorStation);
     }
 
     [Fact]
@@ -35,8 +57,10 @@ public sealed class TripFeasibilityServiceTests
         var response = (await fixture.Service.CheckFeasibilityAsync(Request(budgetMax: 300_000m))).Response!;
 
         Assert.False(response.IsFeasible);
-        Assert.Equal("InsufficientCandidates", response.Reason);
+        Assert.Equal(TripInsufficiencyReasons.InsufficientCandidates, response.Reason);
         Assert.Equal(1, response.CandidatePlaceCount);
+        Assert.Equal([new SuggestedStationDto(2, "Nhà hát Thành phố", 31)], response.SuggestedStations);
+        Assert.Equal(1, fixture.Suggestions.Calls);
     }
 
     [Fact]
@@ -49,6 +73,11 @@ public sealed class TripFeasibilityServiceTests
 
         Assert.False(response.IsFeasible);
         Assert.Equal(0, response.EstimatedStopCount);
+        Assert.Equal(TripInsufficiencyReasons.DurationTooShort, response.Reason);
+
+        // Thiếu giờ thì đổi ga không giúp gì: không gợi ý ga.
+        Assert.Empty(response.SuggestedStations);
+        Assert.Equal(0, fixture.Suggestions.Calls);
     }
 
     [Fact]
@@ -59,8 +88,24 @@ public sealed class TripFeasibilityServiceTests
         var response = (await fixture.Service.CheckFeasibilityAsync(Request())).Response!;
 
         Assert.False(response.IsFeasible);
-        Assert.Equal("OutOfServiceArea", response.Reason);
+        Assert.Equal(TripInsufficiencyReasons.OutOfServiceArea, response.Reason);
         Assert.Equal(0, fixture.Matching.Calls);
+        Assert.Equal(0, fixture.Suggestions.Calls);
+    }
+
+    [Fact]
+    public async Task Check_MetroTooFarFromStation_ReportsThatReason()
+    {
+        var origin = TestTripOrigins.At(
+            AnchorStation, serviceAreaFailure: TripInsufficiencyReasons.TooFarFromStationForMetro);
+        var fixture = new Fixture([Place("A", AnchorStationId, 100)], origin: origin);
+
+        var response = (await fixture.Service.CheckFeasibilityAsync(Request())).Response!;
+
+        Assert.False(response.IsFeasible);
+        Assert.Equal(TripInsufficiencyReasons.TooFarFromStationForMetro, response.Reason);
+        Assert.Equal(0, fixture.Matching.Calls);
+        Assert.Empty(response.SuggestedStations);
     }
 
     [Fact]
@@ -102,19 +147,26 @@ public sealed class TripFeasibilityServiceTests
 
     private sealed class Fixture
     {
-        public Fixture(IReadOnlyList<PlaceCandidateDto> candidates, bool withinServiceArea = true)
+        public Fixture(
+            IReadOnlyList<PlaceCandidateDto> candidates,
+            bool withinServiceArea = true,
+            TripOriginResolution? origin = null)
         {
             Matching = new FakeMatching(candidates);
+            Suggestions = new FakeStationSuggestionService(new SuggestedStationDto(2, "Nhà hát Thành phố", 31));
             Service = new TripFeasibilityService(
                 new TripRequestValidator(Clock),
-                new FakeOrigin(withinServiceArea),
+                new FakeOrigin(origin ?? TestTripOrigins.At(AnchorStation, withinServiceArea: withinServiceArea)),
                 new TripCriteriaNormalizationService(),
                 Matching,
-                new CandidateFilterService(), new FakeSystemSettingProvider());
+                new CandidateFilterService(),
+                Suggestions,
+                new FakeSystemSettingProvider());
         }
 
         public TripFeasibilityService Service { get; }
         public FakeMatching Matching { get; }
+        public FakeStationSuggestionService Suggestions { get; }
     }
 
     private sealed class FakeMatching(IReadOnlyList<PlaceCandidateDto> candidates) : IMetroClusterMatchingService
@@ -131,17 +183,11 @@ public sealed class TripFeasibilityServiceTests
         }
     }
 
-    private sealed class FakeOrigin(bool withinServiceArea) : ITripOriginResolverService
+    private sealed class FakeOrigin(TripOriginResolution origin) : ITripOriginResolverService
     {
         public Task<TripOriginResolution?> ResolveAsync(
             TripRequestDto request, CancellationToken cancellationToken = default) =>
-            ResolveAsync(request.StartLatitude, request.StartLongitude, cancellationToken);
-
-        public Task<TripOriginResolution?> ResolveAsync(
-            double latitude, double longitude, CancellationToken cancellationToken = default) =>
-            Task.FromResult<TripOriginResolution?>(new TripOriginResolution(
-                new NearestStationResult(AnchorStationId, "Bến Thành", 10.7721, 106.6980, withinServiceArea ? 300 : 50_000),
-                withinServiceArea));
+            Task.FromResult<TripOriginResolution?>(origin);
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider

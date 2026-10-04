@@ -11,14 +11,17 @@ public interface IItineraryItemRepository
         Guid userId,
         CancellationToken cancellationToken = default);
 
-    // Trả null nếu không cập nhật được: item không còn thuộc user, trip đã Finalized,
-    // hoặc newPlaceId vừa xuất hiện trong trip.
-    Task<ReplacedItemReadModel?> ReplaceItemPlaceIfEligibleAsync(
+    // Thay địa điểm của item rồi tính lại giờ các chặng trong cùng một transaction.
+    // NotEligible: item không còn thuộc user, trip đã Finalized, hoặc newPlaceId vừa xuất hiện trong trip.
+    // recalculateTimeline nhận mọi chặng (item đã mang toạ độ địa điểm mới) và trả về những chặng cần đổi giờ;
+    // trả null nghĩa là từ chối (lịch tràn qua nửa đêm) ⇒ không ghi gì, kết quả CrossesMidnight.
+    Task<ReplaceItemPersistenceResult> ReplaceItemPlaceAndRecalculateTimelineAsync(
         Guid tripId,
         Guid itemId,
         Guid userId,
         Guid newPlaceId,
         decimal newEstimatedBudget,
+        Func<TimelineRecalculationInput, IReadOnlyList<TimelineItemUpdate>?> recalculateTimeline,
         CancellationToken cancellationToken = default);
 
     // Xoá item và đánh lại OrderIndex/giờ của các item còn lại trong cùng một transaction.

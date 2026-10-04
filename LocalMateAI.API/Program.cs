@@ -259,6 +259,7 @@ builder.Services.AddScoped<ICuratedItineraryService, CuratedItineraryService>();
 builder.Services.AddValidatorsFromAssemblyContaining<TripRequestValidator>();
 builder.Services.AddScoped<ITripCriteriaNormalizationService, TripCriteriaNormalizationService>();
 builder.Services.AddScoped<ITripOriginResolverService, TripOriginResolverService>();
+builder.Services.AddScoped<IStationSuggestionService, StationSuggestionService>();
 builder.Services.AddScoped<ITripFeasibilityService, TripFeasibilityService>();
 builder.Services.AddScoped<IMetroClusterMatchingService, MetroClusterMatchingService>();
 builder.Services.AddScoped<ICandidateFilterService, CandidateFilterService>();

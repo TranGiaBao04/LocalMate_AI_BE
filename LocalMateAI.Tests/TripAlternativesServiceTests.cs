@@ -225,12 +225,13 @@ public sealed class TripAlternativesServiceTests
             CancellationToken cancellationToken = default) =>
             Task.FromResult(item);
 
-        public Task<ReplacedItemReadModel?> ReplaceItemPlaceIfEligibleAsync(
+        public Task<ReplaceItemPersistenceResult> ReplaceItemPlaceAndRecalculateTimelineAsync(
             Guid tripId,
             Guid itemId,
             Guid userId,
             Guid newPlaceId,
             decimal newEstimatedBudget,
+            Func<TimelineRecalculationInput, IReadOnlyList<TimelineItemUpdate>?> recalculateTimeline,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 

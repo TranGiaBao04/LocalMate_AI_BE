@@ -41,14 +41,19 @@ public sealed class HeuristicFallbackEngine(
                     matched.StationName,
                     matched.EstimatedStopCount,
                     matched.BudgetTier,
-                    []));
+                    [],
+                    matched.AnchorStation),
+                Origin: match.Origin);
         }
+
+        var origin = match.Origin
+            ?? throw new InvalidOperationException("Trip matching succeeded without a resolved origin.");
 
         // matched.Candidates đã được xếp hạng (score desc, distance asc) & cắt đúng stopCount.
         var planning = await TripPlanningSettings.LoadAsync(settings, cancellationToken);
         var stops = FallbackItineraryBuilder.BuildStops(
             matched.Candidates, request.DurationHours, request.BudgetMax, request.TravelMode,
-            request.StartTime, new ScheduleOrigin(request.StartLatitude, request.StartLongitude), planning);
+            request.StartTime, origin.ToScheduleOrigin(), planning);
 
         return new FallbackItineraryResult(
             FallbackItineraryStatus.Success,
@@ -59,6 +64,8 @@ public sealed class HeuristicFallbackEngine(
                 matched.StationName,
                 matched.EstimatedStopCount,
                 matched.BudgetTier,
-                stops));
+                stops,
+                matched.AnchorStation),
+            Origin: origin);
     }
 }

@@ -82,7 +82,7 @@ public sealed class PaymentEvidencePostgresTests
         await using var db = await IsolatedPlanDatabase.CreateAsync(targetMigration: ParentMigration);
         await using var c = db.Context();
         var user = await PlanVersionFoundationPostgresTests.UserAsync(c);
-        var trip = await PlanVersionFoundationPostgresTests.TripAsync(c, user.Id);
+        var trip = await PostgresTestDatabase.InsertTripAsync(c, user.Id);
         foreach (var (amount, plan, status) in new[]
         {
             (19000, "TripPass", "Paid"), (49000, "TripPass", "Pending"), (59000, "Membership", "Paid"),

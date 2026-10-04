@@ -18,4 +18,6 @@ public sealed record TripItemReadModel(
     string? Reasoning,
     bool IsVisited,
     DateTimeOffset? VisitedAt,
-    string? Address = null); // chỉ dùng nội bộ (mail lịch trình), không có trong TripItemResponse
+    string? Address = null, // chỉ dùng nội bộ (mail lịch trình), không có trong TripItemResponse
+    int? StationOrder = null, // ga gần địa điểm nhất (cùng ga với StationName)
+    double? DistanceFromStationMeters = null); // đường chim bay từ địa điểm tới ga đó

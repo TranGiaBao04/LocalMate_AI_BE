@@ -10,7 +10,8 @@ public enum ReplaceItineraryItemResultStatus
     TripFinalized,
     SamePlace,
     PlaceAlreadyInTrip,
-    PlaceNotFound
+    PlaceNotFound,
+    CrossesMidnight
 }
 
 public sealed record ReplaceItineraryItemResult(
@@ -43,4 +44,7 @@ public sealed record ReplaceItineraryItemResult(
 
     public static ReplaceItineraryItemResult MissingPlace() =>
         new(ReplaceItineraryItemResultStatus.PlaceNotFound);
+
+    public static ReplaceItineraryItemResult WouldCrossMidnight() =>
+        new(ReplaceItineraryItemResultStatus.CrossesMidnight);
 }

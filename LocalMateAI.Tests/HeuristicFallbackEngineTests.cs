@@ -41,10 +41,13 @@ public sealed class HeuristicFallbackEngineTests
             [
                 new ScoredPlaceDto(candidate, 1.0, [])
             ],
-            Excluded: []);
+            Excluded: [],
+            AnchorStation: new StationRefDto(1, "Bến Thành"));
+        var origin = TestTripOrigins.At(startLatitude: 10.77, startLongitude: 106.69);
         var engine = new HeuristicFallbackEngine(
             new FakeTripMatchingService(
-                new TripMatchingResult(TripMatchingResultStatus.Success, match)), new FakeSystemSettingProvider());
+                new TripMatchingResult(TripMatchingResultStatus.Success, match, Origin: origin)),
+            new FakeSystemSettingProvider());
 
         var result = await engine.GenerateFallbackAsync(Request(), "llm_timeout");
 
@@ -59,6 +62,26 @@ public sealed class HeuristicFallbackEngineTests
         Assert.Equal(candidate.PlaceId, stop.PlaceId);
         Assert.Equal(new TimeOnly(8, 1), stop.ScheduledTime); // 08:00 rời đi + 1 phút (tối thiểu) tới địa điểm ngay tại điểm xuất phát
         Assert.Contains("Bến Thành", stop.Reasoning); // không tag trùng nên chỉ nhắc ga và khoảng cách
+        Assert.Equal(new StationRefDto(1, "Bến Thành"), payload.AnchorStation);
+        Assert.Same(origin, result.Origin);
+    }
+
+    [Fact]
+    public async Task GenerateFallback_SchedulesFromResolvedOrigin_NotFromRequestCoordinates()
+    {
+        // Request xuất phát từ ga (không có toạ độ): giờ chặng đầu phải tính từ toạ độ đã xác định, cách địa điểm ~2,9 km.
+        var candidate = MakeCandidate("Cà phê Bến Thành");
+        var match = new TripMatchingResponse(true, null, "Ba Son", 1, "Standard",
+            [new ScoredPlaceDto(candidate, 1.0, [])], [], new StationRefDto(1, "Bến Thành"));
+        var origin = TestTripOrigins.At(startLatitude: 10.79, startLongitude: 106.69);
+        var engine = new HeuristicFallbackEngine(
+            new FakeTripMatchingService(new TripMatchingResult(TripMatchingResultStatus.Success, match, Origin: origin)),
+            new FakeSystemSettingProvider());
+        var request = new TripRequestDto(null, null, 3, 0, 300_000m, [], StartStationOrder: 3);
+
+        var stop = Assert.Single((await engine.GenerateFallbackAsync(request, "heuristic")).Payload!.Stops);
+
+        Assert.True(stop.ScheduledTime > new TimeOnly(8, 5));
     }
 
     [Fact]
@@ -71,7 +94,8 @@ public sealed class HeuristicFallbackEngineTests
             EstimatedStopCount: 3,
             BudgetTier: "Economy",
             Candidates: [],
-            Excluded: []);
+            Excluded: [],
+            AnchorStation: new StationRefDto(4, "Công viên Văn Thánh"));
         var engine = new HeuristicFallbackEngine(
             new FakeTripMatchingService(
                 new TripMatchingResult(TripMatchingResultStatus.Success, match)), new FakeSystemSettingProvider());
@@ -83,6 +107,7 @@ public sealed class HeuristicFallbackEngineTests
         Assert.False(payload.IsSufficient);
         Assert.Equal("OutOfServiceArea", payload.InsufficiencyReason);
         Assert.Empty(payload.Stops);
+        Assert.Equal(new StationRefDto(4, "Công viên Văn Thánh"), payload.AnchorStation);
     }
 
     private static TripRequestDto Request() =>
