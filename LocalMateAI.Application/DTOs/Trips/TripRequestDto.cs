@@ -21,6 +21,8 @@ namespace LocalMateAI.Application.DTOs.Trips;
 /// <param name="StartStationOrder">Xuất phát từ một ga Metro (thứ tự ga 1–14) thay cho toạ độ.</param>
 /// <param name="DestinationStationOrder">Ga muốn chơi quanh đó (thứ tự ga 1–14).
 /// Bỏ trống = quanh ga gần điểm xuất phát nhất.</param>
+/// <param name="Note">Ghi chú tự do về mong muốn của chuyến đi (tối đa 300 ký tự). Chỉ dùng để ưu tiên
+/// địa điểm hợp ý hơn; không loại địa điểm nào và không vượt ngân sách.</param>
 public sealed record TripRequestDto(
     double? StartLatitude,
     double? StartLongitude,
@@ -32,4 +34,5 @@ public sealed record TripRequestDto(
     DateOnly? PlannedDate = null,
     TimeOnly? StartTime = null,
     int? StartStationOrder = null,
-    int? DestinationStationOrder = null);
+    int? DestinationStationOrder = null,
+    string? Note = null);

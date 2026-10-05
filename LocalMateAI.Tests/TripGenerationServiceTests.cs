@@ -107,6 +107,37 @@ public sealed class TripGenerationServiceTests
         Assert.Equal(destinationStationId, saved.DestinationStationId);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Generate_SavesNormalizedNote_AndWhetherTheEngineAppliedIt(bool noteApplied)
+    {
+        var engineResult = Sufficient();
+        var fixture = new Fixture(engineResult with
+        {
+            Payload = engineResult.Payload! with { NoteApplied = noteApplied }
+        });
+
+        var result = await fixture.Service.GenerateAsync(UserId, Request() with { Note = "  muốn chỗ   yên tĩnh " });
+
+        Assert.Equal(GenerateTripResultStatus.Success, result.Status);
+        var saved = Assert.Single(fixture.Trips.Added);
+        Assert.Equal("muốn chỗ yên tĩnh", saved.Note);
+        Assert.Equal(noteApplied, saved.NoteApplied);
+    }
+
+    [Fact]
+    public async Task Generate_NoteLongerThanLimit_ReturnsValidationErrorWithoutRunningEngine()
+    {
+        var fixture = new Fixture();
+
+        var result = await fixture.Service.GenerateAsync(UserId, Request() with { Note = new string('a', 301) });
+
+        Assert.Equal(GenerateTripResultStatus.ValidationFailed, result.Status);
+        Assert.Contains("Note", result.ValidationErrors!.Keys);
+        Assert.Empty(fixture.Trips.Added);
+    }
+
     [Fact]
     public async Task Generate_UnknownTag_ReturnsInvalidTagsAndSavesNothing()
     {

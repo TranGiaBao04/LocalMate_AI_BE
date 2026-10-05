@@ -67,6 +67,24 @@ public sealed class TripRequestValidatorTests
     public void FirstAndLastStations_AreAccepted(int order) =>
         Assert.True(Validator.Validate(Request(startStationOrder: order, destinationStationOrder: order)).IsValid);
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("muốn chỗ yên tĩnh")]
+    public void ShortOrMissingNote_IsValid(string? note) =>
+        Assert.True(Validator.Validate(Request(10.77, 106.69) with { Note = note }).IsValid);
+
+    [Fact]
+    public void NoteLength_IsCountedAfterCollapsingWhitespace()
+    {
+        var exactlyMax = new string('a', 300);
+
+        Assert.True(Validator.Validate(Request(10.77, 106.69) with { Note = exactlyMax }).IsValid);
+        // Khoảng trắng thừa không tính: sau khi chuẩn hoá vẫn đúng 300 ký tự.
+        Assert.True(Validator.Validate(Request(10.77, 106.69) with { Note = $"   {exactlyMax}   " }).IsValid);
+        Assert.Equal(["Note"], ErrorFields(Request(10.77, 106.69) with { Note = exactlyMax + "a" }));
+    }
+
     private static string[] ErrorFields(TripRequestDto request) =>
         Validator.Validate(request).Errors.Select(error => error.PropertyName).Distinct().ToArray();
 

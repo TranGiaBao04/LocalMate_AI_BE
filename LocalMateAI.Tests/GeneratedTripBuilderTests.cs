@@ -29,6 +29,37 @@ public sealed class GeneratedTripBuilderTests
     }
 
     [Fact]
+    public void Build_WithoutNote_LeavesNoteEmpty()
+    {
+        var trip = GeneratedTripBuilder.Build(UserId, Request(), Origin(), [Stop(0, 8, 0)], [], PlannedStart);
+
+        Assert.Null(trip.Note);
+        Assert.False(trip.NoteApplied);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Build_StoresNormalizedNote_AndWhetherItWasApplied(bool noteApplied)
+    {
+        var request = Request() with { Note = "  muốn chỗ   yên tĩnh " };
+
+        var trip = GeneratedTripBuilder.Build(UserId, request, Origin(), [Stop(0, 8, 0)], [], PlannedStart, noteApplied);
+
+        Assert.Equal("muốn chỗ yên tĩnh", trip.Note);
+        Assert.Equal(noteApplied, trip.NoteApplied);
+    }
+
+    [Fact]
+    public void Build_BlankNote_IsStoredAsNull()
+    {
+        var trip = GeneratedTripBuilder.Build(
+            UserId, Request() with { Note = "   " }, Origin(), [Stop(0, 8, 0)], [], PlannedStart);
+
+        Assert.Null(trip.Note);
+    }
+
+    [Fact]
     public void Build_StartingFromStation_TakesCoordinatesAndStationsFromResolvedOrigin()
     {
         var startStationId = Guid.NewGuid();

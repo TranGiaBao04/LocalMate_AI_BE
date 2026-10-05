@@ -35,6 +35,7 @@ public static class SystemSettingKeys
     public const string MotorbikeSpeedKmH = "Travel.MotorbikeSpeedKmH";
     public const string RoadDetourFactor = "Travel.RoadDetourFactor";
     public const string AutoWalkingMaxMeters = "Travel.AutoWalkingMaxMeters";
+    public const string NoteWeightPercent = "Planning.NoteWeightPercent";
     public const string SemanticMinSimilarityPercent = "Semantic.MinSimilarityPercent";
     public const string SemanticMaxGapFromTopPercent = "Semantic.MaxGapFromTopPercent";
 }
@@ -87,6 +88,10 @@ public static class SystemSettingDefinitions
         new(SystemSettingKeys.AutoWalkingMaxMeters, "Travel", "Ngưỡng tự chọn đi bộ",
             "Ở chế độ Tự động, đoạn đường bộ không quá ngưỡng này thì tính đi bộ, xa hơn thì tính xe máy.",
             SystemSettingValueType.Integer, "m", DefaultValue: 700, MinValue: 100, MaxValue: 2_000),
+        new(SystemSettingKeys.NoteWeightPercent, "Planning", "Trọng số ghi chú khi tạo lịch",
+            "Ghi chú của người dùng ảnh hưởng bao nhiêu phần trăm tới thứ hạng địa điểm, phần còn lại là tag sở thích. "
+            + "0 = bỏ qua ghi chú.",
+            SystemSettingValueType.Integer, "%", DefaultValue: 50, MinValue: 0, MaxValue: 100),
         new(SystemSettingKeys.SemanticMinSimilarityPercent, "Semantic", "Độ tương đồng tối thiểu",
             "Khi tìm theo nghĩa, nếu địa điểm khớp nhất có độ tương đồng với câu của người dùng thấp hơn mức này "
             + "thì coi như không có kết quả liên quan. Đặt cao hơn thì ít gợi ý sai nhưng dễ bỏ sót.",

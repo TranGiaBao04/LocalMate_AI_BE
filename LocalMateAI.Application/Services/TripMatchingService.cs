@@ -15,7 +15,8 @@ public sealed class TripMatchingService(
     ICandidateFilterService candidateFilterService,
     ITagSimilarityScorer tagSimilarityScorer,
     IPlaceRepository placeRepository,
-    ISystemSettingProvider settings) : ITripMatchingService
+    ISystemSettingProvider settings,
+    ISemanticPlaceScorer semanticScorer) : ITripMatchingService
 {
     public async Task<TripMatchingResult> MatchAsync(
         TripRequestDto request,
@@ -71,9 +72,20 @@ public sealed class TripMatchingService(
 
         var scored = tagSimilarityScorer.Score(filtered.Passed, placeTagIds, request.TagIds);
 
-        // Xếp hạng: MatchScore giảm dần, gần ga cột mốc trước, PlaceId để thứ tự luôn ổn định.
+        // Ghi chú chỉ đổi thứ hạng: không loại địa điểm nào và không vượt qua bước lọc ngân sách ở trên.
+        var note = await ScoreNoteAsync(request.Note, scored, cancellationToken);
+        var noteApplied = note.Scores.Count > 0;
+
+        // Xếp hạng: điểm tag (và điểm ghi chú nếu áp dụng) giảm dần, gần ga cột mốc trước,
+        // PlaceId để thứ tự luôn ổn định.
         var ranked = scored
-            .OrderByDescending(place => place.MatchScore)
+            .Select(place => note.HighlightedPlaceIds.Contains(place.Candidate.PlaceId)
+                ? place with { MatchesNote = true }
+                : place)
+            .OrderByDescending(place => noteApplied
+                ? place.MatchScore * (1 - note.Weight)
+                  + note.Scores.GetValueOrDefault(place.Candidate.PlaceId) * note.Weight
+                : place.MatchScore)
             .ThenBy(place => CandidateRanking.DistanceToAnchorKm(place.Candidate, origin.AnchorStation))
             .ThenBy(place => place.Candidate.PlaceId)
             .ToList();
@@ -114,7 +126,63 @@ public sealed class TripMatchingService(
                 criteria.BudgetTier.ToString(),
                 selected,
                 filtered.Excluded,
-                anchorStation),
+                anchorStation,
+                noteApplied),
             Origin: origin);
+    }
+
+    private async Task<NoteRanking> ScoreNoteAsync(
+        string? rawNote,
+        IReadOnlyList<ScoredPlaceDto> scored,
+        CancellationToken cancellationToken)
+    {
+        var note = TripNoteRules.Normalize(rawNote);
+
+        if (note is null || scored.Count == 0)
+        {
+            return NoteRanking.None;
+        }
+
+        var weightPercent = await settings.GetIntAsync(SystemSettingKeys.NoteWeightPercent, cancellationToken);
+        if (weightPercent == 0)
+        {
+            return NoteRanking.None;
+        }
+
+        var similarities = await semanticScorer.ScoreAsync(
+            note, SemanticPlaceScorer.PlanningTimeout, cancellationToken);
+        if (similarities is null)
+        {
+            return NoteRanking.None;
+        }
+
+        var minSimilarity = await settings.GetIntAsync(SystemSettingKeys.SemanticMinSimilarityPercent, cancellationToken);
+        var scores = TripNoteRules.Score(
+            scored.Select(place => place.Candidate.PlaceId), similarities, minSimilarity);
+
+        if (scores.Count == 0)
+        {
+            return NoteRanking.None;
+        }
+
+        // Câu lý do "hợp với ghi chú" chỉ dành cho những ứng viên khớp rõ: đạt sàn và sát ứng viên khớp nhất.
+        var maxGap = await settings.GetIntAsync(SystemSettingKeys.SemanticMaxGapFromTopPercent, cancellationToken);
+        var candidateSimilarities = scored
+            .Select(place => place.Candidate.PlaceId)
+            .Where(similarities.ContainsKey)
+            .ToDictionary(placeId => placeId, placeId => similarities[placeId]);
+        var highlighted = SemanticMatchRules.Select(candidateSimilarities, minSimilarity, maxGap)
+            .Select(match => match.PlaceId)
+            .ToHashSet();
+
+        return new NoteRanking(scores, weightPercent / 100d, highlighted);
+    }
+
+    private sealed record NoteRanking(
+        IReadOnlyDictionary<Guid, double> Scores,
+        double Weight,
+        IReadOnlySet<Guid> HighlightedPlaceIds)
+    {
+        public static readonly NoteRanking None = new(new Dictionary<Guid, double>(), 0d, new HashSet<Guid>());
     }
 }

@@ -66,6 +66,31 @@ public sealed class HeuristicFallbackEngineTests
         Assert.Same(origin, result.Origin);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task GenerateFallback_ForwardsNoteApplied_WhetherOrNotTheMatchIsSufficient(bool isSufficient)
+    {
+        var match = new TripMatchingResponse(
+            IsSufficient: isSufficient,
+            InsufficiencyReason: isSufficient ? null : TripInsufficiencyReasons.DurationTooShort,
+            StationName: "Bến Thành",
+            EstimatedStopCount: isSufficient ? 1 : 0,
+            BudgetTier: "Standard",
+            Candidates: isSufficient ? [new ScoredPlaceDto(MakeCandidate("Cà phê Bến Thành"), 1.0, [])] : [],
+            Excluded: [],
+            AnchorStation: new StationRefDto(1, "Bến Thành"),
+            NoteApplied: true);
+        var engine = new HeuristicFallbackEngine(
+            new FakeTripMatchingService(new TripMatchingResult(
+                TripMatchingResultStatus.Success, match, Origin: TestTripOrigins.At(startLatitude: 10.77, startLongitude: 106.69))),
+            new FakeSystemSettingProvider());
+
+        var result = await engine.GenerateFallbackAsync(Request(), "heuristic");
+
+        Assert.True(result.Payload!.NoteApplied);
+    }
+
     [Fact]
     public async Task GenerateFallback_SchedulesFromResolvedOrigin_NotFromRequestCoordinates()
     {

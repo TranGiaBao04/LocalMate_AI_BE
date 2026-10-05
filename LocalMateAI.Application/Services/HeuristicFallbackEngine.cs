@@ -42,7 +42,8 @@ public sealed class HeuristicFallbackEngine(
                     matched.EstimatedStopCount,
                     matched.BudgetTier,
                     [],
-                    matched.AnchorStation),
+                    matched.AnchorStation,
+                    matched.NoteApplied),
                 Origin: match.Origin);
         }
 
@@ -65,7 +66,8 @@ public sealed class HeuristicFallbackEngine(
                 matched.EstimatedStopCount,
                 matched.BudgetTier,
                 stops,
-                matched.AnchorStation),
+                matched.AnchorStation,
+                matched.NoteApplied),
             Origin: origin);
     }
 }

@@ -15,4 +15,5 @@ public sealed record MetroClusterPlaceReadModel(
     decimal EstimatedCostMin,
     decimal EstimatedCostMax,
     string? ImageUrl,
-    double DistanceFromStationMeters);
+    double DistanceFromStationMeters,
+    string? Description = null);

@@ -66,6 +66,9 @@ public sealed class TripRequestValidator : AbstractValidator<TripRequestDto>
         RuleFor(x => x.TravelMode).IsInEnum();
         RuleFor(x => x.TagIds).NotNull();
         RuleForEach(x => x.TagIds).NotEmpty();
+        RuleFor(x => x.Note)
+            .Must(note => (TripNoteRules.Normalize(note)?.Length ?? 0) <= TripNoteRules.MaxLength)
+            .WithMessage($"Ghi chú tối đa {TripNoteRules.MaxLength} ký tự.");
 
         RuleFor(x => x.PlannedDate).Custom((plannedDate, context) =>
         {
