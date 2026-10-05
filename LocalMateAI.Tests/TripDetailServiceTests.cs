@@ -330,6 +330,23 @@ public sealed class TripDetailServiceTests
     }
 
     [Fact]
+    public async Task Get_ReturnsGooglePlaceIdOfEachStop()
+    {
+        var tripId = Guid.NewGuid();
+        var model = Model(tripId, null, new TimeOnly(8, 20));
+        model = model with
+        {
+            Items = [model.Items[0] with { GooglePlaceId = "ChIJzaevQMcvdTERYE3UhLKg5NE" }, .. model.Items.Skip(1)]
+        };
+        var service = new TripDetailService(new FakeUserRepository(UserId), new FakeTripRepository(model), new FakeSystemSettingProvider(), new StubMetroTimetableSource());
+
+        var response = (await service.GetAsync(UserId, tripId)).Response!;
+
+        Assert.Equal("ChIJzaevQMcvdTERYE3UhLKg5NE", response.Items[0].GooglePlaceId);
+        Assert.All(response.Items.Skip(1), item => Assert.Null(item.GooglePlaceId));
+    }
+
+    [Fact]
     public async Task Get_TripWithoutPlannedStart_LeavesNewFieldsNullAndTotalsUnchanged()
     {
         var tripId = Guid.NewGuid();
