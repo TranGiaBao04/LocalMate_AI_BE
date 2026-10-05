@@ -46,6 +46,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, TimePro
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<PlaceEmbedding> PlaceEmbeddings => Set<PlaceEmbedding>();
     public DbSet<LlmCallLog> LlmCallLogs => Set<LlmCallLog>();
+    public DbSet<AiUsageAdmission> AiUsageAdmissions => Set<AiUsageAdmission>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -13,7 +13,7 @@ namespace LocalMateAI.Tests;
 public sealed class AiEntitlementMigrationPostgresTests
 {
     private const string Previous = "20261005084944_AddTripAiExplainedAt";
-    private const string Latest = "20261005143825_AddVersionedAiEntitlements";
+    private const string Latest = "20261005190624_AddAiUsageAdmissions";
 
     [Fact]
     public async Task FreshMigration_BackfillsBuiltinsAndPreservesProtection()
