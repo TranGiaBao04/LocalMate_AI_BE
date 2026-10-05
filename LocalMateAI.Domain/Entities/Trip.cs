@@ -30,6 +30,9 @@ public sealed class Trip : BaseEntity
     // true khi ghi chú đã được dùng để xếp hạng địa điểm lúc tạo lịch.
     public bool NoteApplied { get; set; }
 
+    // Lần gần nhất AI viết lý do cho các chặng. Null = lý do đang là câu mặc định của hệ thống.
+    public DateTime? AiExplainedAt { get; set; }
+
     // Xoá mềm: null = còn hoạt động. Giữ dòng lại vì Feedback/PlaceReview trỏ tới Trip bằng FK Restrict.
     public DateTime? DeletedAt { get; set; }
 

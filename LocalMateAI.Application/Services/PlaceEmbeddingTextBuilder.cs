@@ -34,7 +34,7 @@ public static class PlaceEmbeddingTextBuilder
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{document.Title}\n{document.Text}")));
 
     // Nhãn đã dùng khi đo ngưỡng ở GĐ 0 (khác nhãn trong mail lịch trình), giữ nguyên để ngưỡng còn đúng.
-    private static string CategoryLabel(PlaceCategory category) => category switch
+    public static string CategoryLabel(PlaceCategory category) => category switch
     {
         PlaceCategory.Cafe => "Quán cà phê",
         PlaceCategory.Food => "Ăn uống",

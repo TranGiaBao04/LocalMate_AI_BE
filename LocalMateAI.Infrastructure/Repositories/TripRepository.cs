@@ -201,6 +201,8 @@ public sealed class TripRepository(AppDbContext dbContext) : ITripRepository
             DestinationStationId = source.DestinationStationId,
             Note = source.Note,
             NoteApplied = source.NoteApplied,
+            // Bản sao mang theo các câu lý do, nên giữ luôn dấu "AI đã viết".
+            AiExplainedAt = source.AiExplainedAt,
             DurationHours = source.DurationHours,
             BudgetMin = source.BudgetMin,
             BudgetMax = source.BudgetMax,
@@ -271,7 +273,8 @@ public sealed class TripRepository(AppDbContext dbContext) : ITripRepository
                 candidate.StartStationId,
                 candidate.DestinationStationId,
                 candidate.Note,
-                candidate.NoteApplied
+                candidate.NoteApplied,
+                candidate.AiExplainedAt
             })
             .SingleOrDefaultAsync(cancellationToken);
 
@@ -377,7 +380,8 @@ public sealed class TripRepository(AppDbContext dbContext) : ITripRepository
                 ? chosenStations.GetValueOrDefault(destinationStationId)
                 : null,
             trip.Note,
-            trip.NoteApplied);
+            trip.NoteApplied,
+            trip.AiExplainedAt);
     }
 
     public async Task AddAsync(

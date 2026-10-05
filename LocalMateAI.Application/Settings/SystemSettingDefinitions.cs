@@ -38,6 +38,9 @@ public static class SystemSettingKeys
     public const string NoteWeightPercent = "Planning.NoteWeightPercent";
     public const string SemanticMinSimilarityPercent = "Semantic.MinSimilarityPercent";
     public const string SemanticMaxGapFromTopPercent = "Semantic.MaxGapFromTopPercent";
+    public const string AiEnabled = "Ai.Enabled";
+    public const string AiDailyCallsPerUser = "Ai.DailyCallsPerUser";
+    public const string AiExplainCallsPerTrip = "Ai.ExplainCallsPerTrip";
 }
 
 /// <summary>
@@ -99,7 +102,18 @@ public static class SystemSettingDefinitions
         new(SystemSettingKeys.SemanticMaxGapFromTopPercent, "Semantic", "Khoảng cách tối đa tới kết quả khớp nhất",
             "Chỉ lấy những địa điểm có độ tương đồng thấp hơn địa điểm khớp nhất không quá số này. "
             + "Đặt nhỏ hơn thì kết quả gọn hơn; 0 = chỉ lấy địa điểm khớp nhất.",
-            SystemSettingValueType.Integer, "điểm %", DefaultValue: 4, MinValue: 0, MaxValue: 100)
+            SystemSettingValueType.Integer, "điểm %", DefaultValue: 4, MinValue: 0, MaxValue: 100),
+        new(SystemSettingKeys.AiEnabled, "Ai", "Bật tính năng AI viết nội dung",
+            "1 = bật, 0 = tắt mọi tính năng dùng mô hình ngôn ngữ (AI viết lý do cho từng chặng, AI hiểu câu nhập). "
+            + "Khi tắt, ứng dụng vẫn tạo lịch bình thường với câu lý do mặc định.",
+            SystemSettingValueType.Integer, null, DefaultValue: 1, MinValue: 0, MaxValue: 1),
+        new(SystemSettingKeys.AiDailyCallsPerUser, "Ai", "Số lần dùng AI tối đa mỗi người mỗi ngày",
+            "Tính chung mọi tính năng AI viết nội dung, kể cả lần gọi bị lỗi. Đặt lại lúc 00:00 giờ Việt Nam.",
+            SystemSettingValueType.Integer, "lần", DefaultValue: 10, MinValue: 1, MaxValue: 1_000),
+        new(SystemSettingKeys.AiExplainCallsPerTrip, "Ai", "Số lần AI viết lại lý do cho một chuyến đi",
+            "Mỗi chuyến đi được nhờ AI viết lý do tối đa từng này lần. Chỉ tính lần thành công; "
+            + "lần bị lỗi không làm mất lượt của chuyến đi nhưng vẫn tính vào trần mỗi ngày.",
+            SystemSettingValueType.Integer, "lần", DefaultValue: 3, MinValue: 1, MaxValue: 20)
     ];
 
     private static SystemSettingDefinition VisitMinutes(string key, string categoryLabel, int defaultMinutes) =>

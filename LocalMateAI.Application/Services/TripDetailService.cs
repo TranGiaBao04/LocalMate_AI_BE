@@ -183,7 +183,8 @@ public sealed class TripDetailService(
             trip.StartStation,
             trip.DestinationStation,
             trip.Note,
-            trip.NoteApplied);
+            trip.NoteApplied,
+            trip.AiExplainedAt);
     }
 
     private static TripLegResponse ToLegResponse(

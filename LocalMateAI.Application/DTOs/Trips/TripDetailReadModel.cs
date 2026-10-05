@@ -23,4 +23,5 @@ public sealed record TripDetailReadModel(
     StationRefDto? StartStation = null,
     StationRefDto? DestinationStation = null,
     string? Note = null,
-    bool NoteApplied = false);
+    bool NoteApplied = false,
+    DateTime? AiExplainedAt = null);
