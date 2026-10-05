@@ -39,7 +39,7 @@ public sealed class LlmCallLogRepositoryPostgresTests
         Assert.Equal(AiUsageStatus.Allowed, (await guard.CheckAsync(other.Id, LlmCallKind.ParseRequest)).Status);
         Assert.Equal(3, await c.LlmCallLogs.CountAsync(log => log.UserId == user.Id));
         var subscriptions = new SubscriptionService(new UserRepository(c), new SubscriptionRepository(c),
-            new UsageEventRepository(c), new TripRepository(c), clock, new LlmCallLogRepository(c),
+            new UsageEventRepository(c), new TripRepository(c), clock, new AiUsageAdmissionRepository(c, new FakeSystemSettingProvider(), clock),
             new FakeSystemSettingProvider());
         var me = (await subscriptions.GetMySubscriptionAsync(user.Id))!;
         Assert.Equal(new LocalMateAI.Application.DTOs.Subscription.SubscriptionAiResponse(3, 3, midnight), me.Ai);

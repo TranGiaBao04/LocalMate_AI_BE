@@ -14,7 +14,7 @@ public sealed record AiUsageCompletion(LlmCallOutcome Outcome, string Model, int
 
 public sealed record AiUsageCompletionResult(Guid LlmCallLogId, bool CompletedNow);
 
-public interface IAiUsageAdmissionRepository
+public interface IAiUsageAdmissionRepository : IAiUsageAccountingRepository
 {
     Task<AiUsageAdmissionResult> AdmitAsync(Guid attemptId, Guid userId, LlmCallKind kind,
         Guid? tripId = null, CancellationToken cancellationToken = default);
@@ -27,4 +27,11 @@ public interface IAiUsageAdmissionRepository
 
     Task<AiUsageCompletionResult> CompleteAsync(AiUsageHandle handle, AiUsageCompletion completion,
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<AiUsageHandle>> GetExpiredAsync(AiUsageAdmissionState state, int batchSize,
+        CancellationToken cancellationToken = default);
+
+    Task<bool> ReleaseExpiredReservedAsync(AiUsageHandle handle, CancellationToken cancellationToken = default);
+
+    Task<bool> AbandonExpiredDispatchAuthorizedAsync(AiUsageHandle handle, CancellationToken cancellationToken = default);
 }

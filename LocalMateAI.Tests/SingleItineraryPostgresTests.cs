@@ -94,7 +94,7 @@ public sealed class SingleItineraryPostgresTests
             new FinalizeTripRequest { FundingSource = "SingleEntitlement", EntitlementId = secondGrant.Id })).Status);
         var me = (await new SubscriptionService(new UserRepository(c), new SubscriptionRepository(c),
             new UsageEventRepository(c), new TripRepository(c), Clock,
-            new LlmCallLogRepository(c), new FakeSystemSettingProvider()).GetMySubscriptionAsync(u.Id))!;
+            new AiUsageAdmissionRepository(c, new FakeSystemSettingProvider(), Clock), new FakeSystemSettingProvider()).GetMySubscriptionAsync(u.Id))!;
         Assert.Equal(1, me.SavedTrips.Used); Assert.Equal(1, me.SavedTrips.Limit);
         var availability = (await Purchases(c, new()).GetAvailabilityAsync(u.Id)).Response!;
         Assert.Equal(1, availability.NormalSavedTripsUsed); Assert.False(availability.NormalFinalizeAvailable);

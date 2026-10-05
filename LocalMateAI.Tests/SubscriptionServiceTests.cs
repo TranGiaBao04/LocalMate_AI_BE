@@ -407,17 +407,15 @@ public sealed class SubscriptionServiceTests
             throw new NotSupportedException();
     }
 
-    private sealed class FakeLlmLogs(IReadOnlyList<LlmCallLog> logs) : ILlmCallLogRepository
+    private sealed class FakeLlmLogs(IReadOnlyList<LlmCallLog> logs) : IAiUsageAccountingRepository
     {
         public List<(Guid UserId, DateTime SinceUtc)> Requests { get; } = [];
-        public Task<int> CountForUserSinceAsync(Guid userId, DateTime sinceUtc, CancellationToken ct = default)
+        public Task<int> CountDailyAsync(Guid userId, DateOnly vietnamUsageDate, CancellationToken ct = default)
         {
+            var sinceUtc = vietnamUsageDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc).AddHours(-7);
             Requests.Add((userId, sinceUtc));
-            return Task.FromResult(logs.Count(l => l.UserId == userId && l.CreatedAt >= sinceUtc));
+            return Task.FromResult(logs.Count(l => l.UserId == userId && l.CreatedAt >= sinceUtc && l.CreatedAt < sinceUtc.AddDays(1)));
         }
-        public Task<int> CountSucceededForTripAsync(Guid tripId, LlmCallKind kind, CancellationToken ct = default) =>
-            throw new NotSupportedException();
-        public Task AddAsync(LlmCallLog log, CancellationToken ct = default) => throw new NotSupportedException();
     }
 
     private sealed class FakeUsageRepository(IReadOnlyList<DateTime> events) : IUsageEventRepository

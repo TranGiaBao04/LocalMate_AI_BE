@@ -1,6 +1,6 @@
 # AI Subscription Entitlement - Backend/Frontend Handoff
 
-Date: 2026-10-05. Additive AI-S3 contract on approved AI-S1/S2 foundation.
+Updated: 2026-10-06. AI-S5D recovery/accounting cutover on approved AI-S1/S2/S3 foundation.
 Payment/Subscription Upgrade Contract v1.0 and Single contracts are unchanged.
 
 ## Versioned Entitlements
@@ -20,10 +20,10 @@ Expired/terminated paid periods fall back to currently effective Free.
 ## Accounting / Operation Boundaries
 
 - POST /api/trips/parse-request and POST /api/trips/{tripId}/explanations share UserId-wide daily LLM usage.
-- Every persisted provider-call outcome counts daily: Succeeded, ProviderFailed and InvalidOutput, across both kinds.
-- Checks occur before the provider call. Caller cancellation behavior remains unchanged; do not assume every attempted HTTP request creates a log.
+- Daily usage includes charged/in-flight admitted operations, across both kinds. Succeeded, ProviderFailed and InvalidOutput remain daily charged.
+- Admission occurs before provider work. Pre-dispatch reservations released after cancellation/preparation failure do not count. After dispatch authorization, cancellation or an unresolved attempt does not refund daily charge; do not assume every charged operation has a call log.
 - Explain-per-Trip counts only Kind=Explain, Outcome=Succeeded for the exact TripId, across days.
-- ProviderFailed and InvalidOutput do not consume successful Explain allowance, but do count daily if persisted.
+- ProviderFailed and InvalidOutput do not consume successful Explain allowance, but do count daily. In-flight Explain temporarily occupies Trip capacity; failed/invalid or abandoned attempts release that temporary hold without granting a successful use.
 - Trip exhaustion is checked before daily exhaustion, after provider/configuration and global Ai.Enabled checks.
 - Semantic search and Trip Note/semantic scoring are available to all plans; they are not gated by these LLM entitlements.
 - Note continues to follow normal Generate constraints/usage.
@@ -31,14 +31,14 @@ Expired/terminated paid periods fall back to currently effective Free.
 - Regenerate criteria uses Parse with base criteria; the later explicit Generate creates a new Trip and consumes normal Generate usage.
 - Single purchase grants no additional AI quota/entitlement. Current effective account/subscription rights still apply.
 
-Upgrade, renewal, downgrade/expiry and plan publication never reset persisted daily usage.
+Upgrade, renewal, downgrade/expiry and plan publication never reset user/day usage, including reserved/in-flight/abandoned operations.
 Free used3 -> Membership: used3, limit30.
 Membership used10 -> expired Free: used10, limit3 until next Vietnam midnight.
 Do not clamp dailyUsed to dailyLimit.
 
 Daily boundaries are Vietnam calendar days (UTC+07:00). resetAt is the next Vietnam midnight represented in UTC.
-Admission is not atomic in AI-S2/S3: concurrent requests can exceed limits under the existing check/provider/log race.
-No strict concurrent hard-cap guarantee is made; atomic hardening belongs to AI-S5.
+New atomic usage belongs to the immutable Vietnam admission day, even if completion happens after midnight. Legacy unlinked historical logs retain their CreatedAt-based Vietnam day. Linked completion logs never count separately from their admitted operation.
+Concurrent hard-cap behavior requires coordinated all-writer cutover; a mixed fleet of legacy and admission-aware writers is unsafe. No fleet guarantee is implied by a local patch alone.
 
 ## Subscription State
 
@@ -58,7 +58,9 @@ New top-level block (example additive fragment):
 }
 ```
 
-dailyUsed counts persisted LLM logs for the current authenticated owner since current Vietnam midnight.
+dailyUsed is Backend-authoritative hybrid accounting for the current owner and Vietnam day: unlinked historical logs plus charged/in-flight admitted operations, once each.
+Reserved and DispatchAuthorized operations occupy daily capacity; completed operations and conservatively Abandoned unresolved dispatches remain charged. Released pre-dispatch reservations do not count.
+Completion after midnight stays on its admission day; the next day's /me does not count its linked log again. Clients must not derive quota usage from LlmCallLogs or provider responses.
 dailyLimit uses AiDailyCallLimit from the already resolved effective version.
 Non-null values, including0, are authoritative. Only null uses the legacy Ai.DailyCallsPerUser setting.
 A broken resolver/binding/database does not award fallback entitlement or a fabricated ai block.
@@ -104,8 +106,8 @@ Same terms/name-only edits do not publish a version.
 
 | HTTP | Code | Meaning |
 |---|---|---|
-| 429 | ai_daily_limit_reached | Shared daily persisted-call allowance exhausted; existing resetAt is next Vietnam midnight |
-| 429 | ai_trip_limit_reached | Successful Explain allowance exhausted for this Trip |
+| 429 | ai_daily_limit_reached | Shared daily charged/reserved allowance exhausted; existing resetAt is next Vietnam midnight |
+| 429 | ai_trip_limit_reached | Successful Explain allowance exhausted or temporarily occupied by in-flight Explain for this Trip |
 | 503 | ai_unavailable | Global AI disabled/provider unavailable or existing provider/output failure path |
 | 403 | ai_requires_persisted_user | AI operation requires a persisted account |
 
@@ -117,4 +119,17 @@ Frontend must render server values/errors, not calculate quota boundaries or app
 
 No payment/Upgrade/credit/receipt/Single/Finalize/Generate contract change.
 No wallet/refund/carry-forward, new PlanFeature enforcement or new AI status/error.
-No frontend implementation in AI-S3.
+No new API fields/errors or frontend implementation in AI-S5D. Recovery is database-only and requires no Gemini configuration; housekeeping can continue while Ai.Enabled=0.
+
+## Coordinated Deployment
+
+MIXED_OLD_NEW_AI_WRITERS = UNSAFE.
+
+1. Ai.Enabled=0.
+2. Apply all approved migrations.
+3. Deploy admission-aware code to ALL API instances.
+4. Drain/remove all legacy writers.
+5. Verify fleet version.
+6. Ai.Enabled=1.
+
+This is a deployment contract, not automated production deployment. Recovery never resends provider requests or fabricates provider-call evidence.

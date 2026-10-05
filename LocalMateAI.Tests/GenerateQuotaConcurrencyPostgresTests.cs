@@ -304,7 +304,7 @@ public sealed class GenerateQuotaConcurrencyPostgresTests
             new SubscriptionRepository(context),
             new UsageEventRepository(context),
             new TripRepository(context),
-            new FixedTimeProvider(nowUtc), new LlmCallLogRepository(context), new FakeSystemSettingProvider());
+            new FixedTimeProvider(nowUtc), new AiUsageAdmissionRepository(context, new FakeSystemSettingProvider(), TimeProvider.System), new FakeSystemSettingProvider());
 
     private static async Task CleanupAsync(string connectionString, SeedData seed)
     {

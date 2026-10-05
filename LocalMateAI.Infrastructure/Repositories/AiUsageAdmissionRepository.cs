@@ -15,6 +15,7 @@ public sealed class AiUsageAdmissionRepository(AppDbContext context, ISystemSett
     TimeProvider clock) : IAiUsageAdmissionRepository
 {
     public static readonly TimeSpan ReservedLease = TimeSpan.FromSeconds(30);
+    public const int RecoveryBatchSize = 50;
 
     public async Task<AiUsageAdmissionResult> AdmitAsync(Guid attemptId, Guid userId, LlmCallKind kind,
         Guid? tripId = null, CancellationToken cancellationToken = default)
@@ -149,6 +150,43 @@ public sealed class AiUsageAdmissionRepository(AppDbContext context, ISystemSett
         }
     }
 
+    public async Task<IReadOnlyList<AiUsageHandle>> GetExpiredAsync(AiUsageAdmissionState state, int batchSize,
+        CancellationToken cancellationToken = default)
+    {
+        if (batchSize is < 1 or > RecoveryBatchSize) throw new ArgumentOutOfRangeException(nameof(batchSize));
+        if (state is not (AiUsageAdmissionState.Reserved or AiUsageAdmissionState.DispatchAuthorized))
+            throw new ArgumentOutOfRangeException(nameof(state));
+        var now = clock.GetUtcNow().UtcDateTime;
+        var rows = context.AiUsageAdmissions.AsNoTracking().Where(a => a.State == state);
+        var ordered = state == AiUsageAdmissionState.Reserved
+            ? rows.Where(a => a.DispatchAuthorizedAt == null && a.ReservedUntil <= now).OrderBy(a => a.ReservedUntil)
+            : rows.Where(a => a.RecoveryAfter != null && a.RecoveryAfter <= now).OrderBy(a => a.RecoveryAfter);
+        return await ordered.ThenBy(a => a.Id).Take(batchSize)
+            .Select(a => new AiUsageHandle(a.Id, a.UserId, a.Kind, a.TripIdSnapshot, a.FencingToken, a.FencingGeneration))
+            .ToListAsync(cancellationToken);
+    }
+
+    public Task<bool> ReleaseExpiredReservedAsync(AiUsageHandle handle, CancellationToken cancellationToken = default) =>
+        ReleaseReservedAsync(handle.UserId, handle.AttemptId, handle.FencingToken, handle.FencingGeneration,
+            expiredOnly: true, cancellationToken);
+
+    public async Task<bool> AbandonExpiredDispatchAuthorizedAsync(AiUsageHandle handle, CancellationToken cancellationToken = default)
+    {
+        await using var transaction = await context.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+        await LockUserAsync(handle.UserId, cancellationToken);
+        var now = clock.GetUtcNow().UtcDateTime;
+        var token = Guid.NewGuid();
+        var changed = await context.AiUsageAdmissions.Where(a => a.Id == handle.AttemptId && a.UserId == handle.UserId
+                && a.Kind == handle.Kind && a.TripIdSnapshot == handle.TripIdSnapshot
+                && a.FencingToken == handle.FencingToken && a.FencingGeneration == handle.FencingGeneration
+                && a.State == AiUsageAdmissionState.DispatchAuthorized && a.RecoveryAfter != null && a.RecoveryAfter <= now)
+            .ExecuteUpdateAsync(s => s.SetProperty(a => a.State, AiUsageAdmissionState.Abandoned)
+                .SetProperty(a => a.CompletedAt, now).SetProperty(a => a.RecoveryAfter, (DateTime?)null)
+                .SetProperty(a => a.FencingToken, token).SetProperty(a => a.FencingGeneration, a => a.FencingGeneration + 1), cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return changed == 1;
+    }
+
     private async Task LockUserAsync(Guid userId, CancellationToken ct)
     {
         if (await context.Database.SqlQuery<int>($"""SELECT 1 AS "Value" FROM "Users" WHERE "Id"={userId} FOR UPDATE""")
@@ -156,15 +194,16 @@ public sealed class AiUsageAdmissionRepository(AppDbContext context, ISystemSett
             throw new InvalidOperationException("Admission owner is not persisted.");
     }
 
-    private async Task<int> CountDailyAsync(Guid userId, DateOnly date, CancellationToken ct)
+    public Task<int> CountDailyAsync(Guid userId, DateOnly vietnamUsageDate, CancellationToken cancellationToken = default)
     {
-        var start = date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc).AddHours(-7);
+        var start = vietnamUsageDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc).AddHours(-7);
         var end = start.AddDays(1);
-        var legacy = await context.LlmCallLogs.CountAsync(l => l.UserId == userId && l.CreatedAt >= start && l.CreatedAt < end
-            && !context.AiUsageAdmissions.Any(a => a.LlmCallLogId == l.Id), ct);
-        var ledger = await context.AiUsageAdmissions.CountAsync(a => a.UserId == userId && a.VietnamUsageDate == date
-            && a.State != AiUsageAdmissionState.Released, ct);
-        return legacy + ledger;
+        // One SQL snapshot for both admission and /me; linked evidence never counts a second time.
+        var legacy = context.LlmCallLogs.Where(l => l.UserId == userId && l.CreatedAt >= start && l.CreatedAt < end
+            && !context.AiUsageAdmissions.Any(a => a.LlmCallLogId == l.Id)).Select(l => l.Id);
+        var ledger = context.AiUsageAdmissions.Where(a => a.UserId == userId && a.VietnamUsageDate == vietnamUsageDate
+            && a.State != AiUsageAdmissionState.Released).Select(a => a.Id);
+        return legacy.Concat(ledger).CountAsync(cancellationToken);
     }
 
     private async Task<int> CountExplainAsync(Guid tripId, CancellationToken ct)

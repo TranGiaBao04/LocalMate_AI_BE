@@ -49,4 +49,9 @@ internal sealed class TestAiUsageCoordinator : IAiUsageCoordinator, IAiUsageAdmi
 
     Task<AiUsageAdmissionResult> IAiUsageAdmissionRepository.AdmitAsync(Guid attemptId, Guid userId, LlmCallKind kind,
         Guid? tripId, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+    public Task<int> CountDailyAsync(Guid userId, DateOnly date, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<IReadOnlyList<AiUsageHandle>> GetExpiredAsync(AiUsageAdmissionState state, int batchSize, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<bool> ReleaseExpiredReservedAsync(AiUsageHandle handle, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<bool> AbandonExpiredDispatchAuthorizedAsync(AiUsageHandle handle, CancellationToken ct = default) => throw new NotSupportedException();
 }

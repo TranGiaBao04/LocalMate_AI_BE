@@ -55,7 +55,7 @@ public sealed class AdminPlanPostgresTests
         Assert.Equal(3, old.AiExplainCallsPerTripLimit);
         var consumer = new SubscriptionService(new UserRepository(c), new SubscriptionRepository(c),
             new UsageEventRepository(c), new TripRepository(c), new PlanVersionFoundationPostgresTests.Clock(Now),
-            new LlmCallLogRepository(c), new FakeSystemSettingProvider());
+            new AiUsageAdmissionRepository(c, new FakeSystemSettingProvider(), TimeProvider.System), new FakeSystemSettingProvider());
         Assert.Equal(new (int?, int?)[] { (3, 1), (15, 3), (30, 3) },
             (await consumer.GetPlansAsync()).Select(p => (p.AiDailyCallLimit, p.AiExplainCallsPerTripLimit)));
     }
@@ -469,7 +469,7 @@ public sealed class AdminPlanPostgresTests
         Assert.Single(await service.GetFeaturesAsync());
         var consumer = new SubscriptionService(new UserRepository(c), new SubscriptionRepository(c), new UsageEventRepository(c),
             new TripRepository(c), new PlanVersionFoundationPostgresTests.Clock(Now),
-            new LlmCallLogRepository(c), new FakeSystemSettingProvider());
+            new AiUsageAdmissionRepository(c, new FakeSystemSettingProvider(), TimeProvider.System), new FakeSystemSettingProvider());
         await service.SetStatusAsync(zero.Id, true);
         Assert.Equal(new[] { "Free", "TripPass", "Membership" }, (await consumer.GetPlansAsync()).Select(p => p.Code));
     }

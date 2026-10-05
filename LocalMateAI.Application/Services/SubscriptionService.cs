@@ -11,7 +11,7 @@ public sealed class SubscriptionService(
     IUsageEventRepository usageEventRepository,
     ITripRepository tripRepository,
     TimeProvider timeProvider,
-    ILlmCallLogRepository llmCallLogs,
+    IAiUsageAccountingRepository aiUsage,
     ISystemSettingProvider settings) : ISubscriptionService
 {
     public async Task<IReadOnlyList<SubscriptionPlanResponse>> GetPlansAsync(CancellationToken cancellationToken = default)
@@ -52,7 +52,7 @@ public sealed class SubscriptionService(
             usageEventRepository, userId, effective, nowUtc, cancellationToken);
         var savedTripsUsed = await tripRepository.CountNormalFinalizedByUserAsync(userId, cancellationToken);
         var dayStartUtc = VietnamTime.StartOfDayUtc(nowUtc);
-        var dailyUsed = await llmCallLogs.CountForUserSinceAsync(userId, dayStartUtc, cancellationToken);
+        var dailyUsed = await aiUsage.CountDailyAsync(userId, DateOnly.FromDateTime(nowUtc.AddHours(7)), cancellationToken);
         var dailyLimit = await AiEntitlementLimits.DailyAsync(plan, settings, cancellationToken);
 
         return new SubscriptionMeResponse(

@@ -68,7 +68,7 @@ public sealed class PlanPeriodQuotaPostgresTests
         Assert.Equal(1, await usage.CountForPeriodAsync(user.Id, highPeriod.Id, UsageEventType.Generate));
         var me = await new SubscriptionService(new UserRepository(c), new SubscriptionRepository(c),
             usage, new TripRepository(c), new Clock(future.StartsAt),
-            new LlmCallLogRepository(c), new FakeSystemSettingProvider()).GetMySubscriptionAsync(user.Id);
+            new AiUsageAdmissionRepository(c, new FakeSystemSettingProvider(), TimeProvider.System), new FakeSystemSettingProvider()).GetMySubscriptionAsync(user.Id);
         Assert.Equal(3, me!.Usage.GenerateLimit);
         Assert.Equal(1, me.Usage.GenerateUsed);
         Assert.Equal(2, me.SavedTrips.Used);
