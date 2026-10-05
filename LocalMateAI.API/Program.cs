@@ -247,6 +247,7 @@ builder.Services.AddScoped<ILlmCallLogRepository, LlmCallLogRepository>();
 builder.Services.AddScoped<IAiUsageGuard, AiUsageGuard>();
 builder.Services.AddScoped<ITripExplanationRepository, TripExplanationRepository>();
 builder.Services.AddScoped<ITripExplanationService, TripExplanationService>();
+builder.Services.AddScoped<ITripRequestParsingService, TripRequestParsingService>();
 builder.Services.AddHostedService<PlaceEmbeddingSyncWorker>();
 builder.Services.AddScoped<ISearchService, SearchService>();
 builder.Services.AddScoped<IAdminPlaceService, AdminPlaceService>();
