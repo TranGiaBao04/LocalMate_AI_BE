@@ -14,4 +14,5 @@ public sealed record AdminPlaceResponse(
     decimal EstimatedCostMax,
     string? ImageUrl,
     DateTime CreatedAt,
-    DateTime UpdatedAt);
+    DateTime UpdatedAt,
+    string? GooglePlaceId = null); // mã địa điểm Google Maps; null thì FE mở bản đồ theo toạ độ

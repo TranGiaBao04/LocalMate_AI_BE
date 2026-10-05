@@ -104,6 +104,7 @@ public sealed class PlaceQueryService(
             place.EstimatedCostMax,
             place.ImageUrl,
             place.Tags,
-            nearestStation);
+            nearestStation,
+            place.GooglePlaceId);
     }
 }

@@ -302,6 +302,7 @@ public sealed class TripRepository(AppDbContext dbContext) : ITripRepository
                 item.Place.Address,
                 item.Place.Category,
                 item.Place.ImageUrl,
+                item.Place.GooglePlaceId,
                 Latitude = item.Place.Location.Y,
                 Longitude = item.Place.Location.X,
                 item.OrderIndex,
@@ -366,7 +367,8 @@ public sealed class TripRepository(AppDbContext dbContext) : ITripRepository
                     item.VisitedAt,
                     item.Address,
                     stationsByItemId.GetValueOrDefault(item.Id)?.StationOrder,
-                    stationsByItemId.GetValueOrDefault(item.Id)?.DistanceMeters))
+                    stationsByItemId.GetValueOrDefault(item.Id)?.DistanceMeters,
+                    item.GooglePlaceId))
                 .ToList(),
             trip.CreatedAt,
             trip.UpdatedAt,

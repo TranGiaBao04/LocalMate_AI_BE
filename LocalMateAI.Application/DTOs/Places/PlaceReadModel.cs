@@ -15,4 +15,5 @@ public sealed record PlaceReadModel(
     decimal EstimatedCostMin,
     decimal EstimatedCostMax,
     string? ImageUrl,
-    IReadOnlyList<TagResponse> Tags);
+    IReadOnlyList<TagResponse> Tags,
+    string? GooglePlaceId = null);

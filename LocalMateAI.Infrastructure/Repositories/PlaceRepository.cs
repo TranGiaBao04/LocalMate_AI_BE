@@ -204,7 +204,8 @@ public sealed class PlaceRepository(AppDbContext dbContext) : IPlaceRepository
                 place.EstimatedCostMax,
                 place.ImageUrl,
                 place.CreatedAt,
-                place.UpdatedAt))
+                place.UpdatedAt,
+                place.GooglePlaceId))
             .ToListAsync(cancellationToken);
     }
 
@@ -267,7 +268,8 @@ public sealed class PlaceRepository(AppDbContext dbContext) : IPlaceRepository
                 place.EstimatedCostMax,
                 place.ImageUrl,
                 place.CreatedAt,
-                place.UpdatedAt))
+                place.UpdatedAt,
+                place.GooglePlaceId))
             .ToPagedResultAsync(query, cancellationToken);
     }
 
@@ -292,7 +294,8 @@ public sealed class PlaceRepository(AppDbContext dbContext) : IPlaceRepository
                 place.EstimatedCostMax,
                 place.ImageUrl,
                 place.CreatedAt,
-                place.UpdatedAt))
+                place.UpdatedAt,
+                place.GooglePlaceId))
             .SingleOrDefaultAsync(cancellationToken);
     }
 
@@ -366,7 +369,8 @@ public sealed class PlaceRepository(AppDbContext dbContext) : IPlaceRepository
                 candidate.IsVerified,
                 candidate.EstimatedCostMin,
                 candidate.EstimatedCostMax,
-                candidate.ImageUrl
+                candidate.ImageUrl,
+                candidate.GooglePlaceId
             })
             .SingleOrDefaultAsync(cancellationToken);
 
@@ -398,6 +402,7 @@ public sealed class PlaceRepository(AppDbContext dbContext) : IPlaceRepository
             place.EstimatedCostMin,
             place.EstimatedCostMax,
             place.ImageUrl,
-            tags);
+            tags,
+            place.GooglePlaceId);
     }
 }
