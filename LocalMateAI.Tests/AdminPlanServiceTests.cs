@@ -237,7 +237,11 @@ public sealed class AdminPlanServiceTests
         }
         private AdminPlanVersionResponse Version(SubscriptionPlanVersion v, Guid? current) => new(v.Id, v.VersionNumber,
             v.Price, v.DurationDays, v.GenerateLimit, v.SavedTripLimit, v.Origin.ToString(), v.PublishedAt, v.CreatedAt,
-            Selections[v.Id].Select(id => Features[id]).ToArray(), v.Id == current);
+            Selections[v.Id].Select(id => Features[id]).ToArray(), v.Id == current)
+        {
+            AiDailyCallLimit = v.AiDailyCallLimit,
+            AiExplainCallsPerTripLimit = v.AiExplainCallsPerTripLimit
+        };
         private AdminPlanResponse Response(SubscriptionPlan p) => new(p.Id, p.Code, p.Name, p.EntitlementPriority,
             p.IsSystem, p.IsActive, p.CreatedAt, p.UpdatedAt, p.CurrentVersionId is { } id ? Version(Versions[id], id) : null, 0);
         public Task<AdminPlanResponse?> GetPlanAsync(Guid id, DateTime now, CancellationToken ct = default) =>

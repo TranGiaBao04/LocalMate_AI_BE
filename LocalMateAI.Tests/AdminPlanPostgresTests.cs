@@ -26,6 +26,74 @@ public sealed class AdminPlanPostgresTests
     private static UpdateAdminPlanRequest Update() => AdminPlanServiceTests.Update();
 
     [Fact]
+    public async Task AiFields_RealRepositoryListDetailHistoryAndCatalogExposeStoredVersions()
+    {
+        await using var db = await IsolatedPlanDatabase.CreateAsync();
+        await using var c = db.Context();
+        var service = Service(c);
+        var list = (await service.GetPlansAsync(new())).Response!;
+        foreach (var (code, daily, explain) in new[] { ("FREE", 3, 1), ("TRIP_PASS", 15, 3), ("MEMBERSHIP", 30, 3) })
+        {
+            var row = list.Items.Single(p => p.Code == code);
+            var detail = (await service.GetPlanAsync(row.Id))!;
+            var history = (await service.GetVersionsAsync(row.Id, new())).Response!.Items;
+            Assert.Equal(daily, row.CurrentVersion!.AiDailyCallLimit);
+            Assert.Equal(explain, row.CurrentVersion.AiExplainCallsPerTripLimit);
+            Assert.Equal(daily, detail.CurrentVersion!.AiDailyCallLimit);
+            Assert.Equal(explain, detail.CurrentVersion.AiExplainCallsPerTripLimit);
+            Assert.Equal(daily, Assert.Single(history).AiDailyCallLimit);
+            Assert.Equal(explain, Assert.Single(history).AiExplainCallsPerTripLimit);
+        }
+        var created = (await service.CreateAsync(Create())).Response!;
+        var original = created.CurrentVersion!;
+        var updated = (await service.UpdateAsync(created.Id, Update() with
+            { AiDailyCallLimit = 22, AiExplainCallsPerTripLimit = 2 })).Response!;
+        Assert.Equal(22, updated.CurrentVersion!.AiDailyCallLimit);
+        Assert.Equal(2, updated.CurrentVersion.AiExplainCallsPerTripLimit);
+        var old = (await service.GetVersionsAsync(created.Id, new())).Response!.Items.Single(v => v.Id == original.Id);
+        Assert.Equal(15, old.AiDailyCallLimit);
+        Assert.Equal(3, old.AiExplainCallsPerTripLimit);
+        var consumer = new SubscriptionService(new UserRepository(c), new SubscriptionRepository(c),
+            new UsageEventRepository(c), new TripRepository(c), new PlanVersionFoundationPostgresTests.Clock(Now),
+            new LlmCallLogRepository(c), new FakeSystemSettingProvider());
+        Assert.Equal(new (int?, int?)[] { (3, 1), (15, 3), (30, 3) },
+            (await consumer.GetPlansAsync()).Select(p => (p.AiDailyCallLimit, p.AiExplainCallsPerTripLimit)));
+    }
+
+    [Fact]
+    public async Task AiFields_HistoricalCustomNullsRemainNullInRealRepositoryResponses()
+    {
+        await using var db = await IsolatedPlanDatabase.CreateAsync(
+            targetMigration: "20261005084944_AddTripAiExplainedAt");
+        var plan = new SubscriptionPlan { Code = "LEGACY_AI", Name = "Legacy AI", EntitlementPriority = 900 };
+        await using (var historical = db.ContextBeforeUserLockedBy())
+        {
+            historical.SubscriptionPlans.Add(plan);
+            await historical.SaveChangesAsync();
+            var version = new SubscriptionPlanVersion
+            {
+                PlanId = plan.Id, VersionNumber = 1, Price = 19000, DurationDays = 7,
+                Origin = PlanVersionOrigin.Published, PublishedAt = Now
+            };
+            historical.SubscriptionPlanVersions.Add(version);
+            await historical.SaveChangesAsync();
+            plan.CurrentVersionId = version.Id;
+            await historical.SaveChangesAsync();
+        }
+        await using var c = db.Context();
+        await c.Database.MigrateAsync();
+        var service = Service(c);
+        var list = (await service.GetPlansAsync(new())).Response!.Items.Single(p => p.Id == plan.Id);
+        var detail = (await service.GetPlanAsync(plan.Id))!;
+        var history = Assert.Single((await service.GetVersionsAsync(plan.Id, new())).Response!.Items);
+        foreach (var response in new[] { list.CurrentVersion!, detail.CurrentVersion!, history })
+        {
+            Assert.Null(response.AiDailyCallLimit);
+            Assert.Null(response.AiExplainCallsPerTripLimit);
+        }
+    }
+
+    [Fact]
     public async Task CreateCustomV1_AtomicServerFieldsFeatures_AndNoSchemaChange()
     {
         await using var db = await IsolatedPlanDatabase.CreateAsync();
@@ -400,7 +468,8 @@ public sealed class AdminPlanPostgresTests
         Assert.Empty(zero.CurrentVersion!.Features);
         Assert.Single(await service.GetFeaturesAsync());
         var consumer = new SubscriptionService(new UserRepository(c), new SubscriptionRepository(c), new UsageEventRepository(c),
-            new TripRepository(c), new PlanVersionFoundationPostgresTests.Clock(Now));
+            new TripRepository(c), new PlanVersionFoundationPostgresTests.Clock(Now),
+            new LlmCallLogRepository(c), new FakeSystemSettingProvider());
         await service.SetStatusAsync(zero.Id, true);
         Assert.Equal(new[] { "Free", "TripPass", "Membership" }, (await consumer.GetPlansAsync()).Select(p => p.Code));
     }

@@ -38,7 +38,7 @@ public sealed class PlanFeaturesPostgresTests
 
     private static SubscriptionService Service(AppDbContext c) => new(new UserRepository(c),
         new SubscriptionRepository(c), new UsageEventRepository(c), new TripRepository(c),
-        new PlanVersionFoundationPostgresTests.Clock(Now));
+        new PlanVersionFoundationPostgresTests.Clock(Now), new LlmCallLogRepository(c), new FakeSystemSettingProvider());
 
     [Fact]
     public async Task FreshMigration_SeedsOnlyMetroForThreeBaselineV1s()

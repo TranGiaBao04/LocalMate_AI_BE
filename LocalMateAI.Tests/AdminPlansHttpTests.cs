@@ -23,6 +23,51 @@ namespace LocalMateAI.Tests;
 
 public sealed class AdminPlansHttpTests
 {
+    [Fact]
+    public async Task AiResponseFields_SerializeNewAndHistoricalValuesWithoutFallback()
+    {
+        var repo = new AdminPlanServiceTests.MemoryPlans();
+        var free = repo.AddFree();
+        using var host = new Host(AdminPlanServiceTests.Service(repo));
+        host.Authenticate();
+        using var freeJson = JsonDocument.Parse(await host.Client.GetStringAsync($"/api/admin/plans/{free.Id}"));
+        var currentFree = freeJson.RootElement.GetProperty("currentVersion");
+        Assert.Equal(3, currentFree.GetProperty("aiDailyCallLimit").GetInt32());
+        Assert.Equal(1, currentFree.GetProperty("aiExplainCallsPerTripLimit").GetInt32());
+
+        var created = (await (await host.Client.PostAsJsonAsync("/api/admin/plans",
+            AdminPlanServiceTests.Create())).Content.ReadFromJsonAsync<AdminPlanResponse>())!;
+        Assert.Equal(15, created.CurrentVersion!.AiDailyCallLimit);
+        Assert.Equal(3, created.CurrentVersion.AiExplainCallsPerTripLimit);
+        var updated = (await (await host.Client.PutAsJsonAsync($"/api/admin/plans/{created.Id}",
+            AdminPlanServiceTests.Update() with { AiDailyCallLimit = 22, AiExplainCallsPerTripLimit = 2 }))
+            .Content.ReadFromJsonAsync<AdminPlanResponse>())!;
+        Assert.Equal(22, updated.CurrentVersion!.AiDailyCallLimit);
+        Assert.Equal(2, updated.CurrentVersion.AiExplainCallsPerTripLimit);
+        using var history = JsonDocument.Parse(await host.Client.GetStringAsync($"/api/admin/plans/{created.Id}/versions"));
+        var items = history.RootElement.GetProperty("items");
+        Assert.Equal(22, items[0].GetProperty("aiDailyCallLimit").GetInt32());
+        Assert.Equal(2, items[0].GetProperty("aiExplainCallsPerTripLimit").GetInt32());
+        Assert.Equal(15, items[1].GetProperty("aiDailyCallLimit").GetInt32());
+        Assert.Equal(3, items[1].GetProperty("aiExplainCallsPerTripLimit").GetInt32());
+
+        var custom = new LocalMateAI.Domain.Entities.SubscriptionPlan { Code = "LEGACY_CUSTOM", EntitlementPriority = 900 };
+        var legacy = new LocalMateAI.Domain.Entities.SubscriptionPlanVersion { PlanId = custom.Id, VersionNumber = 1 };
+        custom.CurrentVersionId = legacy.Id;
+        repo.Plans.Add(custom.Id, custom);
+        repo.Versions.Add(legacy.Id, legacy);
+        repo.Selections.Add(legacy.Id, []);
+        using var legacyJson = JsonDocument.Parse(await host.Client.GetStringAsync($"/api/admin/plans/{custom.Id}/versions"));
+        var legacyItem = legacyJson.RootElement.GetProperty("items")[0];
+        Assert.Equal(JsonValueKind.Null, legacyItem.GetProperty("aiDailyCallLimit").ValueKind);
+        Assert.Equal(JsonValueKind.Null, legacyItem.GetProperty("aiExplainCallsPerTripLimit").ValueKind);
+        using var list = JsonDocument.Parse(await host.Client.GetStringAsync("/api/admin/plans"));
+        var listed = list.RootElement.GetProperty("items").EnumerateArray()
+            .Single(p => p.GetProperty("id").GetGuid() == custom.Id).GetProperty("currentVersion");
+        Assert.Equal(JsonValueKind.Null, listed.GetProperty("aiDailyCallLimit").ValueKind);
+        Assert.Equal(JsonValueKind.Null, listed.GetProperty("aiExplainCallsPerTripLimit").ValueKind);
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

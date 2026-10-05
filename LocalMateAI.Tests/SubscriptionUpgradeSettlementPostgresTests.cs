@@ -106,7 +106,8 @@ public sealed class SubscriptionUpgradeSettlementPostgresTests
         Assert.Equal("MEMBERSHIP", effective.Plan.Code); Assert.Equal(Now.AddDays(30), effective.EffectiveUntil);
         Assert.Equal(effective.EffectiveUntil, effective.PaidThrough);
         var me = await new SubscriptionService(new UserRepository(c), new SubscriptionRepository(c),
-            new UsageEventRepository(c), new TripRepository(c), Clock).GetMySubscriptionAsync(user);
+            new UsageEventRepository(c), new TripRepository(c), Clock,
+            new LlmCallLogRepository(c), new FakeSystemSettingProvider()).GetMySubscriptionAsync(user);
         Assert.Equal("Membership", me!.Plan); Assert.Equal(Now.AddDays(30), me.EffectiveUntil);
         var admin = new AdminPlanRepository(c);
         Assert.Equal(0, (await admin.GetPlanAsync(trip.PlanId, Now))!.ActiveSubscriberCount);

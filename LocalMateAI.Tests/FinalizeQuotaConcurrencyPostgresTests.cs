@@ -236,7 +236,7 @@ public sealed class FinalizeQuotaConcurrencyPostgresTests
             new SubscriptionRepository(context),
             new UsageEventRepository(context),
             new TripRepository(context),
-            new FixedTimeProvider(Now));
+            new FixedTimeProvider(Now), new LlmCallLogRepository(context), new FakeSystemSettingProvider());
 
         var subscription = await service.GetMySubscriptionAsync(userId);
 

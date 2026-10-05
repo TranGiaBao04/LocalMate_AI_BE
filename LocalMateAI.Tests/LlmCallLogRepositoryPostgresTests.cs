@@ -38,12 +38,18 @@ public sealed class LlmCallLogRepositoryPostgresTests
             await guard.CheckAsync(user.Id, LlmCallKind.ParseRequest));
         Assert.Equal(AiUsageStatus.Allowed, (await guard.CheckAsync(other.Id, LlmCallKind.ParseRequest)).Status);
         Assert.Equal(3, await c.LlmCallLogs.CountAsync(log => log.UserId == user.Id));
+        var subscriptions = new SubscriptionService(new UserRepository(c), new SubscriptionRepository(c),
+            new UsageEventRepository(c), new TripRepository(c), clock, new LlmCallLogRepository(c),
+            new FakeSystemSettingProvider());
+        var me = (await subscriptions.GetMySubscriptionAsync(user.Id))!;
+        Assert.Equal(new LocalMateAI.Application.DTOs.Subscription.SubscriptionAiResponse(3, 3, midnight), me.Ai);
 
         clock.Now = new DateTimeOffset(midnight);
         Assert.Equal(AiUsageStatus.Allowed, (await guard.CheckAsync(user.Id, LlmCallKind.ParseRequest)).Status);
         Assert.Equal(AiUsageStatus.TripLimitReached,
             (await guard.CheckAsync(user.Id, LlmCallKind.Explain, trip.Id)).Status);
         Assert.Equal(3, await c.LlmCallLogs.CountAsync(log => log.UserId == user.Id));
+        Assert.Equal(0, (await subscriptions.GetMySubscriptionAsync(user.Id))!.Ai.DailyUsed);
     }
 
     private sealed class MutableClock : TimeProvider

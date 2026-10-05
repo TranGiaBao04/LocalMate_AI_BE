@@ -10,7 +10,9 @@ public sealed class SubscriptionService(
     ISubscriptionRepository subscriptionRepository,
     IUsageEventRepository usageEventRepository,
     ITripRepository tripRepository,
-    TimeProvider timeProvider) : ISubscriptionService
+    TimeProvider timeProvider,
+    ILlmCallLogRepository llmCallLogs,
+    ISystemSettingProvider settings) : ISubscriptionService
 {
     public async Task<IReadOnlyList<SubscriptionPlanResponse>> GetPlansAsync(CancellationToken cancellationToken = default)
     {
@@ -25,6 +27,8 @@ public sealed class SubscriptionService(
             result.Add(new(PlanIdentity.PublicCode(plan.Code), version.Price, version.DurationDays,
                 version.GenerateLimit, version.SavedTripLimit)
             {
+                AiDailyCallLimit = version.AiDailyCallLimit,
+                AiExplainCallsPerTripLimit = version.AiExplainCallsPerTripLimit,
                 Features = features.Select(f => new SubscriptionFeatureResponse(f.Code, f.Name, f.Description)).ToArray()
             });
         }
@@ -47,12 +51,16 @@ public sealed class SubscriptionService(
         var generateUsed = await EffectiveSubscriptionResolver.CountGenerateAsync(
             usageEventRepository, userId, effective, nowUtc, cancellationToken);
         var savedTripsUsed = await tripRepository.CountNormalFinalizedByUserAsync(userId, cancellationToken);
+        var dayStartUtc = VietnamTime.StartOfDayUtc(nowUtc);
+        var dailyUsed = await llmCallLogs.CountForUserSinceAsync(userId, dayStartUtc, cancellationToken);
+        var dailyLimit = await AiEntitlementLimits.DailyAsync(plan, settings, cancellationToken);
 
         return new SubscriptionMeResponse(
             PlanIdentity.PublicCode(effective.Plan.Code),
             effective.PaidThrough,
             new SubscriptionUsageResponse(generateUsed, plan.GenerateLimit, effective.EffectiveUntil ?? month.NextStartUtc),
-            new SubscriptionSavedTripsResponse(savedTripsUsed, plan.SavedTripLimit))
+            new SubscriptionSavedTripsResponse(savedTripsUsed, plan.SavedTripLimit),
+            new SubscriptionAiResponse(dailyUsed, dailyLimit, dayStartUtc.AddDays(1)))
         { EffectiveUntil = effective.EffectiveUntil };
     }
 }

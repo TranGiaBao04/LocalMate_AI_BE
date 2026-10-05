@@ -4,11 +4,14 @@ public sealed record SubscriptionUsageResponse(int GenerateUsed, int? GenerateLi
 
 public sealed record SubscriptionSavedTripsResponse(int Used, int? Limit);
 
+public sealed record SubscriptionAiResponse(int DailyUsed, int DailyLimit, DateTime ResetAt);
+
 public sealed record SubscriptionMeResponse(
     string Plan,
     DateTime? EndsAt,
     SubscriptionUsageResponse Usage,
-    SubscriptionSavedTripsResponse SavedTrips)
+    SubscriptionSavedTripsResponse SavedTrips,
+    SubscriptionAiResponse Ai)
 {
     public DateTime? EffectiveUntil { get; init; }
 }

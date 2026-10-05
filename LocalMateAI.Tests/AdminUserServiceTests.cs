@@ -48,7 +48,8 @@ public sealed class AdminUserServiceTests
     {
         users.Detail = Detail();
         subscriptions.Response = new SubscriptionMeResponse("TripPass", null,
-            new SubscriptionUsageResponse(1, null, DateTime.UtcNow), new SubscriptionSavedTripsResponse(2, 3));
+            new SubscriptionUsageResponse(1, null, DateTime.UtcNow), new SubscriptionSavedTripsResponse(2, 3),
+            new SubscriptionAiResponse(0, 15, DateTime.UtcNow));
 
         var detail = await Service().GetUserAsync(UserId, Admin);
 
@@ -125,7 +126,8 @@ public sealed class AdminUserServiceTests
     {
         users.Detail = Detail() with { ManagesRoles = true, Status = UserStatus.Active };
         subscriptions.Response = new SubscriptionMeResponse("Free", null,
-            new SubscriptionUsageResponse(0, 1, DateTime.UtcNow), new SubscriptionSavedTripsResponse(0, 1));
+            new SubscriptionUsageResponse(0, 1, DateTime.UtcNow), new SubscriptionSavedTripsResponse(0, 1),
+            new SubscriptionAiResponse(0, 3, DateTime.UtcNow));
 
         var asAdmin = await Service().GetUserAsync(UserId, Admin);
         var asSupport = await Service().GetUserAsync(UserId, SupportAgent);

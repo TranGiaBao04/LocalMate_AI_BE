@@ -93,7 +93,8 @@ public sealed class SingleItineraryPostgresTests
         Assert.Equal(FinalizeTripResultStatus.Success, (await Finalize(c).ExecuteAsync(u.Id, secondPurchased.Id,
             new FinalizeTripRequest { FundingSource = "SingleEntitlement", EntitlementId = secondGrant.Id })).Status);
         var me = (await new SubscriptionService(new UserRepository(c), new SubscriptionRepository(c),
-            new UsageEventRepository(c), new TripRepository(c), Clock).GetMySubscriptionAsync(u.Id))!;
+            new UsageEventRepository(c), new TripRepository(c), Clock,
+            new LlmCallLogRepository(c), new FakeSystemSettingProvider()).GetMySubscriptionAsync(u.Id))!;
         Assert.Equal(1, me.SavedTrips.Used); Assert.Equal(1, me.SavedTrips.Limit);
         var availability = (await Purchases(c, new()).GetAvailabilityAsync(u.Id)).Response!;
         Assert.Equal(1, availability.NormalSavedTripsUsed); Assert.False(availability.NormalFinalizeAvailable);

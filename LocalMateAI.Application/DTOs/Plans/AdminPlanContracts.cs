@@ -47,7 +47,11 @@ public sealed record AdminPlanFeatureResponse(Guid Id, string Code, string Name,
 public sealed record AdminPlanVersionResponse(
     Guid Id, int VersionNumber, decimal Price, int? DurationDays, int? GenerateLimit, int? SavedTripLimit,
     string Origin, DateTime? PublishedAt, DateTime CreatedAt,
-    IReadOnlyList<AdminPlanFeatureResponse> Features, bool IsCurrent);
+    IReadOnlyList<AdminPlanFeatureResponse> Features, bool IsCurrent)
+{
+    public int? AiDailyCallLimit { get; init; }
+    public int? AiExplainCallsPerTripLimit { get; init; }
+}
 
 public sealed record AdminPlanResponse(
     Guid Id, string Code, string Name, int EntitlementPriority, bool IsSystem, bool IsActive,
