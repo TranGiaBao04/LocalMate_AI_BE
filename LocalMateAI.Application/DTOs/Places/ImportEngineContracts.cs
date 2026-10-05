@@ -30,7 +30,9 @@ public sealed record PlaceImportPreviewRowResult(
     string? RawStations,
     string? RawOpenHours,
     string? RawTags,
-    string? RawDescription
+    string? RawDescription,
+    string? RawImageUrl,
+    string? ImageUrl
 );
 
 public sealed record PlaceImportPreviewResponse(
