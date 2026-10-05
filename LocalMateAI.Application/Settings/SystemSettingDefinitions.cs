@@ -35,6 +35,8 @@ public static class SystemSettingKeys
     public const string MotorbikeSpeedKmH = "Travel.MotorbikeSpeedKmH";
     public const string RoadDetourFactor = "Travel.RoadDetourFactor";
     public const string AutoWalkingMaxMeters = "Travel.AutoWalkingMaxMeters";
+    public const string SemanticMinSimilarityPercent = "Semantic.MinSimilarityPercent";
+    public const string SemanticMaxGapFromTopPercent = "Semantic.MaxGapFromTopPercent";
 }
 
 /// <summary>
@@ -84,7 +86,15 @@ public static class SystemSettingDefinitions
             SystemSettingValueType.Decimal, "lần", DefaultValue: 1.3m, MinValue: 1m, MaxValue: 2m),
         new(SystemSettingKeys.AutoWalkingMaxMeters, "Travel", "Ngưỡng tự chọn đi bộ",
             "Ở chế độ Tự động, đoạn đường bộ không quá ngưỡng này thì tính đi bộ, xa hơn thì tính xe máy.",
-            SystemSettingValueType.Integer, "m", DefaultValue: 700, MinValue: 100, MaxValue: 2_000)
+            SystemSettingValueType.Integer, "m", DefaultValue: 700, MinValue: 100, MaxValue: 2_000),
+        new(SystemSettingKeys.SemanticMinSimilarityPercent, "Semantic", "Độ tương đồng tối thiểu",
+            "Khi tìm theo nghĩa, nếu địa điểm khớp nhất có độ tương đồng với câu của người dùng thấp hơn mức này "
+            + "thì coi như không có kết quả liên quan. Đặt cao hơn thì ít gợi ý sai nhưng dễ bỏ sót.",
+            SystemSettingValueType.Integer, "%", DefaultValue: 66, MinValue: 0, MaxValue: 100),
+        new(SystemSettingKeys.SemanticMaxGapFromTopPercent, "Semantic", "Khoảng cách tối đa tới kết quả khớp nhất",
+            "Chỉ lấy những địa điểm có độ tương đồng thấp hơn địa điểm khớp nhất không quá số này. "
+            + "Đặt nhỏ hơn thì kết quả gọn hơn; 0 = chỉ lấy địa điểm khớp nhất.",
+            SystemSettingValueType.Integer, "điểm %", DefaultValue: 4, MinValue: 0, MaxValue: 100)
     ];
 
     private static SystemSettingDefinition VisitMinutes(string key, string categoryLabel, int defaultMinutes) =>

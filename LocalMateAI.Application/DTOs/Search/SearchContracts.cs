@@ -24,7 +24,8 @@ public enum SearchMatchField
 {
     Name,
     Tag,
-    Address
+    Address,
+    Semantic
 }
 
 public sealed record SearchStationItem(Guid Id, int Order, string Name, int PlaceCount);
