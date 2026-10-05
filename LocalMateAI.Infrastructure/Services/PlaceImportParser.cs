@@ -59,6 +59,7 @@ public sealed class PlaceImportParser : IPlaceImportParser
             var openHours = GetVal("Khung giờ mở cửa", "Giờ mở cửa", "OpenHours", "OpeningHours");
             var tags = GetVal("Tags (cách nhau bởi dấu phẩy)", "Tags", "Thẻ");
             var description = GetVal("Mô tả chi tiết", "Mô tả", "Description");
+            var imageUrl = GetVal("Link ảnh đại diện", "Ảnh đại diện", "Link ảnh", "ImageUrl", "Image", "Picture");
 
             // Skip completely empty rows
             if (string.IsNullOrWhiteSpace(name) && string.IsNullOrWhiteSpace(address) && string.IsNullOrWhiteSpace(category))
@@ -79,7 +80,8 @@ public sealed class PlaceImportParser : IPlaceImportParser
                 RawStations: stations,
                 RawOpenHours: openHours,
                 RawTags: tags,
-                RawDescription: description
+                RawDescription: description,
+                RawImageUrl: imageUrl
             ));
         }
 

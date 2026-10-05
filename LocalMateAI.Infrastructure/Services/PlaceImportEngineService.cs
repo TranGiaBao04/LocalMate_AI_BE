@@ -100,7 +100,9 @@ public sealed class PlaceImportEngineService(
                     if (PlaceDuplicateMatcher.IsSimilarName(candidate.Name, raw.RawName))
                     {
                         isDuplicateCandidate = true;
-                        warnings.Add($"Nghi trùng với địa điểm '{candidate.Name}' trong hệ thống (khoảng cách {candidate.DistanceMeters:F1}m).");
+                        var msg = $"Nghi trùng với địa điểm '{candidate.Name}' trong hệ thống (khoảng cách {candidate.DistanceMeters:F1}m).";
+                        warnings.Add(msg);
+                        errors.Add(msg);
                         break;
                     }
                 }
@@ -132,7 +134,9 @@ public sealed class PlaceImportEngineService(
                 RawStations: raw.RawStations,
                 RawOpenHours: raw.RawOpenHours,
                 RawTags: raw.RawTags,
-                RawDescription: raw.RawDescription
+                RawDescription: raw.RawDescription,
+                RawImageUrl: raw.RawImageUrl,
+                ImageUrl: !string.IsNullOrWhiteSpace(raw.RawImageUrl) ? raw.RawImageUrl.Trim() : null
             ));
         }
 
@@ -210,8 +214,10 @@ public sealed class PlaceImportEngineService(
                     EstimatedCostMin = row.EstimatedCostMin.HasValue ? (decimal)row.EstimatedCostMin.Value : 0m,
                     EstimatedCostMax = row.EstimatedCostMax.HasValue ? (decimal)row.EstimatedCostMax.Value : 0m,
                     Description = string.IsNullOrWhiteSpace(row.RawDescription) ? null : row.RawDescription.Trim(),
+                    ImageUrl = !string.IsNullOrWhiteSpace(row.ImageUrl) ? row.ImageUrl.Trim() : null,
                     Status = PlaceStatus.Active,
-                    IsVerified = false
+                    IsVerified = false,
+                    OpeningHours = BuildOpeningHours(row.RawOpenHours)
                 };
 
                 await placeRepository.AddAsync(place, cancellationToken);
@@ -270,12 +276,12 @@ public sealed class PlaceImportEngineService(
         var sb = new StringBuilder();
         // Add UTF-8 BOM for Excel compatibility
         sb.Append('\uFEFF');
-        sb.AppendLine("Dòng,Tên địa điểm,Địa chỉ,Danh mục,Tọa độ,Giá từ,Giá đến,Ga Metro,Lý do lỗi");
+        sb.AppendLine("Dòng,Tên địa điểm,Địa chỉ,Danh mục,Tọa độ,Giá từ,Giá đến,Ga Metro,Link ảnh đại diện,Lý do lỗi");
 
         foreach (var r in errorRows)
         {
             var reasons = string.Join(" | ", r.Errors);
-            sb.AppendLine($"\"{r.RowNumber}\",\"{EscapeCsv(r.RawName)}\",\"{EscapeCsv(r.RawAddress)}\",\"{EscapeCsv(r.RawCategory)}\",\"{EscapeCsv(r.RawCoordinates)}\",\"{EscapeCsv(r.RawPriceMin)}\",\"{EscapeCsv(r.RawPriceMax)}\",\"{EscapeCsv(r.RawStations)}\",\"{EscapeCsv(reasons)}\"");
+            sb.AppendLine($"\"{r.RowNumber}\",\"{EscapeCsv(r.RawName)}\",\"{EscapeCsv(r.RawAddress)}\",\"{EscapeCsv(r.RawCategory)}\",\"{EscapeCsv(r.RawCoordinates)}\",\"{EscapeCsv(r.RawPriceMin)}\",\"{EscapeCsv(r.RawPriceMax)}\",\"{EscapeCsv(r.RawStations)}\",\"{EscapeCsv(r.RawImageUrl)}\",\"{EscapeCsv(reasons)}\"");
         }
 
         return Encoding.UTF8.GetBytes(sb.ToString());
@@ -284,4 +290,35 @@ public sealed class PlaceImportEngineService(
     private static string GetSessionCacheKey(string importId) => $"import_session_{importId}";
     private static string GetLockCacheKey(string importId) => $"import_lock_{importId}";
     private static string EscapeCsv(string? val) => (val ?? string.Empty).Replace("\"", "\"\"");
+
+    private static List<PlaceOpeningHour> BuildOpeningHours(string? rawOpenHours)
+    {
+        var days = Enum.GetValues<DayOfWeek>();
+        var defaultOpen = new TimeOnly(8, 0);
+        var defaultClose = new TimeOnly(22, 0);
+
+        var open = defaultOpen;
+        var close = defaultClose;
+
+        if (!string.IsNullOrWhiteSpace(rawOpenHours))
+        {
+            var parts = rawOpenHours.Split(new[] { "-", "–", "—", "to", "Đến", "đến" }, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 2)
+            {
+                if (TimeOnly.TryParse(parts[0], out var parsedOpen) && TimeOnly.TryParse(parts[1], out var parsedClose) && parsedOpen != parsedClose)
+                {
+                    open = parsedOpen;
+                    close = parsedClose;
+                }
+            }
+        }
+
+        return days.Select(day => new PlaceOpeningHour
+        {
+            DayOfWeek = day,
+            OpenTime = open,
+            CloseTime = close,
+            IsClosed = false
+        }).ToList();
+    }
 }

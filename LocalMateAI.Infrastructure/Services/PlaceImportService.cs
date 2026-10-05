@@ -39,7 +39,8 @@ public sealed class PlaceImportService : IPlaceImportService
             EstimatedCostMax = 100000,
             MetroStationName = "Ba Son",
             Description = "Quán phở truyền thống nổi tiếng gần ga Ba Son",
-            OpeningHours = "Mon-Sun 06:00-21:00"
+            OpeningHours = "Mon-Sun 06:00-21:00",
+            ImageUrl = "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=500"
         },
         new()
         {
@@ -52,7 +53,8 @@ public sealed class PlaceImportService : IPlaceImportService
             EstimatedCostMax = 65000,
             MetroStationName = "Ba Son",
             Description = "Quán cà phê trứng đậm đà view sông Sài Gòn",
-            OpeningHours = "Mon-Sun 07:00-22:30"
+            OpeningHours = "Mon-Sun 07:00-22:30",
+            ImageUrl = "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=500"
         },
         new()
         {
@@ -65,7 +67,8 @@ public sealed class PlaceImportService : IPlaceImportService
             EstimatedCostMax = 30000,
             MetroStationName = "Ba Son",
             Description = "Bảo tàng trưng bày di sản lịch sử và văn hóa Việt Nam",
-            OpeningHours = "Tue-Sun 08:00-17:00"
+            OpeningHours = "Tue-Sun 08:00-17:00",
+            ImageUrl = "https://images.unsplash.com/photo-1565008447742-97f6f38c985c?w=500"
         }
     ];
 }

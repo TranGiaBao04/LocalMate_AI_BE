@@ -12,6 +12,7 @@ public sealed class PlaceImportTemplateRow
     public string? MetroStationName { get; set; }
     public string? Description { get; set; }
     public string? OpeningHours { get; set; }
+    public string? ImageUrl { get; set; }
 }
 
 public sealed record PlaceImportTemplateFile(

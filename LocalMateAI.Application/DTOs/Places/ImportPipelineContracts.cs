@@ -15,7 +15,8 @@ public sealed record ParsedPlaceRow(
     string RawStations,
     string RawOpenHours,
     string RawTags,
-    string RawDescription
+    string RawDescription,
+    string RawImageUrl
 );
 
 public sealed record PriceNormalizationResult(
