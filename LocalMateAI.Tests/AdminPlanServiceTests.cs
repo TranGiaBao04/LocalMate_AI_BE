@@ -17,9 +17,10 @@ public sealed class AdminPlanServiceTests
         new AdminPlanVersionsQueryValidator(), new PlanVersionFoundationPostgresTests.Clock(Now));
     internal static CreateAdminPlanRequest Create(string code = "EXPLORER", int priority = 300) => new()
     { Code = code, Name = "Explorer", EntitlementPriority = priority, Price = 49000, DurationDays = 10,
-        GenerateLimit = 2, SavedTripLimit = 4, FeatureIds = [Metro] };
+        GenerateLimit = 2, SavedTripLimit = 4, AiDailyCallLimit = 15, AiExplainCallsPerTripLimit = 3, FeatureIds = [Metro] };
     internal static UpdateAdminPlanRequest Update() => new()
-    { Name = "Explorer", Price = 49000, DurationDays = 10, GenerateLimit = 2, SavedTripLimit = 4, FeatureIds = [Metro] };
+    { Name = "Explorer", Price = 49000, DurationDays = 10, GenerateLimit = 2, SavedTripLimit = 4,
+        AiDailyCallLimit = 15, AiExplainCallsPerTripLimit = 3, FeatureIds = [Metro] };
 
     [Fact]
     public async Task Create_ServerOwnsIdentityVersionAndInactiveState()
@@ -152,7 +153,7 @@ public sealed class AdminPlanServiceTests
         var free = repo.AddFree();
         var service = Service(repo);
         var result = await service.UpdateAsync(free.Id, new() { Name = "Free", Price = 0, DurationDays = null,
-            GenerateLimit = 3, SavedTripLimit = 1, FeatureIds = [] });
+            GenerateLimit = 3, SavedTripLimit = 1, AiDailyCallLimit = 3, AiExplainCallsPerTripLimit = 1, FeatureIds = [] });
         Assert.Equal(2, result.Response!.CurrentVersion!.VersionNumber);
         Assert.Equal(AdminPlanResultStatus.FreeCannotDeactivate, (await service.SetStatusAsync(free.Id, false)).Status);
         Assert.Equal(AdminPlanResultStatus.SystemPlanLocked, (await service.DeleteAsync(free.Id)).Status);
@@ -266,6 +267,7 @@ public sealed class AdminPlanServiceTests
             var v = new SubscriptionPlanVersion { PlanId = plan.Id,
                 VersionNumber = Versions.Values.Count(v => v.PlanId == plan.Id) + 1, Price = terms.Price,
                 DurationDays = terms.DurationDays, GenerateLimit = terms.GenerateLimit, SavedTripLimit = terms.SavedTripLimit,
+                AiDailyCallLimit = terms.AiDailyCallLimit, AiExplainCallsPerTripLimit = terms.AiExplainCallsPerTripLimit,
                 Origin = PlanVersionOrigin.Published, PublishedAt = now };
             Versions.Add(v.Id, v); Selections.Add(v.Id, terms.FeatureIds.ToArray()); plan.CurrentVersionId = v.Id;
             Publications++; return Task.CompletedTask;

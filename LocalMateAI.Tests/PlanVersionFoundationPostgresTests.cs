@@ -411,6 +411,8 @@ public sealed class PlanVersionFoundationPostgresTests
             DurationDays = days,
             GenerateLimit = generate,
             SavedTripLimit = saved,
+            AiDailyCallLimit = 15,
+            AiExplainCallsPerTripLimit = 3,
             Origin = PlanVersionOrigin.Published,
             PublishedAt = Now
         };

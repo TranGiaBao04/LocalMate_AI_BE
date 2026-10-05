@@ -307,7 +307,7 @@ public sealed class AdminPlanPostgresTests
         Assert.Equal(AdminPlanResultStatus.Success, (await service.DeleteAsync(bare.Id)).Status);
         Assert.Null(await service.GetPlanAsync(bare.Id));
         var edited = await service.UpdateAsync(free, new() { Name = "Free", Price = 0, DurationDays = null,
-            GenerateLimit = 2, SavedTripLimit = 1, FeatureIds = [] });
+            GenerateLimit = 2, SavedTripLimit = 1, AiDailyCallLimit = 3, AiExplainCallsPerTripLimit = 1, FeatureIds = [] });
         Assert.Equal(2, edited.Response!.CurrentVersion!.VersionNumber);
         var user = await PlanVersionFoundationPostgresTests.UserAsync(c);
         var resolved = await EffectiveSubscriptionResolver.ResolveAsync(new SubscriptionRepository(c), user.Id, Now);

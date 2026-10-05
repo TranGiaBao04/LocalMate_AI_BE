@@ -10,6 +10,9 @@ public sealed class SubscriptionPlanVersion : BaseEntity
     public int? DurationDays { get; init; }
     public int? GenerateLimit { get; init; }
     public int? SavedTripLimit { get; init; }
+    // Null is legacy AI metadata, not unlimited; zero is an explicit allowance.
+    public int? AiDailyCallLimit { get; init; }
+    public int? AiExplainCallsPerTripLimit { get; init; }
     public PlanVersionOrigin Origin { get; init; }
     public DateTime? PublishedAt { get; init; }
 }

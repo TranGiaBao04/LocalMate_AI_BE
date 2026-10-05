@@ -10,6 +10,8 @@ public abstract record AdminPlanTermsRequest
     public int? DurationDays { get; init; }
     public int? GenerateLimit { get; init; }
     public int? SavedTripLimit { get; init; }
+    public int? AiDailyCallLimit { get; init; }
+    public int? AiExplainCallsPerTripLimit { get; init; }
     public IReadOnlyList<Guid>? FeatureIds { get; init; } = [];
 }
 
@@ -52,7 +54,7 @@ public sealed record AdminPlanResponse(
     DateTime CreatedAt, DateTime UpdatedAt, AdminPlanVersionResponse? CurrentVersion, int ActiveSubscriberCount);
 
 public sealed record PlanVersionTerms(decimal Price, int? DurationDays, int? GenerateLimit,
-    int? SavedTripLimit, IReadOnlyList<Guid> FeatureIds);
+    int? SavedTripLimit, int AiDailyCallLimit, int AiExplainCallsPerTripLimit, IReadOnlyList<Guid> FeatureIds);
 
 public enum AdminPlanResultStatus
 {

@@ -24,6 +24,18 @@ namespace LocalMateAI.Tests;
 public sealed class AdminPlansHttpTests
 {
     [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task MissingAiPublicationTerms_KeepExistingValidationErrorCode(bool daily)
+    {
+        using var host = new Host(AdminPlanServiceTests.Service(new AdminPlanServiceTests.MemoryPlans()));
+        host.Authenticate();
+        var request = daily ? AdminPlanServiceTests.Create() with { AiDailyCallLimit = null }
+            : AdminPlanServiceTests.Create() with { AiExplainCallsPerTripLimit = null };
+        await Problem(await host.Client.PostAsJsonAsync("/api/admin/plans", request), 400, "invalid_plan_data");
+    }
+
+    [Theory]
     [InlineData("GET", "")]
     [InlineData("GET", "/features")]
     [InlineData("GET", "/11111111-1111-1111-1111-111111111111")]

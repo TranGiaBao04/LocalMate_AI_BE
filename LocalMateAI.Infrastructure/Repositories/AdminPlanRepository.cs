@@ -148,6 +148,7 @@ public sealed class AdminPlanRepository(AppDbContext context) : IAdminPlanReposi
         {
             PlanId = plan.Id, VersionNumber = checked(latest + 1), Price = terms.Price, DurationDays = terms.DurationDays,
             GenerateLimit = terms.GenerateLimit, SavedTripLimit = terms.SavedTripLimit,
+            AiDailyCallLimit = terms.AiDailyCallLimit, AiExplainCallsPerTripLimit = terms.AiExplainCallsPerTripLimit,
             Origin = PlanVersionOrigin.Published, PublishedAt = nowUtc
         };
         context.SubscriptionPlanVersions.Add(version);
