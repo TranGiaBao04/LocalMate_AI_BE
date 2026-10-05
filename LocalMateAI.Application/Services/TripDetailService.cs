@@ -149,7 +149,8 @@ public sealed class TripDetailService(
                     distanceMeters,
                     walkingMinutes,
                     motorbikeMinutes,
-                    leg);
+                    leg,
+                    item.GooglePlaceId);
             })
             .ToList();
 

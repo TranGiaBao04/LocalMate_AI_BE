@@ -17,4 +17,5 @@ public sealed record PlaceDetailResponse(
     decimal EstimatedCostMax,
     string? ImageUrl,
     IReadOnlyList<TagResponse> Tags,
-    NearestStationResult NearestStation);
+    NearestStationResult NearestStation,
+    string? GooglePlaceId = null); // mã địa điểm Google Maps; null thì FE mở bản đồ theo toạ độ

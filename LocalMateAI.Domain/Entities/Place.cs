@@ -23,6 +23,10 @@ public sealed class Place : BaseEntity
     public decimal EstimatedCostMax { get; set; }
     public string? ImageUrl { get; set; }
 
+    // Mã địa điểm của Google Maps (place id, dạng "ChIJ..."). Có thì FE mở đúng thẻ địa điểm trên Google Maps;
+    // không có (địa điểm không có trên Google) thì FE mở theo toạ độ.
+    public string? GooglePlaceId { get; set; }
+
     public ICollection<PlaceTag> Tags { get; set; } = [];
     public ICollection<PlaceImage> Images { get; set; } = [];
     public ICollection<PlaceOpeningHour> OpeningHours { get; set; } = [];

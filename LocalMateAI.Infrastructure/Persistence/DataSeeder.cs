@@ -132,7 +132,8 @@ public static class DataSeeder
             Category = Enum.Parse<PlaceCategory>(record.Category),
             Status = PlaceStatus.Active,
             EstimatedCostMin = record.EstimatedCostMin,
-            EstimatedCostMax = record.EstimatedCostMax
+            EstimatedCostMax = record.EstimatedCostMax,
+            GooglePlaceId = record.GooglePlaceId
         });
 
         await context.Places.AddRangeAsync(places, cancellationToken);
@@ -258,7 +259,8 @@ public static class DataSeeder
         decimal EstimatedCostMin,
         decimal EstimatedCostMax,
         string Description,
-        string[]? Tags = null);
+        string[]? Tags = null,
+        string? GooglePlaceId = null);
 
     private sealed record CuratedItinerarySeedRecord(
         string Title,

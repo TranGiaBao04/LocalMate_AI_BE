@@ -1,3 +1,4 @@
+using LocalMateAI.Application.DTOs.Places;
 using LocalMateAI.Application.DTOs.Trips;
 using LocalMateAI.Application.Services;
 using LocalMateAI.Application.Settings;
@@ -65,6 +66,38 @@ public sealed class TripStationReadPostgresTests
         var copyDetail = await repository.GetOwnedDetailAsync(copy!.Id, seed.UserId);
         Assert.Equal("muốn chỗ yên tĩnh", copyDetail!.Note);
         Assert.True(copyDetail.NoteApplied);
+    }
+
+    [Fact]
+    public async Task TripDetail_AndPlaceDetail_ReturnTheGooglePlaceId()
+    {
+        await using var db = await IsolatedPlanDatabase.CreateAsync();
+        await using var c = db.Context();
+        var seed = await SeedAsync(c, TravelMode.Auto);
+        await c.Places.Where(place => place.Name == "Gần ga 1").ExecuteUpdateAsync(setters => setters
+            .SetProperty(place => place.GooglePlaceId, "ChIJzaevQMcvdTERYE3UhLKg5NE"));
+
+        var detail = await new TripRepository(c).GetOwnedDetailAsync(seed.TripId, seed.UserId);
+
+        // Địa điểm chưa có mã Google (không có trên Google Maps) thì trả null để FE mở theo toạ độ.
+        Assert.Equal(
+            ["ChIJzaevQMcvdTERYE3UhLKg5NE", null, null],
+            detail!.Items.Select(item => item.GooglePlaceId));
+
+        var placeRepository = new PlaceRepository(c);
+        var withId = await placeRepository.GetActiveByIdAsync(detail.Items[0].PlaceId);
+        var withoutId = await placeRepository.GetActiveByIdAsync(detail.Items[1].PlaceId);
+        Assert.Equal("ChIJzaevQMcvdTERYE3UhLKg5NE", withId!.GooglePlaceId);
+        Assert.Null(withoutId!.GooglePlaceId);
+
+        // Ba đường đọc của trang admin (chi tiết, danh sách đầy đủ, danh sách phân trang) cũng trả mã.
+        var adminDetail = await placeRepository.GetAdminByIdAsync(detail.Items[0].PlaceId);
+        var adminAll = await placeRepository.GetAllForAdminAsync();
+        var adminPaged = await placeRepository.GetPagedForAdminAsync(new AdminPlaceQuery());
+        Assert.Equal("ChIJzaevQMcvdTERYE3UhLKg5NE", adminDetail!.GooglePlaceId);
+        Assert.Equal("ChIJzaevQMcvdTERYE3UhLKg5NE", adminAll.Single(place => place.Name == "Gần ga 1").GooglePlaceId);
+        Assert.Equal("ChIJzaevQMcvdTERYE3UhLKg5NE", adminPaged.Items.Single(place => place.Name == "Gần ga 1").GooglePlaceId);
+        Assert.Equal(3, adminAll.Count(place => place.GooglePlaceId is null));
     }
 
     [Fact]
