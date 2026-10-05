@@ -15,6 +15,7 @@ using LocalMateAI.Application.Settings;
 using LocalMateAI.Application.Validators.Trips;
 using LocalMateAI.Domain.Enums;
 using LocalMateAI.Infrastructure.Email;
+using LocalMateAI.Infrastructure.Embeddings;
 using LocalMateAI.Infrastructure.Metro;
 using LocalMateAI.Infrastructure.Persistence;
 using LocalMateAI.Infrastructure.Payments;
@@ -134,6 +135,8 @@ builder.Services.Configure<OtpOptions>(builder.Configuration.GetSection(OtpOptio
 builder.Services.AddSingleton<IValidateOptions<OtpOptions>, OtpOptionsValidator>();
 builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection(SmtpOptions.SectionName));
 builder.Services.AddSingleton<IValidateOptions<SmtpOptions>, SmtpOptionsValidator>();
+builder.Services.Configure<EmbeddingOptions>(builder.Configuration.GetSection(EmbeddingOptions.SectionName));
+builder.Services.AddHttpClient<IEmbeddingClient, GeminiEmbeddingClient>(client => client.Timeout = TimeSpan.FromSeconds(30));
 builder.Services.Configure<PasswordHasherOptions>(options =>
 {
     options.CompatibilityMode = PasswordHasherCompatibilityMode.IdentityV3;
@@ -234,6 +237,10 @@ builder.Services.AddScoped<IPlaceQueryService, PlaceQueryService>();
 builder.Services.AddScoped<ISearchRepository, SearchRepository>();
 builder.Services.AddScoped<INotificationRepository, NotificationRepository>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddScoped<IPlaceEmbeddingRepository, PlaceEmbeddingRepository>();
+builder.Services.AddScoped<IPlaceEmbeddingSyncService, PlaceEmbeddingSyncService>();
+builder.Services.AddScoped<ISemanticPlaceScorer, SemanticPlaceScorer>();
+builder.Services.AddHostedService<PlaceEmbeddingSyncWorker>();
 builder.Services.AddScoped<ISearchService, SearchService>();
 builder.Services.AddScoped<IAdminPlaceService, AdminPlaceService>();
 builder.Services.AddScoped<IPlaceDistanceValidationService, PlaceDistanceValidationService>();
