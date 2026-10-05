@@ -314,6 +314,22 @@ public sealed class TripDetailServiceTests
     }
 
     [Fact]
+    public async Task Get_ReturnsNoteAndWhetherItWasApplied()
+    {
+        var tripId = Guid.NewGuid();
+        var withNote = Model(tripId, null, new TimeOnly(8, 20)) with { Note = "muốn chỗ yên tĩnh", NoteApplied = true };
+        var withoutNote = Model(tripId, null, new TimeOnly(8, 20));
+
+        var first = (await new TripDetailService(new FakeUserRepository(UserId), new FakeTripRepository(withNote), new FakeSystemSettingProvider(), new StubMetroTimetableSource()).GetAsync(UserId, tripId)).Response!;
+        var second = (await new TripDetailService(new FakeUserRepository(UserId), new FakeTripRepository(withoutNote), new FakeSystemSettingProvider(), new StubMetroTimetableSource()).GetAsync(UserId, tripId)).Response!;
+
+        Assert.Equal("muốn chỗ yên tĩnh", first.Note);
+        Assert.True(first.NoteApplied);
+        Assert.Null(second.Note);
+        Assert.False(second.NoteApplied);
+    }
+
+    [Fact]
     public async Task Get_TripWithoutPlannedStart_LeavesNewFieldsNullAndTotalsUnchanged()
     {
         var tripId = Guid.NewGuid();

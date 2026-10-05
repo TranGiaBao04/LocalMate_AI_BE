@@ -105,23 +105,56 @@ public sealed class SearchRepository(AppDbContext dbContext) : ISearchRepository
             .ToListAsync(cancellationToken);
 
         return rows
-            .Select(row => new SearchPlaceItem(
-                row.Id,
-                row.Name,
-                row.Address,
-                row.Category,
-                row.ImageUrl,
-                row.EstimatedCostMin,
-                row.EstimatedCostMax,
-                row.StationOrder is { } order && row.StationName is { } name ? new StationRefDto(order, name) : null,
-                row.MatchRank switch
-                {
-                    2 => SearchMatchField.Tag,
-                    3 => SearchMatchField.Address,
-                    _ => SearchMatchField.Name
-                }))
+            .Select(row => ToItem(row, row.MatchRank switch
+            {
+                2 => SearchMatchField.Tag,
+                3 => SearchMatchField.Address,
+                _ => SearchMatchField.Name
+            }))
             .ToList();
     }
+
+    public async Task<IReadOnlyList<SearchPlaceItem>> GetSemanticPlacesAsync(
+        IReadOnlyCollection<Guid> placeIds,
+        double clusterRadiusMeters,
+        CancellationToken cancellationToken = default)
+    {
+        var ids = placeIds.ToArray();
+
+        var rows = await dbContext.Database.SqlQuery<PlaceRow>(
+            $"""
+             SELECT p."Id", p."Name", p."Address", p."Category", p."ImageUrl",
+                    p."EstimatedCostMin", p."EstimatedCostMax", 0 AS "MatchRank",
+                    CASE WHEN nearest."Distance" <= {clusterRadiusMeters} THEN nearest."Order" END AS "StationOrder",
+                    CASE WHEN nearest."Distance" <= {clusterRadiusMeters} THEN nearest."Name" END AS "StationName"
+             FROM "Places" p
+             LEFT JOIN LATERAL (
+                 SELECT ms."Order", ms."Name",
+                        ST_Distance(p."Location"::geography, ms."Location"::geography) AS "Distance"
+                 FROM "MetroStations" ms
+                 ORDER BY "Distance", ms."Order", ms."Name", ms."Id"
+                 LIMIT 1
+             ) nearest ON true
+             WHERE p."Id" = ANY({ids})
+               AND p."Status" = 'Active'
+               AND p."DeletedAt" IS NULL
+             """)
+            .ToListAsync(cancellationToken);
+
+        return rows.Select(row => ToItem(row, SearchMatchField.Semantic)).ToList();
+    }
+
+    private static SearchPlaceItem ToItem(PlaceRow row, SearchMatchField matchedOn) =>
+        new(
+            row.Id,
+            row.Name,
+            row.Address,
+            row.Category,
+            row.ImageUrl,
+            row.EstimatedCostMin,
+            row.EstimatedCostMax,
+            row.StationOrder is { } order && row.StationName is { } name ? new StationRefDto(order, name) : null,
+            matchedOn);
 
     public async Task<IReadOnlyList<SearchCuratedItineraryItem>> SearchCuratedItinerariesAsync(
         string keyword,

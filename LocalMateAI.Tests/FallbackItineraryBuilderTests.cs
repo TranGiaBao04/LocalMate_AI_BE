@@ -99,6 +99,57 @@ public sealed class FallbackItineraryBuilderTests
         Assert.Contains("sở thích", stops[0].Reasoning);
     }
 
+    [Fact]
+    public void BuildStops_PlaceMatchingNote_QuotesItsDescription_InsteadOfTagMatch()
+    {
+        var candidate = MakeCandidate("Tonkin", distance: 250.0) with { Description = "  Không gian yên tĩnh, ấm cúng.  " };
+        var scored = Scored(candidate, score: 1.0, matchedTagIds: [Guid.NewGuid()]) with { MatchesNote = true };
+
+        var reasoning = FallbackItineraryBuilder.BuildStops([scored], durationHours: 8, budgetMax: 1_000_000m)[0].Reasoning;
+
+        Assert.Equal("Hợp với ghi chú của bạn: Không gian yên tĩnh, ấm cúng. Cách ga Bến Thành 250 m", reasoning);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("   ")]
+    public void BuildStops_PlaceMatchingNote_WithoutDescription_UsesShortSentence(string? description)
+    {
+        var scored = Scored(MakeCandidate("Tonkin", distance: 250.0) with { Description = description }) with
+        {
+            MatchesNote = true
+        };
+
+        var reasoning = FallbackItineraryBuilder.BuildStops([scored], durationHours: 8, budgetMax: 1_000_000m)[0].Reasoning;
+
+        Assert.Equal("Hợp với ghi chú của bạn, cách ga Bến Thành 250 m", reasoning);
+    }
+
+    [Fact]
+    public void BuildStops_PlaceMatchingNote_CutsLongDescriptionAtAWordBoundary()
+    {
+        var longDescription = string.Join(' ', Enumerable.Repeat("không gian yên tĩnh,", 12)); // 251 ký tự
+        var scored = Scored(MakeCandidate("Tonkin") with { Description = longDescription }) with { MatchesNote = true };
+
+        var reasoning = FallbackItineraryBuilder.BuildStops([scored], durationHours: 8, budgetMax: 1_000_000m)[0].Reasoning;
+
+        var quoted = reasoning["Hợp với ghi chú của bạn: ".Length..reasoning.IndexOf("…", StringComparison.Ordinal)];
+        Assert.InRange(quoted.Length, 80, FallbackItineraryBuilder.NoteReasonDescriptionLength);
+        Assert.StartsWith(quoted + " ", longDescription); // cắt trọn từ
+        Assert.DoesNotMatch("[,;: ]$", quoted); // không để dấu câu thừa trước dấu ba chấm
+        Assert.Contains("…. Cách ga Bến Thành 100 m", reasoning);
+    }
+
+    [Fact]
+    public void BuildStops_PlaceNotMatchingNote_KeepsTheOldSentence_EvenWithADescription()
+    {
+        var scored = Scored(MakeCandidate("Quán khác", distance: 250.0) with { Description = "Quán đông vui" });
+
+        var reasoning = FallbackItineraryBuilder.BuildStops([scored], durationHours: 8, budgetMax: 1_000_000m)[0].Reasoning;
+
+        Assert.Equal("Cách ga Bến Thành 250 m", reasoning);
+    }
+
     private static ScoredPlaceDto Scored(
         PlaceCandidateDto candidate, double score = 1.0, IReadOnlyList<Guid>? matchedTagIds = null) =>
         new(candidate, score, matchedTagIds ?? []);

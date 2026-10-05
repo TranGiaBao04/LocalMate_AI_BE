@@ -3,6 +3,7 @@ using LocalMateAI.Application.DTOs.Matching;
 using LocalMateAI.Application.DTOs.Trips;
 using LocalMateAI.Application.Interfaces.Services;
 using LocalMateAI.Application.Services;
+using LocalMateAI.Application.Settings;
 using LocalMateAI.Application.Validators.Trips;
 using LocalMateAI.Domain.Enums;
 
@@ -173,9 +174,178 @@ public sealed class TripMatchingServiceTests
         Assert.Equal(fits ? null : TripInsufficiencyReasons.DurationTooShort, response.InsufficiencyReason);
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("   ")]
+    public async Task Match_WithoutNote_DoesNotScoreSemantically(string? note)
+    {
+        var fixture = new Fixture(TestTripOrigins.At(NhaHat), [Place("A", NhaHat, 100)]);
+
+        var response = (await fixture.Service.MatchAsync(Request(note: note))).Response!;
+
+        Assert.False(response.NoteApplied);
+        Assert.Empty(fixture.Scorer.Calls);
+    }
+
+    [Fact]
+    public async Task Match_NoteLiftsMatchingPlaceAboveNearerPlace_WithoutChangingMatchScore()
+    {
+        var near = Place("Gần", NhaHat, metersNorthOfAnchor: 100);
+        var matchesNote = Place("Xa, hợp ghi chú", NhaHat, metersNorthOfAnchor: 600);
+        var fixture = new Fixture(TestTripOrigins.At(NhaHat), [near, matchesNote]);
+        fixture.Scorer.Scores = new Dictionary<Guid, double> { [near.PlaceId] = 0.60, [matchesNote.PlaceId] = 0.72 };
+
+        var withoutNote = (await fixture.Service.MatchAsync(Request())).Response!;
+        var withNote = (await fixture.Service.MatchAsync(Request(note: "  muốn chỗ   yên tĩnh "))).Response!;
+
+        Assert.Equal(["Gần", "Xa, hợp ghi chú"], withoutNote.Candidates.Select(place => place.Candidate.PlaceName));
+        Assert.Equal(["Xa, hợp ghi chú", "Gần"], withNote.Candidates.Select(place => place.Candidate.PlaceName));
+        Assert.True(withNote.NoteApplied);
+        Assert.False(withoutNote.NoteApplied);
+        // MatchScore trả ra vẫn là điểm tag thuần (không tag ⇒ mọi địa điểm bằng nhau).
+        Assert.Single(withNote.Candidates.Select(place => place.MatchScore).Distinct());
+        Assert.Equal(("muốn chỗ yên tĩnh", SemanticPlaceScorer.PlanningTimeout), Assert.Single(fixture.Scorer.Calls));
+    }
+
+    [Fact]
+    public async Task Match_NoCandidateReachesTheFloor_NoteIsNotApplied_AndRankingIsUnchanged()
+    {
+        var near = Place("Gần", NhaHat, metersNorthOfAnchor: 100);
+        var far = Place("Xa", NhaHat, metersNorthOfAnchor: 600);
+        var fixture = new Fixture(TestTripOrigins.At(NhaHat), [near, far]);
+        fixture.Scorer.Scores = new Dictionary<Guid, double> { [near.PlaceId] = 0.58, [far.PlaceId] = 0.65 };
+
+        var response = (await fixture.Service.MatchAsync(Request(note: "sửa xe máy ở đâu"))).Response!;
+
+        Assert.False(response.NoteApplied);
+        Assert.Equal(["Gần", "Xa"], response.Candidates.Select(place => place.Candidate.PlaceName));
+    }
+
+    [Fact]
+    public async Task Match_ScorerUnavailable_NoteIsNotApplied_AndRankingIsUnchanged()
+    {
+        var near = Place("Gần", NhaHat, metersNorthOfAnchor: 100);
+        var far = Place("Xa", NhaHat, metersNorthOfAnchor: 600);
+        var fixture = new Fixture(TestTripOrigins.At(NhaHat), [far, near]);
+        fixture.Scorer.Scores = null;
+
+        var response = (await fixture.Service.MatchAsync(Request(note: "muốn chỗ yên tĩnh"))).Response!;
+
+        Assert.False(response.NoteApplied);
+        Assert.Equal(["Gần", "Xa"], response.Candidates.Select(place => place.Candidate.PlaceName));
+        Assert.Single(fixture.Scorer.Calls);
+    }
+
+    [Fact]
+    public async Task Match_NoteWeightZero_SkipsTheScorer()
+    {
+        var fixture = new Fixture(TestTripOrigins.At(NhaHat), [Place("A", NhaHat, 100)]);
+        fixture.Settings.Set(SystemSettingKeys.NoteWeightPercent, 0);
+
+        var response = (await fixture.Service.MatchAsync(Request(note: "muốn chỗ yên tĩnh"))).Response!;
+
+        Assert.False(response.NoteApplied);
+        Assert.Empty(fixture.Scorer.Calls);
+    }
+
+    [Theory]
+    [InlineData(20, "Khớp tag")]
+    [InlineData(80, "Hợp ghi chú")]
+    public async Task Match_NoteWeight_DecidesBetweenTagMatchAndNoteMatch(int weightPercent, string expectedFirst)
+    {
+        var tagId = Guid.NewGuid();
+        var matchesTag = Place("Khớp tag", NhaHat, metersNorthOfAnchor: 300);
+        var matchesNote = Place("Hợp ghi chú", NhaHat, metersNorthOfAnchor: 300);
+        var fixture = new Fixture(
+            TestTripOrigins.At(NhaHat),
+            [matchesTag, matchesNote],
+            new Dictionary<Guid, IReadOnlyList<Guid>>
+            {
+                [matchesTag.PlaceId] = [tagId],
+                [matchesNote.PlaceId] = [Guid.NewGuid()]
+            });
+        fixture.Settings.Set(SystemSettingKeys.NoteWeightPercent, weightPercent);
+        // Vượt sàn 66 đủ 10 điểm ⇒ điểm ghi chú tối đa.
+        fixture.Scorer.Scores = new Dictionary<Guid, double> { [matchesNote.PlaceId] = 0.80 };
+
+        var response = (await fixture.Service.MatchAsync(Request(tagIds: [tagId], note: "muốn chỗ yên tĩnh"))).Response!;
+
+        Assert.True(response.NoteApplied);
+        Assert.Equal(expectedFirst, response.Candidates[0].Candidate.PlaceName);
+    }
+
+    [Fact]
+    public async Task Match_NoteNeverBringsBackPlacesExcludedByBudget()
+    {
+        var affordable = Place("Vừa túi tiền", NhaHat, metersNorthOfAnchor: 100);
+        var expensive = Place("Đắt nhưng hợp ghi chú", NhaHat, metersNorthOfAnchor: 100, cost: 900_000m);
+        var fixture = new Fixture(TestTripOrigins.At(NhaHat), [affordable, expensive]);
+        fixture.Scorer.Scores = new Dictionary<Guid, double> { [expensive.PlaceId] = 0.90, [affordable.PlaceId] = 0.50 };
+
+        var response = (await fixture.Service.MatchAsync(Request(budgetMax: 300_000m, note: "nhà hàng sang trọng"))).Response!;
+
+        Assert.Equal(["Vừa túi tiền"], response.Candidates.Select(place => place.Candidate.PlaceName));
+        Assert.Single(response.Excluded);
+        // Địa điểm hợp ghi chú đã bị loại vì ngân sách, các ứng viên còn lại đều dưới sàn.
+        Assert.False(response.NoteApplied);
+    }
+
+    [Fact]
+    public async Task Match_MatchesNote_IsSetOnlyForCandidatesCloseToTheBestMatch()
+    {
+        var best = Place("Khớp nhất", NhaHat, metersNorthOfAnchor: 100);
+        var close = Place("Sát hạng 1", NhaHat, metersNorthOfAnchor: 200);
+        var aboveFloorButFar = Place("Qua sàn nhưng xa hạng 1", NhaHat, metersNorthOfAnchor: 300);
+        var belowFloor = Place("Dưới sàn", NhaHat, metersNorthOfAnchor: 400);
+        var fixture = new Fixture(TestTripOrigins.At(NhaHat), [best, close, aboveFloorButFar, belowFloor]);
+        fixture.Scorer.Scores = new Dictionary<Guid, double>
+        {
+            [best.PlaceId] = 0.786,
+            [close.PlaceId] = 0.750,
+            [aboveFloorButFar.PlaceId] = 0.705,
+            [belowFloor.PlaceId] = 0.60,
+            // Địa điểm khớp hơn nữa nhưng không nằm trong tập ứng viên: không được kéo mốc "khớp nhất" lên.
+            [Guid.NewGuid()] = 0.95
+        };
+
+        var response = (await fixture.Service.MatchAsync(Request(durationHours: 8, note: "hóng gió ngắm sông"))).Response!;
+
+        Assert.Equal(
+            ["Khớp nhất", "Sát hạng 1"],
+            response.Candidates.Where(place => place.MatchesNote).Select(place => place.Candidate.PlaceName));
+        Assert.Equal(4, response.Candidates.Count);
+    }
+
+    [Fact]
+    public async Task Match_NoteNotApplied_LeavesMatchesNoteFalse()
+    {
+        var place = Place("A", NhaHat, metersNorthOfAnchor: 100);
+        var fixture = new Fixture(TestTripOrigins.At(NhaHat), [place]);
+        fixture.Scorer.Scores = new Dictionary<Guid, double> { [place.PlaceId] = 0.60 };
+
+        var response = (await fixture.Service.MatchAsync(Request(note: "sửa xe máy ở đâu"))).Response!;
+
+        Assert.False(Assert.Single(response.Candidates).MatchesNote);
+    }
+
+    [Fact]
+    public async Task Match_FloorForNote_ComesFromSettings()
+    {
+        var near = Place("Gần", NhaHat, metersNorthOfAnchor: 100);
+        var far = Place("Xa", NhaHat, metersNorthOfAnchor: 600);
+        var fixture = new Fixture(TestTripOrigins.At(NhaHat), [near, far]);
+        fixture.Settings.Set(SystemSettingKeys.SemanticMinSimilarityPercent, 50);
+        fixture.Scorer.Scores = new Dictionary<Guid, double> { [near.PlaceId] = 0.40, [far.PlaceId] = 0.60 };
+
+        var response = (await fixture.Service.MatchAsync(Request(note: "muốn chỗ yên tĩnh"))).Response!;
+
+        Assert.True(response.NoteApplied);
+        Assert.Equal("Xa", response.Candidates[0].Candidate.PlaceName);
+    }
+
     private static TripRequestDto Request(
-        int durationHours = 4, decimal budgetMax = 500_000m, IReadOnlyList<Guid>? tagIds = null) =>
-        new(NhaHat.Latitude, NhaHat.Longitude, durationHours, 0m, budgetMax, tagIds ?? []);
+        int durationHours = 4, decimal budgetMax = 500_000m, IReadOnlyList<Guid>? tagIds = null, string? note = null) =>
+        new(NhaHat.Latitude, NhaHat.Longitude, durationHours, 0m, budgetMax, tagIds ?? [], Note: note);
 
     // 0,001 độ vĩ ≈ 111 m: đặt địa điểm thẳng hướng bắc của ga Nhà hát để khoảng cách tới ga cột mốc dễ kiểm soát.
     private static PlaceCandidateDto Place(
@@ -208,11 +378,14 @@ public sealed class TripMatchingServiceTests
                 {
                     PlaceTagIds = placeTagIds ?? new Dictionary<Guid, IReadOnlyList<Guid>>()
                 },
-                new FakeSystemSettingProvider());
+                Settings,
+                Scorer);
         }
 
         public TripMatchingService Service { get; }
         public FakeCluster Cluster { get; }
+        public FakeSystemSettingProvider Settings { get; } = new();
+        public FakeSemanticPlaceScorer Scorer { get; } = new();
     }
 
     private sealed class FakeCluster(IReadOnlyList<PlaceCandidateDto> candidates) : IMetroClusterMatchingService

@@ -7,4 +7,8 @@ public static class VietnamTime
 
     public static DateTime Now(TimeProvider clock) =>
         DateTime.SpecifyKind(clock.GetUtcNow().UtcDateTime + Offset, DateTimeKind.Unspecified);
+
+    /// <summary>00:00 hôm nay theo giờ Việt Nam, đổi sang UTC. Dùng cho các hạn mức tính theo ngày.</summary>
+    public static DateTime StartOfTodayUtc(TimeProvider clock) =>
+        DateTime.SpecifyKind(Now(clock).Date - Offset, DateTimeKind.Utc);
 }

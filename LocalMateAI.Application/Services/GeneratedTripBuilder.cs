@@ -14,7 +14,8 @@ public static class GeneratedTripBuilder
         TripOriginResolution origin,
         IReadOnlyList<FallbackStopDto> stops,
         IReadOnlyList<Guid> tagIds,
-        DateTime plannedStartAt)
+        DateTime plannedStartAt,
+        bool noteApplied = false)
     {
         if (stops.Count == 0)
         {
@@ -37,6 +38,8 @@ public static class GeneratedTripBuilder
             BudgetMax = request.BudgetMax,
             TravelMode = request.TravelMode,
             PlannedStartAt = plannedStartAt,
+            Note = TripNoteRules.Normalize(request.Note),
+            NoteApplied = noteApplied,
             Status = TripStatus.Draft,
             CreatedAt = now,
             UpdatedAt = now,

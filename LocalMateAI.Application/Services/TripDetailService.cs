@@ -181,7 +181,10 @@ public sealed class TripDetailService(
             trip.PlannedStartAt is { } time ? TimeOnly.FromDateTime(time) : null,
             originMinutes,
             trip.StartStation,
-            trip.DestinationStation);
+            trip.DestinationStation,
+            trip.Note,
+            trip.NoteApplied,
+            trip.AiExplainedAt);
     }
 
     private static TripLegResponse ToLegResponse(

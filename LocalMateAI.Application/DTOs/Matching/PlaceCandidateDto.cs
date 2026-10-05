@@ -13,4 +13,5 @@ public sealed record PlaceCandidateDto(
     Guid StationId,
     string StationName,
     int StationOrder,
-    double DistanceFromStationMeters);
+    double DistanceFromStationMeters,
+    string? Description = null);

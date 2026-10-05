@@ -23,6 +23,8 @@ public sealed class TripConfiguration : IEntityTypeConfiguration<Trip>
         builder.Property(trip => trip.PlannedStartAt)
             .HasColumnType("timestamp without time zone");
 
+        builder.Property(trip => trip.Note).HasMaxLength(300);
+
         builder.Property(trip => trip.BudgetMin)
             .HasColumnType("numeric(12,0)");
 

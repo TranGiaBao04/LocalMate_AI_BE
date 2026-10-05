@@ -44,6 +44,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, TimePro
     public DbSet<EmailOutboxMessage> EmailOutboxMessages => Set<EmailOutboxMessage>();
     public DbSet<SystemSetting> SystemSettings => Set<SystemSetting>();
     public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<PlaceEmbedding> PlaceEmbeddings => Set<PlaceEmbedding>();
+    public DbSet<LlmCallLog> LlmCallLogs => Set<LlmCallLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

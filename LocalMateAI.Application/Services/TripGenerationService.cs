@@ -80,7 +80,8 @@ public sealed class TripGenerationService(
 
         var plannedStartAt = TripTimingRules.ResolveStart(
             request.PlannedDate, request.StartTime, VietnamTime.Now(timeProvider));
-        var trip = GeneratedTripBuilder.Build(userId, request, origin, payload.Stops, tagIds, plannedStartAt);
+        var trip = GeneratedTripBuilder.Build(
+            userId, request, origin, payload.Stops, tagIds, plannedStartAt, payload.NoteApplied);
 
         var execution = await quotaExecutor.ExecuteForUserAsync(
             userId,

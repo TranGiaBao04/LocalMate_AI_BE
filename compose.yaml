@@ -29,6 +29,8 @@ services:
       Otp__HashKey: "${Otp__HashKey:-}"
       Smtp__Username: "${Smtp__Username:-}"
       Smtp__Password: "${Smtp__Password:-}"
+      Embedding__ApiKey: "${Embedding__ApiKey:-}"
+      Llm__ApiKey: "${Llm__ApiKey:-}"
       AdminSeed__Email: "${AdminSeed__Email:-}"
       AdminSeed__Password: "${AdminSeed__Password:-}"
       AdminSeed__FullName: "${AdminSeed__FullName:-}"

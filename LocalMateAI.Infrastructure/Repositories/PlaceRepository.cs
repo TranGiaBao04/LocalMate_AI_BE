@@ -36,7 +36,7 @@ public sealed class PlaceRepository(AppDbContext dbContext) : IPlaceRepository
                     ST_X(p."Location") AS "PlaceLongitude",
                     p."Category" AS "PlaceCategory",
                     p."EstimatedCostMin", p."EstimatedCostMax", p."ImageUrl",
-                    nearest."DistanceFromStationMeters"
+                    nearest."DistanceFromStationMeters", p."Description"
              FROM "Places" p
              CROSS JOIN LATERAL (
                  SELECT ms."Id" AS "StationId", ms."Name" AS "StationName",

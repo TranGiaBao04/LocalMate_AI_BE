@@ -40,6 +40,56 @@ public sealed class TripStationReadPostgresTests
     }
 
     [Fact]
+    public async Task Detail_AndFork_CarryTheNote()
+    {
+        await using var db = await IsolatedPlanDatabase.CreateAsync();
+        await using var c = db.Context();
+        var seed = await SeedAsync(c, TravelMode.Auto);
+        var repository = new TripRepository(c);
+
+        // Trip tạo trước khi có ô ghi chú: cột mới nhận giá trị mặc định.
+        var before = await repository.GetOwnedDetailAsync(seed.TripId, seed.UserId);
+        Assert.Null(before!.Note);
+        Assert.False(before.NoteApplied);
+
+        await c.Trips.Where(trip => trip.Id == seed.TripId).ExecuteUpdateAsync(setters => setters
+            .SetProperty(trip => trip.Note, "muốn chỗ yên tĩnh")
+            .SetProperty(trip => trip.NoteApplied, true));
+
+        var after = await repository.GetOwnedDetailAsync(seed.TripId, seed.UserId);
+        Assert.Equal("muốn chỗ yên tĩnh", after!.Note);
+        Assert.True(after.NoteApplied);
+
+        var copy = await repository.ForkTripAsync(seed.TripId, seed.UserId);
+        c.ChangeTracker.Clear();
+        var copyDetail = await repository.GetOwnedDetailAsync(copy!.Id, seed.UserId);
+        Assert.Equal("muốn chỗ yên tĩnh", copyDetail!.Note);
+        Assert.True(copyDetail.NoteApplied);
+    }
+
+    [Fact]
+    public async Task MetroClusterPlaces_IncludeTheDescription()
+    {
+        await using var db = await IsolatedPlanDatabase.CreateAsync();
+        await using var c = db.Context();
+        c.MetroStations.Add(new MetroStation { Name = "Ga 1", Order = 1, Location = Point(Station1Lng) });
+        var described = Place("Có mô tả", Station1Lng + 0.001);
+        described.Description = "Không gian yên tĩnh";
+        c.Places.AddRange(described, Place("Không mô tả", Station1Lng + 0.002));
+        await c.SaveChangesAsync();
+        c.ChangeTracker.Clear();
+
+        var rows = (await new PlaceRepository(c).GetMetroClusterPlacesAsync(800))
+            .OrderBy(row => row.PlaceName)
+            .ToArray();
+
+        Assert.Equal(["Có mô tả", "Không mô tả"], rows.Select(row => row.PlaceName));
+        Assert.Equal("Không gian yên tĩnh", rows[0].Description);
+        Assert.Null(rows[1].Description);
+        Assert.All(rows, row => Assert.Equal(1, row.StationOrder));
+    }
+
+    [Fact]
     public async Task DeleteItem_MetroTrip_GivesRecalculatorStationsAndPlannedDate()
     {
         await using var db = await IsolatedPlanDatabase.CreateAsync();

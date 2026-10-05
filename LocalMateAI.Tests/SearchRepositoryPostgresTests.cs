@@ -109,6 +109,36 @@ public sealed class SearchRepositoryPostgresTests
     }
 
     [Fact]
+    public async Task SemanticPlaces_ReturnOnlyVisibleOnes_WithStation_AndSemanticMatchField()
+    {
+        await using var db = await IsolatedPlanDatabase.CreateAsync();
+        await using var c = db.Context();
+        AddStations(c);
+        var nearStation = Place("Gần ga", BenThanhLng + 0.0001);
+        var outsideCluster = Place("Ngoài cụm ga", FarLng);
+        var pending = Place("Chờ duyệt", BenThanhLng, status: PlaceStatus.Pending);
+        var deleted = Place("Đã xoá", BenThanhLng, status: PlaceStatus.Inactive, deletedAt: DateTime.UtcNow);
+        var notRequested = Place("Không được hỏi", BenThanhLng);
+        c.Places.AddRange(nearStation, outsideCluster, pending, deleted, notRequested);
+        await c.SaveChangesAsync();
+        c.ChangeTracker.Clear();
+
+        var repository = new SearchRepository(c);
+        var result = (await repository.GetSemanticPlacesAsync(
+                [nearStation.Id, outsideCluster.Id, pending.Id, deleted.Id, Guid.NewGuid()], Radius))
+            .OrderBy(place => place.Name)
+            .ToArray();
+
+        Assert.Equal(["Gần ga", "Ngoài cụm ga"], result.Select(place => place.Name));
+        Assert.All(result, place => Assert.Equal(SearchMatchField.Semantic, place.MatchedOn));
+        Assert.Equal(new StationRefDto(2, "Bến Thành"), result[0].Station);
+        Assert.Null(result[1].Station);
+        Assert.Equal(nearStation.Id, result[0].Id);
+        Assert.Equal("Cafe", result[0].Category);
+        Assert.Empty(await repository.GetSemanticPlacesAsync([], Radius));
+    }
+
+    [Fact]
     public async Task CuratedItineraries_MatchTitleBeforeDescription_AndNeedAnActivePlace()
     {
         await using var db = await IsolatedPlanDatabase.CreateAsync();

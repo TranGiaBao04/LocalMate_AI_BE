@@ -5,6 +5,7 @@ namespace LocalMateAI.Application.DTOs.Matching;
 /// <param name="InsufficiencyReason">Một giá trị của <see cref="TripInsufficiencyReasons"/>, hoặc null khi đủ.</param>
 /// <param name="StationName">Tên ga lên (ga gần điểm xuất phát nhất, hoặc ga người dùng chọn xuất phát).</param>
 /// <param name="AnchorStation">Ga cột mốc: ứng viên được lấy và xếp hạng quanh ga này.</param>
+/// <param name="NoteApplied">true khi ghi chú của người dùng đã được dùng để xếp hạng địa điểm.</param>
 public sealed record TripMatchingResponse(
     bool IsSufficient,
     string? InsufficiencyReason,
@@ -13,7 +14,8 @@ public sealed record TripMatchingResponse(
     string BudgetTier,
     IReadOnlyList<ScoredPlaceDto> Candidates,
     IReadOnlyList<ExcludedCandidateDto> Excluded,
-    StationRefDto AnchorStation);
+    StationRefDto AnchorStation,
+    bool NoteApplied = false);
 
 /// <param name="Origin">Điểm xuất phát đã xác định; chỉ dùng nội bộ (không nằm trong response trả cho client).</param>
 public sealed record TripMatchingResult(
