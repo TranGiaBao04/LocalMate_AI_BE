@@ -353,7 +353,7 @@ public sealed class TripRequestParsingServiceTests
                 Llm,
                 new FixedTimeProvider(Now));
 
-        public FakeGuard Guard { get; } = new();
+        public TestAiUsageCoordinator Guard { get; } = new();
         public FakeLlm Llm { get; } = new();
         public TripRequestParsingService Service { get; }
     }
@@ -375,28 +375,6 @@ public sealed class TripRequestParsingServiceTests
             return Failure is null
                 ? Task.FromResult(new LlmJsonResponse(Answer, 1100, 90))
                 : Task.FromException<LlmJsonResponse>(Failure);
-        }
-    }
-
-    private sealed class FakeGuard : IAiUsageGuard
-    {
-        public AiUsageDecision Decision { get; set; } = new(AiUsageStatus.Allowed);
-        public List<(Guid UserId, LlmCallKind Kind, Guid? TripId)> Checks { get; } = [];
-        public List<(Guid UserId, LlmCallKind Kind, Guid? TripId, LlmCallOutcome Outcome)> Records { get; } = [];
-
-        public Task<AiUsageDecision> CheckAsync(
-            Guid userId, LlmCallKind kind, Guid? tripId = null, CancellationToken cancellationToken = default)
-        {
-            Checks.Add((userId, kind, tripId));
-            return Task.FromResult(Decision);
-        }
-
-        public Task RecordAsync(
-            Guid userId, LlmCallKind kind, Guid? tripId, LlmCallOutcome outcome, LlmJsonResponse? response,
-            int durationMilliseconds, CancellationToken cancellationToken = default)
-        {
-            Records.Add((userId, kind, tripId, outcome));
-            return Task.CompletedTask;
         }
     }
 

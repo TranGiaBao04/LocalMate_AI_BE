@@ -8,7 +8,7 @@ namespace LocalMateAI.Application.Services;
 public sealed class TripExplanationService(
     IUserRepository userRepository,
     ITripExplanationRepository repository,
-    IAiUsageGuard usageGuard,
+    IAiUsageCoordinator usageCoordinator,
     ILlmClient llmClient,
     TimeProvider timeProvider) : ITripExplanationService
 {
@@ -40,8 +40,8 @@ public sealed class TripExplanationService(
             return new ExplainTripResult(ExplainTripResultStatus.TripFinalized);
         }
 
-        // Kiểm tra trần TRƯỚC khi gọi AI: lần nào đã gửi đi cũng tính vào trần ngày.
-        var usage = await usageGuard.CheckAsync(userId, LlmCallKind.Explain, tripId, cancellationToken);
+        var admission = await usageCoordinator.AdmitAsync(userId, LlmCallKind.Explain, tripId, cancellationToken);
+        var usage = admission.Decision;
         switch (usage.Status)
         {
             case AiUsageStatus.Disabled:
@@ -52,6 +52,7 @@ public sealed class TripExplanationService(
                 return new ExplainTripResult(ExplainTripResultStatus.DailyLimitReached, ResetAtUtc: usage.ResetAtUtc);
         }
 
+        await using var call = admission.Call ?? throw new InvalidOperationException("Missing AI admission scope.");
         // Chặng không có mô tả lẫn tag nhận luôn câu cố định, không gửi cho AI.
         var describable = trip.Stops.Where(TripExplanationPrompt.HasDescribableData).ToList();
         var reasons = trip.Stops
@@ -62,7 +63,7 @@ public sealed class TripExplanationService(
 
         if (describable.Count > 0)
         {
-            var generated = await GenerateAsync(userId, trip, describable, cancellationToken);
+            var generated = await GenerateAsync(call, trip, describable, cancellationToken);
             if (generated is null)
             {
                 return new ExplainTripResult(ExplainTripResultStatus.AiUnavailable);
@@ -72,6 +73,11 @@ public sealed class TripExplanationService(
             {
                 reasons[placeId] = reason;
             }
+        }
+        else
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await call.ReleaseAsync();
         }
 
         var explainedAt = timeProvider.GetUtcNow().UtcDateTime;
@@ -98,7 +104,7 @@ public sealed class TripExplanationService(
 
     // Trả null khi AI không dùng được hoặc trả lời không có lý do hợp lệ nào; lần gọi nào cũng được ghi log.
     private async Task<IReadOnlyDictionary<Guid, string>?> GenerateAsync(
-        Guid userId,
+        AiUsageCall call,
         TripExplanationReadModel trip,
         IReadOnlyList<TripExplanationStopReadModel> stops,
         CancellationToken cancellationToken)
@@ -110,6 +116,7 @@ public sealed class TripExplanationService(
             TripExplanationPrompt.BuildSchema(placeIds),
             TripExplanationPrompt.MaxOutputTokens);
 
+        await call.AuthorizeAsync(cancellationToken);
         using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutSource.CancelAfter(ProviderTimeout);
         var startedAt = timeProvider.GetTimestamp();
@@ -134,8 +141,7 @@ public sealed class TripExplanationService(
                 ? LlmCallOutcome.Succeeded
                 : LlmCallOutcome.InvalidOutput;
 
-        await usageGuard.RecordAsync(
-            userId, LlmCallKind.Explain, trip.TripId, outcome, response, elapsed, CancellationToken.None);
+        await call.CompleteAsync(outcome, response, elapsed);
 
         return outcome == LlmCallOutcome.Succeeded ? reasons : null;
     }

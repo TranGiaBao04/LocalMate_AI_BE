@@ -6,6 +6,14 @@ namespace LocalMateAI.Application.Interfaces.Repositories;
 
 public sealed record AiUsageAdmissionResult(AiUsageDecision Decision, AiUsageAdmission? Admission = null);
 
+public sealed record AiUsageHandle(Guid AttemptId, Guid UserId, LlmCallKind Kind, Guid? TripIdSnapshot,
+    Guid FencingToken, long FencingGeneration);
+
+public sealed record AiUsageCompletion(LlmCallOutcome Outcome, string Model, int InputTokens,
+    int OutputTokens, int DurationMilliseconds);
+
+public sealed record AiUsageCompletionResult(Guid LlmCallLogId, bool CompletedNow);
+
 public interface IAiUsageAdmissionRepository
 {
     Task<AiUsageAdmissionResult> AdmitAsync(Guid attemptId, Guid userId, LlmCallKind kind,
@@ -15,5 +23,8 @@ public interface IAiUsageAdmissionRepository
         bool expiredOnly = false, CancellationToken cancellationToken = default);
 
     Task<bool> AuthorizeDispatchAsync(Guid userId, Guid attemptId, Guid fencingToken, long fencingGeneration,
+        CancellationToken cancellationToken = default);
+
+    Task<AiUsageCompletionResult> CompleteAsync(AiUsageHandle handle, AiUsageCompletion completion,
         CancellationToken cancellationToken = default);
 }
