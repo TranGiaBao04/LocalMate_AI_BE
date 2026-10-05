@@ -4,6 +4,7 @@ using LocalMateAI.Application.Services;
 using LocalMateAI.Application.Settings;
 using LocalMateAI.Domain.Entities;
 using LocalMateAI.Domain.Enums;
+using LocalMateAI.Infrastructure.Persistence;
 
 namespace LocalMateAI.Tests;
 
@@ -38,6 +39,7 @@ public sealed class AiUsageGuardTests
         Assert.Equal(AiUsageStatus.Disabled, decision.Status);
         Assert.Empty(fixture.Repository.UserCountRequests);
         Assert.Empty(fixture.Repository.TripCountRequests);
+        Assert.Equal(0, fixture.Subscriptions.Reads);
     }
 
     [Fact]
@@ -49,6 +51,7 @@ public sealed class AiUsageGuardTests
 
         Assert.Equal(AiUsageStatus.Disabled, decision.Status);
         Assert.Empty(fixture.Settings.RequestedKeys);
+        Assert.Equal(0, fixture.Subscriptions.Reads);
     }
 
     [Fact]
@@ -146,14 +149,253 @@ public sealed class AiUsageGuardTests
             VietnamTime.StartOfTodayUtc(clock));
     }
 
+    [Theory]
+    [InlineData(PlanCode.Free, 3, 1)]
+    [InlineData(PlanCode.TripPass, 15, 3)]
+    [InlineData(PlanCode.Membership, 30, 3)]
+    public async Task CanonicalVersion_UsesExactDailyAndExplainTerms(PlanCode code, int daily, int explain)
+    {
+        var f = new Fixture();
+        f.SetFreeTerms(3, 1);
+        if (code != PlanCode.Free)
+            f.Paid(code, Now.UtcDateTime.AddDays(-1), Now.UtcDateTime.AddDays(1));
+        f.Repository.UserCalls = daily - 1;
+        f.Repository.TripCalls = explain - 1;
+        Assert.Equal(AiUsageStatus.Allowed, (await f.Guard.CheckAsync(UserId, LlmCallKind.Explain, TripId)).Status);
+        f.Repository.UserCalls = daily;
+        Assert.Equal(AiUsageStatus.DailyLimitReached, (await f.Guard.CheckAsync(UserId, LlmCallKind.ParseRequest)).Status);
+        f.Repository.TripCalls = explain;
+        Assert.Equal(AiUsageStatus.TripLimitReached, (await f.Guard.CheckAsync(UserId, LlmCallKind.Explain, TripId)).Status);
+        Assert.DoesNotContain(SystemSettingKeys.AiDailyCallsPerUser, f.Settings.RequestedKeys);
+        Assert.DoesNotContain(SystemSettingKeys.AiExplainCallsPerTrip, f.Settings.RequestedKeys);
+    }
+
+    [Fact]
+    public async Task Membership_IsNotCappedByLegacyTen()
+    {
+        var f = new Fixture { Repository = { UserCalls = 29 } };
+        f.Paid(PlanCode.Membership, Now.UtcDateTime.AddDays(-1), Now.UtcDateTime.AddDays(1));
+        f.Settings.Set(SystemSettingKeys.AiDailyCallsPerUser, 10);
+        Assert.Equal(AiUsageStatus.Allowed, (await f.Guard.CheckAsync(UserId, LlmCallKind.ParseRequest)).Status);
+        Assert.DoesNotContain(SystemSettingKeys.AiDailyCallsPerUser, f.Settings.RequestedKeys);
+    }
+
+    [Theory]
+    [InlineData(null, 1, 7, 1, AiUsageStatus.DailyLimitReached)]
+    [InlineData(7, null, 7, 2, AiUsageStatus.TripLimitReached)]
+    [InlineData(0, 1, 0, 0, AiUsageStatus.DailyLimitReached)]
+    [InlineData(7, 0, 0, 0, AiUsageStatus.TripLimitReached)]
+    public async Task EachField_FallsBackOnlyForNull(int? daily, int? explain, int used, int tripUsed,
+        AiUsageStatus expected)
+    {
+        var f = new Fixture();
+        f.SetFreeTerms(daily, explain);
+        f.Settings.Set(SystemSettingKeys.AiDailyCallsPerUser, 7);
+        f.Settings.Set(SystemSettingKeys.AiExplainCallsPerTrip, 2);
+        f.Repository.UserCalls = used;
+        f.Repository.TripCalls = tripUsed;
+        var kind = expected == AiUsageStatus.TripLimitReached ? LlmCallKind.Explain : LlmCallKind.ParseRequest;
+        Assert.Equal(expected, (await f.Guard.CheckAsync(UserId, kind, TripId)).Status);
+        Assert.Equal(daily is null && kind == LlmCallKind.ParseRequest,
+            f.Settings.RequestedKeys.Contains(SystemSettingKeys.AiDailyCallsPerUser));
+        Assert.Equal(explain is null && kind == LlmCallKind.Explain,
+            f.Settings.RequestedKeys.Contains(SystemSettingKeys.AiExplainCallsPerTrip));
+    }
+
+    [Theory]
+    [InlineData("missing-paid-version")]
+    [InlineData("wrong-paid-binding")]
+    [InlineData("missing-free")]
+    [InlineData("missing-free-version")]
+    [InlineData("wrong-free-binding")]
+    [InlineData("inactive-free")]
+    [InlineData("repository-error")]
+    public async Task ResolverFailure_IsVisibleWithoutFallbackOrCounting(string corruption)
+    {
+        var f = new Fixture();
+        var free = f.Subscriptions.Plans.Single(p => p.Code == "FREE");
+        switch (corruption)
+        {
+            case "missing-paid-version":
+                f.Paid(PlanCode.Membership, Now.UtcDateTime.AddDays(-1), Now.UtcDateTime.AddDays(1), Guid.NewGuid());
+                break;
+            case "wrong-paid-binding":
+                f.Paid(PlanCode.Membership, Now.UtcDateTime.AddDays(-1), Now.UtcDateTime.AddDays(1),
+                    free.CurrentVersionId);
+                break;
+            case "missing-free": f.Subscriptions.Plans.Remove(free); break;
+            case "missing-free-version": free.CurrentVersionId = Guid.NewGuid(); break;
+            case "wrong-free-binding": free.CurrentVersionId = SubscriptionBaseline.VersionId(PlanCode.Membership); break;
+            case "inactive-free": free.IsActive = false; break;
+            case "repository-error": f.Subscriptions.Failure = new InvalidOperationException("DB unavailable"); break;
+        }
+        await Assert.ThrowsAsync<InvalidOperationException>(() => f.Guard.CheckAsync(UserId, LlmCallKind.Explain, TripId));
+        Assert.DoesNotContain(SystemSettingKeys.AiDailyCallsPerUser, f.Settings.RequestedKeys);
+        Assert.DoesNotContain(SystemSettingKeys.AiExplainCallsPerTrip, f.Settings.RequestedKeys);
+        Assert.Empty(f.Repository.UserCountRequests);
+        Assert.Empty(f.Repository.TripCountRequests);
+    }
+
+    [Fact]
+    public async Task SameDayUpgrade_RaisesAllowanceWithoutResettingUserUsage()
+    {
+        var f = new Fixture { Repository = { UserCalls = 3 } };
+        f.SetFreeTerms(3, 1);
+        Assert.Equal(AiUsageStatus.DailyLimitReached, (await f.Guard.CheckAsync(UserId, LlmCallKind.ParseRequest)).Status);
+        f.Paid(PlanCode.Membership, Now.UtcDateTime, Now.UtcDateTime.AddDays(30));
+        Assert.Equal(AiUsageStatus.Allowed, (await f.Guard.CheckAsync(UserId, LlmCallKind.ParseRequest)).Status);
+        Assert.Equal(3, f.Repository.UserCalls);
+        Assert.All(f.Repository.UserCountRequests, request => Assert.Equal((UserId, DayStartUtc), request));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExpiryOrTermination_ReturnsFreeWithoutResettingUsage(bool terminated)
+    {
+        var f = new Fixture { Repository = { UserCalls = 10 } };
+        f.SetFreeTerms(3, 1);
+        var period = f.Paid(PlanCode.Membership, Now.UtcDateTime.AddDays(-1), Now.UtcDateTime.AddDays(1));
+        Assert.Equal(AiUsageStatus.Allowed, (await f.Guard.CheckAsync(UserId, LlmCallKind.ParseRequest)).Status);
+        if (terminated) period.Terminate(Now.UtcDateTime, Guid.NewGuid());
+        else f.Clock.Now = new DateTimeOffset(period.EndsAt);
+        Assert.Equal(AiUsageStatus.DailyLimitReached, (await f.Guard.CheckAsync(UserId, LlmCallKind.ParseRequest)).Status);
+        Assert.Equal(10, f.Repository.UserCalls);
+    }
+
+    [Fact]
+    public async Task FuturePaid_DoesNotGrantEarly()
+    {
+        var f = new Fixture { Repository = { UserCalls = 3 } };
+        f.SetFreeTerms(3, 1);
+        f.Paid(PlanCode.Membership, Now.UtcDateTime.AddHours(1), Now.UtcDateTime.AddDays(30));
+        Assert.Equal(AiUsageStatus.DailyLimitReached, (await f.Guard.CheckAsync(UserId, LlmCallKind.ParseRequest)).Status);
+    }
+
+    [Fact]
+    public async Task PurchasedVersionAndQueuedRenewal_DoNotUseCurrentVersionOrResetUsage()
+    {
+        var f = new Fixture { Repository = { UserCalls = 15 } };
+        var end = Now.UtcDateTime.AddHours(1);
+        f.Paid(PlanCode.TripPass, Now.UtcDateTime.AddDays(-1), end);
+        var next = new SubscriptionPlanVersion
+        {
+            PlanId = SubscriptionBaseline.PlanId(PlanCode.TripPass), VersionNumber = 2,
+            AiDailyCallLimit = 20, AiExplainCallsPerTripLimit = 2
+        };
+        await f.Subscriptions.PublishVersionAsync(next);
+        f.Paid(PlanCode.TripPass, end, end.AddDays(7), next.Id);
+        Assert.Equal(AiUsageStatus.DailyLimitReached, (await f.Guard.CheckAsync(UserId, LlmCallKind.ParseRequest)).Status);
+        f.Clock.Now = new DateTimeOffset(end);
+        Assert.Equal(AiUsageStatus.Allowed, (await f.Guard.CheckAsync(UserId, LlmCallKind.ParseRequest)).Status);
+        Assert.Equal(15, f.Repository.UserCalls);
+        Assert.All(f.Repository.UserCountRequests, request => Assert.Equal((UserId, DayStartUtc), request));
+    }
+
+    [Fact]
+    public async Task ExplainAllowance_FollowsPlanWithoutResettingSuccessfulTripCount()
+    {
+        var f = new Fixture { Repository = { TripCalls = 2 } };
+        f.SetFreeTerms(3, 1);
+        var paid = f.Paid(PlanCode.Membership, Now.UtcDateTime.AddDays(-1), Now.UtcDateTime.AddDays(1));
+        Assert.Equal(AiUsageStatus.Allowed, (await f.Guard.CheckAsync(UserId, LlmCallKind.Explain, TripId)).Status);
+        paid.Terminate(Now.UtcDateTime, Guid.NewGuid());
+        Assert.Equal(AiUsageStatus.TripLimitReached, (await f.Guard.CheckAsync(UserId, LlmCallKind.Explain, TripId)).Status);
+        f.Paid(PlanCode.Membership, Now.UtcDateTime, Now.UtcDateTime.AddDays(30));
+        Assert.Equal(AiUsageStatus.Allowed, (await f.Guard.CheckAsync(UserId, LlmCallKind.Explain, TripId)).Status);
+        await f.Guard.RecordAsync(UserId, LlmCallKind.Explain, TripId, LlmCallOutcome.Succeeded, null, 1);
+        Assert.Equal(AiUsageStatus.TripLimitReached, (await f.Guard.CheckAsync(UserId, LlmCallKind.Explain, TripId)).Status);
+    }
+
+    [Theory]
+    [InlineData(LlmCallOutcome.ProviderFailed)]
+    [InlineData(LlmCallOutcome.InvalidOutput)]
+    [InlineData(LlmCallOutcome.Succeeded)]
+    public async Task EveryRecordedOutcome_CountsDaily_OnlySuccessfulExplainCountsTrip(LlmCallOutcome outcome)
+    {
+        var f = new Fixture();
+        f.SetFreeTerms(3, 1);
+        await f.Guard.RecordAsync(UserId, LlmCallKind.Explain, TripId, outcome, null, 1);
+        Assert.Equal(outcome == LlmCallOutcome.Succeeded ? AiUsageStatus.TripLimitReached : AiUsageStatus.Allowed,
+            (await f.Guard.CheckAsync(UserId, LlmCallKind.Explain, TripId)).Status);
+        await f.Guard.RecordAsync(UserId, LlmCallKind.ParseRequest, null, outcome, null, 1);
+        Assert.Equal(AiUsageStatus.Allowed, (await f.Guard.CheckAsync(UserId, LlmCallKind.ParseRequest)).Status);
+        await f.Guard.RecordAsync(UserId, LlmCallKind.ParseRequest, null, outcome, null, 1);
+        Assert.Equal(AiUsageStatus.DailyLimitReached, (await f.Guard.CheckAsync(UserId, LlmCallKind.ParseRequest)).Status);
+    }
+
+    [Fact]
+    public async Task OneClockRead_AlignsEffectivePeriodAndVietnamMidnight()
+    {
+        var f = new Fixture { Repository = { UserCalls = 3 } };
+        f.SetFreeTerms(3, 1);
+        var midnight = new DateTimeOffset(2026, 10, 5, 17, 0, 0, TimeSpan.Zero);
+        f.Paid(PlanCode.Membership, midnight.UtcDateTime, midnight.AddDays(30).UtcDateTime);
+        f.Clock.Now = midnight.AddTicks(-1);
+        Assert.Equal(new AiUsageDecision(AiUsageStatus.DailyLimitReached, midnight.UtcDateTime),
+            await f.Guard.CheckAsync(UserId, LlmCallKind.ParseRequest));
+        Assert.Equal(1, f.Clock.Reads);
+        Assert.Equal(DayStartUtc, f.Repository.UserCountRequests.Last().SinceUtc);
+        f.Clock.Now = midnight;
+        Assert.Equal(AiUsageStatus.Allowed, (await f.Guard.CheckAsync(UserId, LlmCallKind.ParseRequest)).Status);
+        Assert.Equal(2, f.Clock.Reads);
+        Assert.Equal(midnight.UtcDateTime, f.Repository.UserCountRequests.Last().SinceUtc);
+    }
+
     private sealed class Fixture
     {
-        public Fixture() => Guard = new AiUsageGuard(Client, Repository, Settings, new FixedTimeProvider(Now));
+        public Fixture()
+        {
+            SetFreeTerms(null, null);
+            Guard = new AiUsageGuard(Client, Repository, Settings, Clock, Subscriptions);
+        }
 
         public FakeClient Client { get; } = new();
         public FakeRepository Repository { get; } = new();
         public FakeSystemSettingProvider Settings { get; } = new();
+        public MemorySubscriptions Subscriptions { get; } = new();
+        public FixedTimeProvider Clock { get; } = new(Now);
         public AiUsageGuard Guard { get; }
+
+        public void SetFreeTerms(int? daily, int? explain)
+        {
+            var plan = Subscriptions.Plans.Single(p => p.Code == "FREE");
+            var version = new SubscriptionPlanVersion
+            {
+                PlanId = plan.Id, VersionNumber = 2,
+                AiDailyCallLimit = daily, AiExplainCallsPerTripLimit = explain
+            };
+            Subscriptions.Versions.Add(version);
+            plan.CurrentVersionId = version.Id;
+        }
+
+        public SubscriptionPeriod Paid(PlanCode code, DateTime start, DateTime end, Guid? versionId = null)
+        {
+            var period = new SubscriptionPeriod
+            {
+                UserId = UserId, PlanId = SubscriptionBaseline.PlanId(code),
+                PlanVersionId = versionId ?? SubscriptionBaseline.VersionId(code),
+                StartsAt = start, EndsAt = end, SourcePaymentOrderId = Guid.NewGuid()
+            };
+            Subscriptions.Periods.Add(period);
+            return period;
+        }
+    }
+
+    private sealed class MemorySubscriptions : TestSubscriptionRepository
+    {
+        public int Reads { get; private set; }
+        public Exception? Failure { get; set; }
+        public override Task<IReadOnlyList<UserSubscription>> GetByUserIdAsync(Guid userId, CancellationToken ct = default)
+        {
+            Reads++;
+            if (Failure is { } error) throw error;
+            return Task.FromResult<IReadOnlyList<UserSubscription>>([]);
+        }
+        public override Task<UserSubscription?> GetByUserAndPlanAsync(Guid userId, PlanCode code,
+            CancellationToken ct = default) => throw new NotSupportedException();
+        public override Task AddAsync(UserSubscription subscription, CancellationToken ct = default) =>
+            throw new NotSupportedException();
     }
 
     private sealed class FakeClient : ILlmClient
@@ -184,19 +426,26 @@ public sealed class AiUsageGuardTests
             Guid userId, DateTime sinceUtc, CancellationToken cancellationToken = default)
         {
             UserCountRequests.Add((userId, sinceUtc));
-            return Task.FromResult(UserCalls);
+            return Task.FromResult(UserCalls + Added.Count(log => log.UserId == userId));
         }
 
         public Task<int> CountSucceededForTripAsync(
             Guid tripId, LlmCallKind kind, CancellationToken cancellationToken = default)
         {
             TripCountRequests.Add((tripId, kind));
-            return Task.FromResult(TripCalls);
+            return Task.FromResult(TripCalls + Added.Count(log => log.TripId == tripId && log.Kind == kind
+                && log.Outcome == LlmCallOutcome.Succeeded));
         }
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider
     {
-        public override DateTimeOffset GetUtcNow() => utcNow;
+        public DateTimeOffset Now { get; set; } = utcNow;
+        public int Reads { get; private set; }
+        public override DateTimeOffset GetUtcNow()
+        {
+            Reads++;
+            return Now;
+        }
     }
 }

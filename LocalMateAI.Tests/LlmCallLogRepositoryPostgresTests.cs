@@ -1,5 +1,7 @@
 using LocalMateAI.Domain.Entities;
 using LocalMateAI.Domain.Enums;
+using LocalMateAI.Application.Interfaces.Services;
+using LocalMateAI.Application.Services;
 using LocalMateAI.Infrastructure.Persistence;
 using LocalMateAI.Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -9,6 +11,54 @@ namespace LocalMateAI.Tests;
 public sealed class LlmCallLogRepositoryPostgresTests
 {
     private static readonly DateTime Since = new(2026, 10, 4, 17, 0, 0, DateTimeKind.Utc);
+
+    [Fact]
+    public async Task PlanAwareGuard_FreeCountsPersistedOutcomes_SeparatesOwners_AndResetsAtVietnamMidnight()
+    {
+        await using var db = await IsolatedPlanDatabase.CreateAsync();
+        await using var c = db.Context();
+        var user = await PlanVersionFoundationPostgresTests.UserAsync(c);
+        var other = await PlanVersionFoundationPostgresTests.UserAsync(c);
+        var trip = await PostgresTestDatabase.InsertTripAsync(c, user.Id);
+        var clock = new MutableClock { Now = DateTimeOffset.UtcNow };
+        var midnight = VietnamTime.StartOfDayUtc(clock.Now.UtcDateTime).AddDays(1);
+        var guard = new AiUsageGuard(new ConfiguredClient(), new LlmCallLogRepository(c),
+            new FakeSystemSettingProvider(), clock, new SubscriptionRepository(c));
+
+        foreach (var outcome in new[] { LlmCallOutcome.ProviderFailed, LlmCallOutcome.InvalidOutput })
+        {
+            await guard.RecordAsync(user.Id, LlmCallKind.Explain, trip.Id, outcome, null, 1);
+            Assert.Equal(AiUsageStatus.Allowed,
+                (await guard.CheckAsync(user.Id, LlmCallKind.Explain, trip.Id)).Status);
+        }
+        await guard.RecordAsync(user.Id, LlmCallKind.Explain, trip.Id, LlmCallOutcome.Succeeded, null, 1);
+        Assert.Equal(AiUsageStatus.TripLimitReached,
+            (await guard.CheckAsync(user.Id, LlmCallKind.Explain, trip.Id)).Status);
+        Assert.Equal(new AiUsageDecision(AiUsageStatus.DailyLimitReached, midnight),
+            await guard.CheckAsync(user.Id, LlmCallKind.ParseRequest));
+        Assert.Equal(AiUsageStatus.Allowed, (await guard.CheckAsync(other.Id, LlmCallKind.ParseRequest)).Status);
+        Assert.Equal(3, await c.LlmCallLogs.CountAsync(log => log.UserId == user.Id));
+
+        clock.Now = new DateTimeOffset(midnight);
+        Assert.Equal(AiUsageStatus.Allowed, (await guard.CheckAsync(user.Id, LlmCallKind.ParseRequest)).Status);
+        Assert.Equal(AiUsageStatus.TripLimitReached,
+            (await guard.CheckAsync(user.Id, LlmCallKind.Explain, trip.Id)).Status);
+        Assert.Equal(3, await c.LlmCallLogs.CountAsync(log => log.UserId == user.Id));
+    }
+
+    private sealed class MutableClock : TimeProvider
+    {
+        public DateTimeOffset Now { get; set; }
+        public override DateTimeOffset GetUtcNow() => Now;
+    }
+
+    private sealed class ConfiguredClient : ILlmClient
+    {
+        public string Model => "test-model";
+        public bool IsConfigured => true;
+        public Task<LlmJsonResponse> GenerateJsonAsync(LlmJsonRequest request, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException("This test must never call a provider.");
+    }
 
     [Fact]
     public async Task CountForUserSince_CountsEveryKindAndOutcome_ButNotOlderCallsOrOtherUsers()
