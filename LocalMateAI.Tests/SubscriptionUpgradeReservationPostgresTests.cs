@@ -303,24 +303,25 @@ public sealed class SubscriptionUpgradeReservationPostgresTests
     [InlineData("none", true)]
     public async Task MigrationPreflightAndHistoricalMoneyPreservation(string setup, bool success)
     {
-        await using var db = await IsolatedPlanDatabase.CreateAsync(targetMigration: Previous); await using var c = db.Context();
+        await using var db = await IsolatedPlanDatabase.CreateAsync(targetMigration: Previous); await using var c = db.ContextBeforeUserLockedBy();
         var user = await PlanVersionFoundationPostgresTests.UserAsync(c);
         var v = await c.SubscriptionPlanVersions.SingleAsync(v => v.Id == SubscriptionBaseline.VersionId(PlanCode.TripPass));
         await PlanVersionFoundationPostgresTests.BoundOrderAsync(c, user.Id, v.PlanId, v);
         if (setup == "duplicate") await PlanVersionFoundationPostgresTests.BoundOrderAsync(c, user.Id, v.PlanId, v);
         if (setup == "single") { await SingleItineraryPostgresTests.Order(c, user.Id); await SingleItineraryPostgresTests.Order(c, user.Id); }
         var before = await c.Database.SqlQueryRaw<string>("""SELECT to_jsonb(o)::text AS "Value" FROM "PaymentOrders" o ORDER BY "Id" """).ToListAsync();
+        await using var current = db.Context();
         if (success)
         {
-            await c.Database.MigrateAsync(); Assert.Contains(Migration, await c.Database.GetAppliedMigrationsAsync());
-            Assert.False(c.Database.HasPendingModelChanges());
+            await current.Database.MigrateAsync(); Assert.Contains(Migration, await current.Database.GetAppliedMigrationsAsync());
+            Assert.False(current.Database.HasPendingModelChanges());
         }
         else
         {
-            var ex = await Assert.ThrowsAsync<PostgresException>(() => c.Database.MigrateAsync());
+            var ex = await Assert.ThrowsAsync<PostgresException>(() => current.Database.MigrateAsync());
             Assert.Contains("duplicate Pending", ex.MessageText);
-            Assert.Equal(Previous, (await c.Database.GetAppliedMigrationsAsync()).Last());
+            Assert.Equal(Previous, (await current.Database.GetAppliedMigrationsAsync()).Last());
         }
-        Assert.Equal(before, await c.Database.SqlQueryRaw<string>("""SELECT to_jsonb(o)::text AS "Value" FROM "PaymentOrders" o ORDER BY "Id" """).ToListAsync());
+        Assert.Equal(before, await current.Database.SqlQueryRaw<string>("""SELECT to_jsonb(o)::text AS "Value" FROM "PaymentOrders" o ORDER BY "Id" """).ToListAsync());
     }
 }
