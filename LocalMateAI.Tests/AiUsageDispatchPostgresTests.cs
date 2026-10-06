@@ -588,7 +588,7 @@ public sealed class AiUsageDispatchPostgresTests
     private sealed class MasterData : IMasterDataService
     {
         public Task<MasterDataResponse> GetMasterDataAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(new MasterDataResponse([], [], [], [], [], new TripLimitsResponse(1, 24), []));
+            Task.FromResult(new MasterDataResponse([], [], [], [], [], new TripLimitsResponse(1, 24), [], []));
     }
 
     private sealed class ReleaseFault : DbCommandInterceptor

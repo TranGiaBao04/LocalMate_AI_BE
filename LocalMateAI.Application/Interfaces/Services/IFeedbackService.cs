@@ -8,4 +8,9 @@ public interface IFeedbackService
         Guid currentUserId,
         CreateFeedbackRequest request,
         CancellationToken cancellationToken = default);
+
+    Task<GetFeedbackResult> GetAsync(
+        Guid currentUserId,
+        Guid tripId,
+        CancellationToken cancellationToken = default);
 }

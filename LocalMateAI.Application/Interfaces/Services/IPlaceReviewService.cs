@@ -14,4 +14,9 @@ public interface IPlaceReviewService
         Guid userId,
         Guid itemId,
         CancellationToken cancellationToken = default);
+
+    Task<DeletePlaceReviewResultStatus> DeleteAsync(
+        Guid userId,
+        Guid itemId,
+        CancellationToken cancellationToken = default);
 }

@@ -48,6 +48,16 @@ public sealed class FeedbackRepository(AppDbContext dbContext) : IFeedbackReposi
         }
     }
 
+    public Task<Feedback?> GetAsync(
+        Guid userId,
+        Guid tripId,
+        CancellationToken cancellationToken = default) =>
+        dbContext.Feedbacks
+            .AsNoTracking()
+            .SingleOrDefaultAsync(
+                feedback => feedback.UserId == userId && feedback.TripId == tripId,
+                cancellationToken);
+
     private static bool IsDuplicateFeedbackViolation(DbUpdateException exception) =>
         exception.InnerException is PostgresException postgresException
         && postgresException.SqlState == PostgresErrorCodes.UniqueViolation

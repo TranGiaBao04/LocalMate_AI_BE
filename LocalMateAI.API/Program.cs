@@ -305,6 +305,9 @@ builder.Services.AddScoped<IFinalizeTripCommand, FinalizeTripCommand>();
 builder.Services.AddScoped<IForkTripCommand, ForkTripCommand>();
 builder.Services.AddScoped<IFeedbackService, FeedbackService>();
 builder.Services.AddScoped<IPlaceReviewService, PlaceReviewService>();
+builder.Services.AddScoped<IPlaceReviewQueryService, PlaceReviewQueryService>();
+builder.Services.AddScoped<IAdminFeedbackRepository, AdminFeedbackRepository>();
+builder.Services.AddScoped<IAdminFeedbackService, AdminFeedbackService>();
 
 // Register Application Services for Google Maps & Navigation (BE-60, BE-61, BE-62, BE-63)
 builder.Services.AddSingleton<IGoogleMapsUrlBuilderService, GoogleMapsUrlBuilderService>();

@@ -31,6 +31,18 @@ public sealed class MasterDataService(
         [ReviewQuickTags.WantsReplacement] = "Muốn thay địa điểm khác"
     };
 
+    private static readonly IReadOnlyDictionary<FeedbackQuickTag, string> FeedbackQuickTagLabels =
+        new Dictionary<FeedbackQuickTag, string>
+        {
+            [FeedbackQuickTag.Suitable] = "Phù hợp",
+            [FeedbackQuickTag.NotSuitable] = "Chưa phù hợp",
+            [FeedbackQuickTag.TooDense] = "Lịch quá dày",
+            [FeedbackQuickTag.TooFewStops] = "Quá ít điểm dừng",
+            [FeedbackQuickTag.TooExpensive] = "Chi phí quá cao",
+            [FeedbackQuickTag.TooFar] = "Di chuyển quá xa",
+            [FeedbackQuickTag.PreferenceMismatch] = "Không đúng sở thích"
+        };
+
     private static readonly IReadOnlyList<TimeSlotResponse> TimeSlots =
     [
         Slot("morning", "Buổi sáng", 8),
@@ -56,7 +68,11 @@ public sealed class MasterDataService(
             Enum.GetNames<TripStatus>(),
             Enum.GetNames<TravelMode>(),
             new TripLimitsResponse(TripRequestValidator.MinDurationHours, TripRequestValidator.MaxDurationHours),
-            TimeSlots);
+            TimeSlots,
+            Enum.GetValues<FeedbackQuickTag>()
+                .Select(tag => new FeedbackQuickTagResponse(
+                    tag.ToString(), FeedbackQuickTagLabels.GetValueOrDefault(tag, tag.ToString())))
+                .ToList());
 
         cache.Set(CacheKey, result, CacheDuration);
 

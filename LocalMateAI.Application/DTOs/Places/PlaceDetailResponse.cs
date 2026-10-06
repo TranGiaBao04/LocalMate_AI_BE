@@ -18,4 +18,6 @@ public sealed record PlaceDetailResponse(
     string? ImageUrl,
     IReadOnlyList<TagResponse> Tags,
     NearestStationResult NearestStation,
-    string? GooglePlaceId = null); // mã địa điểm Google Maps; null thì FE mở bản đồ theo toạ độ
+    string? GooglePlaceId = null, // mã địa điểm Google Maps; null thì FE mở bản đồ theo toạ độ
+    decimal? AverageRating = null, // làm tròn 1 chữ số; null khi chưa có đánh giá nào
+    int ReviewCount = 0);

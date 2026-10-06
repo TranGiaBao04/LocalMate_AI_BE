@@ -196,6 +196,7 @@ public sealed class MetroTimetableServiceTests
                     .ToList(),
                 [], [], [], [],
                 new TripLimitsResponse(1, 24),
+                [],
                 []));
     }
 
