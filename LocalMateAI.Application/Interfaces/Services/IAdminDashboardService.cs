@@ -10,6 +10,9 @@ public interface IAdminDashboardService
     Task<AdminDashboardResult<AdminDashboardRevenueDailyResponse>> GetRevenueDailyAsync(DashboardDateRangeQuery query,
         CancellationToken cancellationToken = default);
 
+    Task<AdminDashboardResult<AdminDashboardTripsFinalizedDailyResponse>> GetTripsFinalizedDailyAsync(
+        DashboardDateRangeQuery query, CancellationToken cancellationToken = default);
+
     Task<AdminDashboardResult<AdminDashboardTopStationsResponse>> GetTopStationsAsync(DashboardTopStationsQuery query,
         CancellationToken cancellationToken = default);
 

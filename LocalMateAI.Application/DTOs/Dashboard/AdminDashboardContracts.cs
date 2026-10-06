@@ -56,6 +56,15 @@ public sealed record AdminDashboardRevenueDailyResponse(
     IReadOnlyList<DailyRevenueResponse> Days,
     DateTime GeneratedAt);
 
+public sealed record DailyTripsFinalizedResponse(DateOnly Date, long TripsFinalized);
+
+public sealed record AdminDashboardTripsFinalizedDailyResponse(
+    DateOnly From,
+    DateOnly To,
+    long TotalTripsFinalized,
+    IReadOnlyList<DailyTripsFinalizedResponse> Days,
+    DateTime GeneratedAt);
+
 public sealed record AdminDashboardBreakEvenResponse(
     string Month,
     decimal Target,
