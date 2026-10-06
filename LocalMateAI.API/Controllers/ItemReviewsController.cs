@@ -115,6 +115,53 @@ public sealed class ItemReviewsController(IPlaceReviewService placeReviewService
         };
     }
 
+    [HttpDelete]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeleteAsync(
+        Guid itemId,
+        CancellationToken cancellationToken)
+    {
+        var subject = User.FindFirst("sub")?.Value;
+        if (!Guid.TryParse(subject, out var userId) || userId == Guid.Empty)
+        {
+            return Unauthorized(CreateProblem(
+                StatusCodes.Status401Unauthorized,
+                "Authentication identity is invalid.",
+                "invalid_identity"));
+        }
+
+        var status = await placeReviewService.DeleteAsync(userId, itemId, cancellationToken);
+        return status switch
+        {
+            DeletePlaceReviewResultStatus.Success => NoContent(),
+            DeletePlaceReviewResultStatus.InvalidItemId =>
+                BadRequest(CreateProblem(
+                    StatusCodes.Status400BadRequest,
+                    "Itinerary item ID is invalid.",
+                    "invalid_itinerary_item_id")),
+            DeletePlaceReviewResultStatus.UserNotFound =>
+                StatusCode(StatusCodes.Status403Forbidden, CreateProblem(
+                    StatusCodes.Status403Forbidden,
+                    "A persisted user account is required to delete a review.",
+                    "review_requires_persisted_user")),
+            DeletePlaceReviewResultStatus.ItemNotFound =>
+                NotFound(CreateProblem(
+                    StatusCodes.Status404NotFound,
+                    "Itinerary item was not found.",
+                    "itinerary_item_not_found")),
+            DeletePlaceReviewResultStatus.ReviewNotFound =>
+                NotFound(CreateProblem(
+                    StatusCodes.Status404NotFound,
+                    "Review was not found.",
+                    "review_not_found")),
+            _ => throw new InvalidOperationException("Unsupported place review result status.")
+        };
+    }
+
     private ProblemDetails CreateProblem(int status, string title, string code)
     {
         var problem = new ProblemDetails

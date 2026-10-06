@@ -15,6 +15,7 @@ public static class Permissions
     public const string ManageUsers = nameof(ManageUsers);
     public const string ManageRoles = nameof(ManageRoles);
     public const string ManageSettings = nameof(ManageSettings);
+    public const string ViewFeedback = nameof(ViewFeedback);
 
     public static readonly IReadOnlyList<PermissionDefinition> All =
     [
@@ -23,7 +24,8 @@ public static class Permissions
         new(ViewRevenue, "Xem doanh thu", "Xem dashboard, danh sách và tổng hợp giao dịch."),
         new(ManageUsers, "Quản lý người dùng", "Xem, khoá và mở khoá tài khoản."),
         new(ManageRoles, "Quản lý phân quyền", "Tạo, sửa, xoá role và gán role cho người dùng."),
-        new(ManageSettings, "Cấu hình hệ thống", "Xem và sửa các thông số vận hành (ví dụ ngưỡng địa điểm mỗi ga).")
+        new(ManageSettings, "Cấu hình hệ thống", "Xem và sửa các thông số vận hành (ví dụ ngưỡng địa điểm mỗi ga)."),
+        new(ViewFeedback, "Xem phản hồi & đánh giá", "Xem đánh giá địa điểm và phản hồi chuyến đi của người dùng.")
     ];
 
     public static bool IsDefined(string code) => All.Any(permission => permission.Code == code);

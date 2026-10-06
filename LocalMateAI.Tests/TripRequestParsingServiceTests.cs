@@ -401,7 +401,8 @@ public sealed class TripRequestParsingServiceTests
                     new TimeSlotResponse("morning", "Buổi sáng", new TimeOnly(8, 0), 16),
                     new TimeSlotResponse("afternoon", "Buổi chiều", new TimeOnly(13, 0), 11),
                     new TimeSlotResponse("evening", "Buổi tối", new TimeOnly(18, 0), 6)
-                ]));
+                ],
+                []));
     }
 
     private sealed class FakeUserRepository(Guid? userId = null) : IUserRepository

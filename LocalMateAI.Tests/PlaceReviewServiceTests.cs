@@ -1,3 +1,4 @@
+using LocalMateAI.Application.DTOs.Common;
 using LocalMateAI.Application.DTOs.PlaceReviews;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Services;
@@ -262,6 +263,67 @@ public sealed class PlaceReviewServiceTests
         Assert.Equal("Đông", result.Response.Comment);
     }
 
+    [Fact]
+    public async Task Delete_EmptyItemId_ReturnsInvalidItemWithoutLookup()
+    {
+        var repository = new FakeReviewRepository(VisitedItem());
+        var service = new PlaceReviewService(new FakeUserRepository(UserId), repository);
+
+        var status = await service.DeleteAsync(UserId, Guid.Empty);
+
+        Assert.Equal(DeletePlaceReviewResultStatus.InvalidItemId, status);
+        Assert.Equal(0, repository.ItemReads);
+        Assert.Empty(repository.Deletes);
+    }
+
+    [Fact]
+    public async Task Delete_UnknownUser_ReturnsUserNotFoundWithoutDeleting()
+    {
+        var repository = new FakeReviewRepository(VisitedItem()) { DeleteResult = 1 };
+        var service = new PlaceReviewService(new FakeUserRepository(), repository);
+
+        var status = await service.DeleteAsync(UserId, ItemId);
+
+        Assert.Equal(DeletePlaceReviewResultStatus.UserNotFound, status);
+        Assert.Empty(repository.Deletes);
+    }
+
+    [Fact]
+    public async Task Delete_ItemNotOwned_ReturnsItemNotFoundWithoutDeleting()
+    {
+        var repository = new FakeReviewRepository(item: null) { DeleteResult = 1 };
+        var service = new PlaceReviewService(new FakeUserRepository(UserId), repository);
+
+        var status = await service.DeleteAsync(UserId, ItemId);
+
+        Assert.Equal(DeletePlaceReviewResultStatus.ItemNotFound, status);
+        Assert.Empty(repository.Deletes);
+    }
+
+    [Fact]
+    public async Task Delete_NoReviewForItem_ReturnsReviewNotFound()
+    {
+        var repository = new FakeReviewRepository(VisitedItem());
+        var service = new PlaceReviewService(new FakeUserRepository(UserId), repository);
+
+        var status = await service.DeleteAsync(UserId, ItemId);
+
+        Assert.Equal(DeletePlaceReviewResultStatus.ReviewNotFound, status);
+        Assert.Equal((UserId, ItemId), Assert.Single(repository.Deletes));
+    }
+
+    [Fact]
+    public async Task Delete_ExistingReview_ReturnsSuccess()
+    {
+        var repository = new FakeReviewRepository(VisitedItem()) { DeleteResult = 1 };
+        var service = new PlaceReviewService(new FakeUserRepository(UserId), repository);
+
+        var status = await service.DeleteAsync(UserId, ItemId);
+
+        Assert.Equal(DeletePlaceReviewResultStatus.Success, status);
+        Assert.Equal((UserId, ItemId), Assert.Single(repository.Deletes));
+    }
+
     private static CreatePlaceReviewRequest Valid() =>
         new(5, [ReviewQuickTags.WorthVisiting], "Tuyệt vời");
 
@@ -276,6 +338,16 @@ public sealed class PlaceReviewServiceTests
         public int ItemReads { get; private set; }
 
         public List<PlaceReview> Added { get; } = [];
+
+        public int DeleteResult { get; init; }
+
+        public List<(Guid UserId, Guid ItemId)> Deletes { get; } = [];
+
+        public Task<int> DeleteAsync(Guid userId, Guid itemId, CancellationToken cancellationToken = default)
+        {
+            Deletes.Add((userId, itemId));
+            return Task.FromResult(DeleteResult);
+        }
 
         public Task<OwnedItemForReviewReadModel?> GetOwnedItemAsync(
             Guid itemId,
@@ -309,6 +381,18 @@ public sealed class PlaceReviewServiceTests
 
             return Task.FromResult(tryAddResult);
         }
+
+        public Task<bool> IsPlaceVisibleAsync(Guid placeId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<PlaceReviewSummary> GetSummaryAsync(Guid placeId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<PagedResult<PublicPlaceReviewResponse>> GetPagedByPlaceAsync(
+            Guid placeId,
+            PlaceReviewQuery query,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 
     private sealed class FakeUserRepository(Guid? userId = null) : IUserRepository

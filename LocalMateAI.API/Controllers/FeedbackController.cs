@@ -63,6 +63,49 @@ public sealed class FeedbackController(IFeedbackService feedbackService) : Contr
         };
     }
 
+    [HttpGet("trip/{tripId:guid}")]
+    [Authorize(Policy = AppPolicies.RegisteredUser)]
+    [ProducesResponseType<FeedbackResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<FeedbackResponse>> GetTripFeedbackAsync(
+        Guid tripId,
+        CancellationToken cancellationToken)
+    {
+        var subject = User.FindFirst("sub")?.Value;
+        if (!Guid.TryParse(subject, out var userId) || userId == Guid.Empty)
+        {
+            return Unauthorized(CreateProblem(
+                StatusCodes.Status401Unauthorized,
+                "Authentication identity is invalid.",
+                "invalid_identity"));
+        }
+
+        var result = await feedbackService.GetAsync(userId, tripId, cancellationToken);
+
+        return result.Status switch
+        {
+            GetFeedbackResultStatus.Success => Ok(result.Response),
+            GetFeedbackResultStatus.NonPersistedUser =>
+                StatusCode(StatusCodes.Status403Forbidden, CreateProblem(
+                    StatusCodes.Status403Forbidden,
+                    "A persisted user account is required to view feedback.",
+                    "feedback_requires_persisted_user")),
+            GetFeedbackResultStatus.TripNotFound =>
+                NotFound(CreateProblem(
+                    StatusCodes.Status404NotFound,
+                    "Trip was not found.",
+                    "trip_not_found")),
+            GetFeedbackResultStatus.FeedbackNotFound =>
+                NotFound(CreateProblem(
+                    StatusCodes.Status404NotFound,
+                    "Feedback was not found.",
+                    "feedback_not_found")),
+            _ => throw new InvalidOperationException("Unsupported feedback result status.")
+        };
+    }
+
     private ProblemDetails CreateProblem(int status, string title, string code)
     {
         var problem = new ProblemDetails

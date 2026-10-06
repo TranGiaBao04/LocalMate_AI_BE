@@ -7,4 +7,5 @@ public sealed record MasterDataResponse(
     IReadOnlyList<string> TripStatuses,
     IReadOnlyList<string> TravelModes,
     TripLimitsResponse TripLimits,
-    IReadOnlyList<TimeSlotResponse> TimeSlots);
+    IReadOnlyList<TimeSlotResponse> TimeSlots,
+    IReadOnlyList<FeedbackQuickTagResponse> FeedbackQuickTags);
