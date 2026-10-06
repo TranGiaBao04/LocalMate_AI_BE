@@ -10,6 +10,8 @@ public abstract record AdminPlanTermsRequest
     public int? DurationDays { get; init; }
     public int? GenerateLimit { get; init; }
     public int? SavedTripLimit { get; init; }
+    public int? AiDailyCallLimit { get; init; }
+    public int? AiExplainCallsPerTripLimit { get; init; }
     public IReadOnlyList<Guid>? FeatureIds { get; init; } = [];
 }
 
@@ -45,14 +47,18 @@ public sealed record AdminPlanFeatureResponse(Guid Id, string Code, string Name,
 public sealed record AdminPlanVersionResponse(
     Guid Id, int VersionNumber, decimal Price, int? DurationDays, int? GenerateLimit, int? SavedTripLimit,
     string Origin, DateTime? PublishedAt, DateTime CreatedAt,
-    IReadOnlyList<AdminPlanFeatureResponse> Features, bool IsCurrent);
+    IReadOnlyList<AdminPlanFeatureResponse> Features, bool IsCurrent)
+{
+    public int? AiDailyCallLimit { get; init; }
+    public int? AiExplainCallsPerTripLimit { get; init; }
+}
 
 public sealed record AdminPlanResponse(
     Guid Id, string Code, string Name, int EntitlementPriority, bool IsSystem, bool IsActive,
     DateTime CreatedAt, DateTime UpdatedAt, AdminPlanVersionResponse? CurrentVersion, int ActiveSubscriberCount);
 
 public sealed record PlanVersionTerms(decimal Price, int? DurationDays, int? GenerateLimit,
-    int? SavedTripLimit, IReadOnlyList<Guid> FeatureIds);
+    int? SavedTripLimit, int AiDailyCallLimit, int AiExplainCallsPerTripLimit, IReadOnlyList<Guid> FeatureIds);
 
 public enum AdminPlanResultStatus
 {

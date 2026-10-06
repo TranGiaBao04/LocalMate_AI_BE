@@ -78,6 +78,7 @@ internal sealed class BeforeSingleItineraryModelCustomizer(ModelCustomizerDepend
         order.Ignore(o => o.SingleItineraryProductVersionId);
         order.Ignore(o => o.CreditAmount);
         BeforeUserLockedByModelCustomizer.IgnoreUserLockedBy(modelBuilder);
+        BeforeUserLockedByModelCustomizer.IgnoreAiEntitlements(modelBuilder);
     }
 }
 
@@ -89,6 +90,7 @@ internal sealed class BeforeUserLockedByModelCustomizer(ModelCustomizerDependenc
     {
         base.Customize(modelBuilder, context);
         IgnoreUserLockedBy(modelBuilder);
+        IgnoreAiEntitlements(modelBuilder);
     }
 
     internal static void IgnoreUserLockedBy(ModelBuilder modelBuilder)
@@ -98,5 +100,13 @@ internal sealed class BeforeUserLockedByModelCustomizer(ModelCustomizerDependenc
                      .Where(f => f.Properties.Any(p => p.Name == nameof(User.LockedByUserId))).ToArray())
             user.Metadata.RemoveForeignKey(fk);
         user.Ignore(u => u.LockedByUserId);
+    }
+
+    internal static void IgnoreAiEntitlements(ModelBuilder modelBuilder)
+    {
+        // These columns do not exist in the historical schemas used by these fixtures.
+        var version = modelBuilder.Entity<SubscriptionPlanVersion>();
+        version.Ignore(v => v.AiDailyCallLimit);
+        version.Ignore(v => v.AiExplainCallsPerTripLimit);
     }
 }

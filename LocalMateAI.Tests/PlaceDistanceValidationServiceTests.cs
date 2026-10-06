@@ -1,3 +1,4 @@
+using System.Globalization;
 using LocalMateAI.Application.DTOs.Common;
 using LocalMateAI.Application.DTOs.Geo;
 using LocalMateAI.Application.DTOs.MasterData;
@@ -53,8 +54,26 @@ public sealed class PlaceDistanceValidationServiceTests
         Assert.False(result.IsWithinThreshold);
         Assert.True(result.HasWarning);
         Assert.NotNull(result.WarningMessage);
-        Assert.Contains("vượt quá bán kính phục vụ khuyến nghị 1.5 km", result.WarningMessage);
+        var thresholdText = (1500.0 / 1000.0).ToString("F1", CultureInfo.CurrentCulture);
+        Assert.Contains($"vượt quá bán kính phục vụ khuyến nghị {thresholdText} km", result.WarningMessage);
         Assert.Equal(2350.0, result.DistanceMeters);
+    }
+
+    [Theory]
+    [InlineData("en-US")]
+    [InlineData("vi-VN")]
+    public async Task ValidateDistance_WarningUsesCurrentCulture(string cultureName)
+    {
+        var previousCulture = CultureInfo.CurrentCulture;
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo(cultureName);
+            await ValidateDistance_DistanceExceeds1500m_ReturnsWarning();
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previousCulture;
+        }
     }
 
     [Fact]

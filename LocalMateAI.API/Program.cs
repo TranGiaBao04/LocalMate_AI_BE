@@ -244,6 +244,10 @@ builder.Services.AddScoped<IPlaceEmbeddingRepository, PlaceEmbeddingRepository>(
 builder.Services.AddScoped<IPlaceEmbeddingSyncService, PlaceEmbeddingSyncService>();
 builder.Services.AddScoped<ISemanticPlaceScorer, SemanticPlaceScorer>();
 builder.Services.AddScoped<ILlmCallLogRepository, LlmCallLogRepository>();
+builder.Services.AddScoped<IAiUsageAdmissionRepository, AiUsageAdmissionRepository>();
+builder.Services.AddScoped<IAiUsageAccountingRepository>(sp => sp.GetRequiredService<IAiUsageAdmissionRepository>());
+builder.Services.AddHostedService<AiUsageRecoveryWorker>();
+builder.Services.AddScoped<IAiUsageCoordinator, AiUsageCoordinator>();
 builder.Services.AddScoped<IAiUsageGuard, AiUsageGuard>();
 builder.Services.AddScoped<ITripExplanationRepository, TripExplanationRepository>();
 builder.Services.AddScoped<ITripExplanationService, TripExplanationService>();

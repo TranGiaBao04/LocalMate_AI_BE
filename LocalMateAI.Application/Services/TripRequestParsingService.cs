@@ -9,7 +9,7 @@ public sealed class TripRequestParsingService(
     IUserRepository userRepository,
     ITagRepository tagRepository,
     IMasterDataService masterDataService,
-    IAiUsageGuard usageGuard,
+    IAiUsageCoordinator usageCoordinator,
     ILlmClient llmClient,
     TimeProvider timeProvider) : ITripRequestParsingService
 {
@@ -42,8 +42,8 @@ public sealed class TripRequestParsingService(
             return new ParseTripRequestResult(ParseTripRequestResultStatus.UserNotFound);
         }
 
-        // Kiểm tra trần TRƯỚC khi gọi AI: lần nào đã gửi đi cũng tính vào trần ngày.
-        var usage = await usageGuard.CheckAsync(userId, LlmCallKind.ParseRequest, null, cancellationToken);
+        var admission = await usageCoordinator.AdmitAsync(userId, LlmCallKind.ParseRequest, null, cancellationToken);
+        var usage = admission.Decision;
         if (usage.Status == AiUsageStatus.DailyLimitReached)
         {
             return new ParseTripRequestResult(
@@ -55,6 +55,7 @@ public sealed class TripRequestParsingService(
             return new ParseTripRequestResult(ParseTripRequestResultStatus.AiUnavailable);
         }
 
+        await using var call = admission.Call ?? throw new InvalidOperationException("Missing AI admission scope.");
         var tags = await tagRepository.GetActiveAsync(cancellationToken);
         var masterData = await masterDataService.GetMasterDataAsync(cancellationToken);
         var vietnamNow = VietnamTime.Now(timeProvider);
@@ -83,6 +84,7 @@ public sealed class TripRequestParsingService(
             TripRequestParsingPrompt.MaxOutputTokens,
             TripRequestParsingPrompt.Temperature);
 
+        await call.AuthorizeAsync(cancellationToken);
         using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutSource.CancelAfter(ProviderTimeout);
         var startedAt = timeProvider.GetTimestamp();
@@ -109,14 +111,10 @@ public sealed class TripRequestParsingService(
                 ? LlmCallOutcome.InvalidOutput
                 : LlmCallOutcome.Succeeded;
 
-        await usageGuard.RecordAsync(
-            userId,
-            LlmCallKind.ParseRequest,
-            null,
+        await call.CompleteAsync(
             outcome,
             response,
-            (int)timeProvider.GetElapsedTime(startedAt).TotalMilliseconds,
-            CancellationToken.None);
+            (int)timeProvider.GetElapsedTime(startedAt).TotalMilliseconds);
 
         if (answer is null)
         {

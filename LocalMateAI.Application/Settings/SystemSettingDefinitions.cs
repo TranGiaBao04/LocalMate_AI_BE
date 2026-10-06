@@ -108,10 +108,12 @@ public static class SystemSettingDefinitions
             + "Khi tắt, ứng dụng vẫn tạo lịch bình thường với câu lý do mặc định.",
             SystemSettingValueType.Integer, null, DefaultValue: 1, MinValue: 0, MaxValue: 1),
         new(SystemSettingKeys.AiDailyCallsPerUser, "Ai", "Số lần dùng AI tối đa mỗi người mỗi ngày",
-            "Tính chung mọi tính năng AI viết nội dung, kể cả lần gọi bị lỗi. Đặt lại lúc 00:00 giờ Việt Nam.",
+            "Dự phòng cho PlanVersion thiếu AiDailyCallLimit; không giới hạn quyền AI đã có trên phiên bản gói. "
+            + "Tính chung mọi tính năng AI viết nội dung, kể cả lần gọi bị lỗi. Đặt lại lúc 00:00 giờ Việt Nam.",
             SystemSettingValueType.Integer, "lần", DefaultValue: 10, MinValue: 1, MaxValue: 1_000),
         new(SystemSettingKeys.AiExplainCallsPerTrip, "Ai", "Số lần AI viết lại lý do cho một chuyến đi",
-            "Mỗi chuyến đi được nhờ AI viết lý do tối đa từng này lần. Chỉ tính lần thành công; "
+            "Dự phòng cho PlanVersion thiếu AiExplainCallsPerTripLimit; không giới hạn quyền AI đã có trên phiên bản gói. "
+            + "Mỗi chuyến đi được nhờ AI viết lý do tối đa từng này lần. Chỉ tính lần thành công; "
             + "lần bị lỗi không làm mất lượt của chuyến đi nhưng vẫn tính vào trần mỗi ngày.",
             SystemSettingValueType.Integer, "lần", DefaultValue: 3, MinValue: 1, MaxValue: 20)
     ];

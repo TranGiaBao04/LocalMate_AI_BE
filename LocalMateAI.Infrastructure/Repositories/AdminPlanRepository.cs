@@ -85,7 +85,11 @@ public sealed class AdminPlanRepository(AppDbContext context) : IAdminPlanReposi
     private static AdminPlanVersionResponse VersionResponse(SubscriptionPlanVersion v,
         Dictionary<Guid, AdminPlanFeatureResponse[]> features, bool current) =>
         new(v.Id, v.VersionNumber, v.Price, v.DurationDays, v.GenerateLimit, v.SavedTripLimit, v.Origin.ToString(),
-            v.PublishedAt, v.CreatedAt, features.GetValueOrDefault(v.Id, []), current);
+            v.PublishedAt, v.CreatedAt, features.GetValueOrDefault(v.Id, []), current)
+        {
+            AiDailyCallLimit = v.AiDailyCallLimit,
+            AiExplainCallsPerTripLimit = v.AiExplainCallsPerTripLimit
+        };
 
     public async Task<IReadOnlyList<AdminPlanFeatureResponse>> GetFeaturesAsync(CancellationToken cancellationToken = default) =>
         await context.PlanFeatures.AsNoTracking().OrderBy(f => f.Code)
@@ -148,6 +152,7 @@ public sealed class AdminPlanRepository(AppDbContext context) : IAdminPlanReposi
         {
             PlanId = plan.Id, VersionNumber = checked(latest + 1), Price = terms.Price, DurationDays = terms.DurationDays,
             GenerateLimit = terms.GenerateLimit, SavedTripLimit = terms.SavedTripLimit,
+            AiDailyCallLimit = terms.AiDailyCallLimit, AiExplainCallsPerTripLimit = terms.AiExplainCallsPerTripLimit,
             Origin = PlanVersionOrigin.Published, PublishedAt = nowUtc
         };
         context.SubscriptionPlanVersions.Add(version);

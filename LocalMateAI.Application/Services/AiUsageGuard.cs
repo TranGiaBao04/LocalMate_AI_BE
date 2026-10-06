@@ -10,7 +10,8 @@ public sealed class AiUsageGuard(
     ILlmClient llmClient,
     ILlmCallLogRepository repository,
     ISystemSettingProvider settings,
-    TimeProvider timeProvider) : IAiUsageGuard
+    TimeProvider timeProvider,
+    ISubscriptionRepository subscriptions) : IAiUsageGuard
 {
     public async Task<AiUsageDecision> CheckAsync(
         Guid userId,
@@ -24,9 +25,13 @@ public sealed class AiUsageGuard(
             return new AiUsageDecision(AiUsageStatus.Disabled);
         }
 
+        var nowUtc = timeProvider.GetUtcNow().UtcDateTime;
+        var effective = await EffectiveSubscriptionResolver.ResolveAsync(
+            subscriptions, userId, nowUtc, cancellationToken);
+
         if (tripId is { } id && kind == LlmCallKind.Explain)
         {
-            var perTrip = await settings.GetIntAsync(SystemSettingKeys.AiExplainCallsPerTrip, cancellationToken);
+            var perTrip = await AiEntitlementLimits.ExplainPerTripAsync(effective.Version, settings, cancellationToken);
             // Chỉ đếm lần thành công: lần bị nhà cung cấp từ chối không làm mất lượt của chuyến đi.
             if (await repository.CountSucceededForTripAsync(id, kind, cancellationToken) >= perTrip)
             {
@@ -35,8 +40,8 @@ public sealed class AiUsageGuard(
         }
 
         // "Ngày" tính theo lịch Việt Nam: trần đặt lại lúc 00:00 giờ Việt Nam.
-        var dayStartUtc = VietnamTime.StartOfTodayUtc(timeProvider);
-        var perDay = await settings.GetIntAsync(SystemSettingKeys.AiDailyCallsPerUser, cancellationToken);
+        var dayStartUtc = VietnamTime.StartOfDayUtc(nowUtc);
+        var perDay = await AiEntitlementLimits.DailyAsync(effective.Version, settings, cancellationToken);
 
         return await repository.CountForUserSinceAsync(userId, dayStartUtc, cancellationToken) >= perDay
             ? new AiUsageDecision(AiUsageStatus.DailyLimitReached, dayStartUtc.AddDays(1))

@@ -3,6 +3,7 @@ using System;
 using LocalMateAI.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NetTopologySuite.Geometries;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace LocalMateAI.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261005143825_AddVersionedAiEntitlements")]
+    partial class AddVersionedAiEntitlements
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -26,103 +29,6 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
             modelBuilder.HasSequence("PaymentOrderCodeSequence");
-
-            modelBuilder.Entity("LocalMateAI.Domain.Entities.AiUsageAdmission", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("AdmittedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("AdmittedDailyLimit")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("AdmittedExplainLimit")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime?>("CompletedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("DispatchAuthorizedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<long>("FencingGeneration")
-                        .HasColumnType("bigint");
-
-                    b.Property<Guid>("FencingToken")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Kind")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)");
-
-                    b.Property<Guid?>("LlmCallLogId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Outcome")
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)");
-
-                    b.Property<DateTime?>("RecoveryAfter")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("ReservedUntil")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("ResolvedPlanVersionId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("State")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)");
-
-                    b.Property<Guid?>("TripId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("TripIdSnapshot")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateOnly>("VietnamUsageDate")
-                        .HasColumnType("date");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("LlmCallLogId")
-                        .IsUnique()
-                        .HasFilter("\"LlmCallLogId\" IS NOT NULL");
-
-                    b.HasIndex("ResolvedPlanVersionId");
-
-                    b.HasIndex("TripId");
-
-                    b.HasIndex("RecoveryAfter", "State")
-                        .HasFilter("\"RecoveryAfter\" IS NOT NULL");
-
-                    b.HasIndex("ReservedUntil", "State");
-
-                    b.HasIndex("TripIdSnapshot", "Kind", "State");
-
-                    b.HasIndex("UserId", "VietnamUsageDate", "State");
-
-                    b.ToTable("AiUsageAdmissions", null, t =>
-                        {
-                            t.HasCheckConstraint("CK_AiAdmissions_Identity", "\"Id\" <> '00000000-0000-0000-0000-000000000000'::uuid AND \"FencingToken\" <> '00000000-0000-0000-0000-000000000000'::uuid AND \"FencingGeneration\" > 0 AND (\"TripId\" IS NULL OR \"TripId\"=\"TripIdSnapshot\")");
-
-                            t.HasCheckConstraint("CK_AiAdmissions_Kind", "\"Kind\" IN ('ParseRequest','Explain')");
-
-                            t.HasCheckConstraint("CK_AiAdmissions_State", "(\"State\"='Reserved' AND \"DispatchAuthorizedAt\" IS NULL AND \"CompletedAt\" IS NULL AND \"Outcome\" IS NULL AND \"LlmCallLogId\" IS NULL AND \"RecoveryAfter\" IS NULL) OR (\"State\"='DispatchAuthorized' AND \"DispatchAuthorizedAt\" IS NOT NULL AND \"CompletedAt\" IS NULL AND \"Outcome\" IS NULL AND \"LlmCallLogId\" IS NULL) OR (\"State\"='Completed' AND \"DispatchAuthorizedAt\" IS NOT NULL AND \"CompletedAt\" IS NOT NULL AND \"Outcome\" IS NOT NULL AND \"Outcome\" IN ('Succeeded','ProviderFailed','InvalidOutput') AND \"LlmCallLogId\" IS NOT NULL AND \"RecoveryAfter\" IS NULL) OR (\"State\"='Released' AND \"DispatchAuthorizedAt\" IS NULL AND \"CompletedAt\" IS NOT NULL AND \"Outcome\" IS NULL AND \"LlmCallLogId\" IS NULL AND \"RecoveryAfter\" IS NULL) OR (\"State\"='Abandoned' AND \"DispatchAuthorizedAt\" IS NOT NULL AND \"CompletedAt\" IS NOT NULL AND \"Outcome\" IS NULL AND \"LlmCallLogId\" IS NULL AND \"RecoveryAfter\" IS NULL)");
-
-                            t.HasCheckConstraint("CK_AiAdmissions_Terms", "\"AdmittedDailyLimit\" BETWEEN 0 AND 1000 AND ((\"Kind\"='ParseRequest' AND \"TripId\" IS NULL AND \"TripIdSnapshot\" IS NULL AND \"AdmittedExplainLimit\" IS NULL) OR (\"Kind\"='Explain' AND \"TripIdSnapshot\" IS NOT NULL AND \"AdmittedExplainLimit\" IS NOT NULL AND \"AdmittedExplainLimit\" BETWEEN 0 AND 20))");
-
-                            t.HasCheckConstraint("CK_AiAdmissions_Time", "\"ReservedUntil\"=\"AdmittedAt\" + interval '30 seconds' AND \"VietnamUsageDate\"=((\"AdmittedAt\" AT TIME ZONE 'UTC') + interval '7 hours')::date AND (\"DispatchAuthorizedAt\" IS NULL OR \"DispatchAuthorizedAt\">=\"AdmittedAt\") AND (\"CompletedAt\" IS NULL OR \"CompletedAt\">=COALESCE(\"DispatchAuthorizedAt\",\"AdmittedAt\")) AND (\"RecoveryAfter\" IS NULL OR \"RecoveryAfter\">=\"DispatchAuthorizedAt\")");
-                        });
-                });
 
             modelBuilder.Entity("LocalMateAI.Domain.Entities.CuratedItinerary", b =>
                 {
@@ -958,10 +864,6 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
 
                     b.Property<decimal>("EstimatedCostMin")
                         .HasColumnType("numeric(12,0)");
-
-                    b.Property<string>("GooglePlaceId")
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
 
                     b.Property<string>("ImageUrl")
                         .HasColumnType("text");
@@ -1927,31 +1829,6 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("UX_UserSubscriptions_UserId_PlanCode");
 
                     b.ToTable("UserSubscriptions", (string)null);
-                });
-
-            modelBuilder.Entity("LocalMateAI.Domain.Entities.AiUsageAdmission", b =>
-                {
-                    b.HasOne("LocalMateAI.Domain.Entities.LlmCallLog", null)
-                        .WithMany()
-                        .HasForeignKey("LlmCallLogId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("LocalMateAI.Domain.Entities.SubscriptionPlanVersion", null)
-                        .WithMany()
-                        .HasForeignKey("ResolvedPlanVersionId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("LocalMateAI.Domain.Entities.Trip", null)
-                        .WithMany()
-                        .HasForeignKey("TripId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("LocalMateAI.Domain.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
                 });
 
             modelBuilder.Entity("LocalMateAI.Domain.Entities.CuratedItineraryItem", b =>

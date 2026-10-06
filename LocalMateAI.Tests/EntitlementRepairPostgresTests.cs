@@ -58,7 +58,8 @@ public sealed class EntitlementRepairPostgresTests
         var plan = await c.SubscriptionPlans.SingleAsync(p => p.Id == f.Orders[0].PlanId);
         var repository = new SubscriptionRepository(c);
         var version = new SubscriptionPlanVersion { PlanId = plan.Id, VersionNumber = 2, Price = 29000, DurationDays = 12,
-            GenerateLimit = 4, SavedTripLimit = 9, Origin = PlanVersionOrigin.Published, PublishedAt = Day.AddDays(1) };
+            GenerateLimit = 4, SavedTripLimit = 9, AiDailyCallLimit = 15, AiExplainCallsPerTripLimit = 3,
+            Origin = PlanVersionOrigin.Published, PublishedAt = Day.AddDays(1) };
         await repository.PublishVersionAsync(version, []);
         plan.IsActive = false;
         await c.SaveChangesAsync();

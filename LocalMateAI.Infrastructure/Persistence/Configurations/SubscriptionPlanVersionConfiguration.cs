@@ -14,6 +14,8 @@ public sealed class SubscriptionPlanVersionConfiguration : IEntityTypeConfigurat
             t.HasCheckConstraint("CK_Versions_Duration", "\"DurationDays\" IS NULL OR \"DurationDays\" > 0");
             t.HasCheckConstraint("CK_Versions_Generate", "\"GenerateLimit\" IS NULL OR \"GenerateLimit\" >= 0");
             t.HasCheckConstraint("CK_Versions_Saved", "\"SavedTripLimit\" IS NULL OR \"SavedTripLimit\" >= 0");
+            t.HasCheckConstraint("CK_Versions_AiDaily", "\"AiDailyCallLimit\" IS NULL OR \"AiDailyCallLimit\" BETWEEN 0 AND 1000");
+            t.HasCheckConstraint("CK_Versions_AiExplain", "\"AiExplainCallsPerTripLimit\" IS NULL OR \"AiExplainCallsPerTripLimit\" BETWEEN 0 AND 20");
             t.HasCheckConstraint("CK_Versions_Origin", "\"Origin\" IN ('Published','LegacyBaseline','LegacyReconstructed') AND (\"Origin\" <> 'Published' OR \"PublishedAt\" IS NOT NULL)");
         });
         b.HasKey(v => v.Id);
