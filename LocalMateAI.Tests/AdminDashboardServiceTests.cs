@@ -121,6 +121,51 @@ public sealed class AdminDashboardServiceTests
     }
 
     [Fact]
+    public async Task TripsFinalizedDaily_FillsMissingDaysWithZero_InAscendingOrder()
+    {
+        var repository = new FakeRepository
+        {
+            FinalizedRows =
+            [
+                new DailyTripsFinalizedResponse(new DateOnly(2026, 9, 28), 2),
+                new DailyTripsFinalizedResponse(new DateOnly(2026, 9, 30), 3)
+            ]
+        };
+        var service = CreateService(repository);
+        var query = new DashboardDateRangeQuery { From = "2026-09-27", To = "2026-10-01" };
+
+        var result = await service.GetTripsFinalizedDailyAsync(query);
+        await service.GetTripsFinalizedDailyAsync(query);
+
+        var response = result.Response!;
+        Assert.Equal(
+        [
+            new DailyTripsFinalizedResponse(new DateOnly(2026, 9, 27), 0),
+            new DailyTripsFinalizedResponse(new DateOnly(2026, 9, 28), 2),
+            new DailyTripsFinalizedResponse(new DateOnly(2026, 9, 29), 0),
+            new DailyTripsFinalizedResponse(new DateOnly(2026, 9, 30), 3),
+            new DailyTripsFinalizedResponse(new DateOnly(2026, 10, 1), 0)
+        ], response.Days);
+        Assert.Equal(5, response.TotalTripsFinalized);
+        Assert.Equal(new DateTime(2026, 9, 26, 17, 0, 0, DateTimeKind.Utc), repository.LastStartUtc);
+        Assert.Equal(new DateTime(2026, 10, 1, 17, 0, 0, DateTimeKind.Utc), repository.LastEndUtc);
+        Assert.Equal(1, repository.Calls);
+    }
+
+    [Fact]
+    public async Task TripsFinalizedDaily_InvalidQuery_DoesNotQuery()
+    {
+        var repository = new FakeRepository();
+
+        var result = await CreateService(repository).GetTripsFinalizedDailyAsync(
+            new DashboardDateRangeQuery { To = "2030-01-01" });
+
+        Assert.Equal(AdminDashboardResultStatus.InvalidQuery, result.Status);
+        Assert.Contains("To", result.ValidationErrors!.Keys);
+        Assert.Equal(0, repository.Calls);
+    }
+
+    [Fact]
     public async Task BreakEven_QueriesVietnamMonthWindow_AndUsesConfiguredTarget()
     {
         var repository = new FakeRepository { Totals = new PaidRevenueTotals(5, 177000m) };
@@ -272,6 +317,7 @@ public sealed class AdminDashboardServiceTests
         public PaidRevenueTotals Totals { get; init; } = new(0, 0m);
         public IReadOnlyList<DailyRevenueRow> DailyRows { get; init; } = [];
         public IReadOnlyList<StationTripCountRow> StationRows { get; init; } = [];
+        public IReadOnlyList<DailyTripsFinalizedResponse> FinalizedRows { get; init; } = [];
         public bool FailNext { get; set; }
         public int Calls { get; private set; }
         public DateTime LastStartUtc { get; private set; }
@@ -285,6 +331,9 @@ public sealed class AdminDashboardServiceTests
 
         public Task<IReadOnlyList<DailyRevenueRow>> GetDailyRevenueAsync(DateTime startUtc, DateTime endUtc,
             CancellationToken cancellationToken = default) => Record(startUtc, endUtc, DailyRows);
+
+        public Task<IReadOnlyList<DailyTripsFinalizedResponse>> GetDailyFinalizedTripsAsync(DateTime startUtc,
+            DateTime endUtc, CancellationToken cancellationToken = default) => Record(startUtc, endUtc, FinalizedRows);
 
         public Task<IReadOnlyList<StationTripCountRow>> GetTripCountsByStationAsync(DateTime startUtc, DateTime endUtc,
             CancellationToken cancellationToken = default) => Record(startUtc, endUtc, StationRows);

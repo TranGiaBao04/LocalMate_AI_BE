@@ -159,6 +159,8 @@ builder.Services.AddScoped<IAdminTransactionRepository, AdminTransactionReposito
 builder.Services.AddScoped<IAdminTransactionService, AdminTransactionService>();
 builder.Services.AddScoped<IAdminDashboardRepository, AdminDashboardRepository>();
 builder.Services.AddScoped<IAdminDashboardService, AdminDashboardService>();
+builder.Services.AddScoped<IPublicStatsRepository, PublicStatsRepository>();
+builder.Services.AddScoped<IPublicStatsService, PublicStatsService>();
 builder.Services.AddScoped<IAdminStationRepository, AdminStationRepository>();
 builder.Services.AddScoped<IAdminStationService, AdminStationService>();
 builder.Services.AddScoped<IAdminUserRepository, AdminUserRepository>();

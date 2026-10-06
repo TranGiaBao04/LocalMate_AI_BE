@@ -70,6 +70,33 @@ public sealed class AdminDashboardService(
         return new(AdminDashboardResultStatus.Success, response);
     }
 
+    public async Task<AdminDashboardResult<AdminDashboardTripsFinalizedDailyResponse>> GetTripsFinalizedDailyAsync(
+        DashboardDateRangeQuery query, CancellationToken cancellationToken = default)
+    {
+        var validation = await rangeValidator.ValidateAsync(query, cancellationToken);
+        if (!validation.IsValid)
+        {
+            return Invalid<AdminDashboardTripsFinalizedDailyResponse>(validation.Errors);
+        }
+
+        var range = DashboardDateRules.Resolve(query, DashboardDateRules.Today(timeProvider))!;
+        var response = await GetOrCreateAsync(CacheKey("trips-finalized-daily", range), async () =>
+        {
+            var rows = (await repository.GetDailyFinalizedTripsAsync(range.StartUtc, range.EndUtc, cancellationToken))
+                .ToDictionary(row => row.Date);
+            // Ngày không có trip chốt vẫn có dòng 0 để FE vẽ biểu đồ liền mạch.
+            var days = Enumerable.Range(0, range.DayCount)
+                .Select(offset => range.From.AddDays(offset))
+                .Select(date => rows.TryGetValue(date, out var row) ? row : new DailyTripsFinalizedResponse(date, 0))
+                .ToList();
+
+            return new AdminDashboardTripsFinalizedDailyResponse(range.From, range.To,
+                days.Sum(day => day.TripsFinalized), days, timeProvider.GetUtcNow().UtcDateTime);
+        });
+
+        return new(AdminDashboardResultStatus.Success, response);
+    }
+
     public async Task<AdminDashboardResult<AdminDashboardTopStationsResponse>> GetTopStationsAsync(
         DashboardTopStationsQuery query, CancellationToken cancellationToken = default)
     {
