@@ -1,3 +1,4 @@
+using LocalMateAI.Application.DTOs.Notifications;
 using LocalMateAI.Application.Interfaces.Payments;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Payments;
@@ -16,7 +17,8 @@ public sealed class PaymentSettlementService(
     TimeProvider timeProvider,
     ILogger<PaymentSettlementService> logger,
     ISingleItineraryRepository? singleRepository = null,
-    IPaymentCreditRepository? creditRepository = null) : IPaymentSettlementService
+    IPaymentCreditRepository? creditRepository = null,
+    INotificationRepository? notificationRepository = null) : IPaymentSettlementService
 {
     public Task<PaymentSettlementResult> ApplyVerifiedPaymentAsync(
         VerifiedPaymentNotification notification,
@@ -160,6 +162,8 @@ public sealed class PaymentSettlementService(
             ?? throw new InvalidOperationException("Paid order owner is missing.");
         await emailOutboxRepository.EnqueueAsync(
             UpgradePaymentReceiptEmailBuilder.Build(user, order, targetPeriod, plan, version), now, ct);
+        await EnqueueNotificationAsync(
+            NotificationBuilder.SubscriptionUpgraded(order.UserId, order.Id, plan.Name, targetPeriod.EndsAt), now, ct);
         return new(PaymentSettlementStatus.Settled)
         { TransitionReasonCode = context.ReasonCode ?? "verified_success", OccurredAt = now };
 
@@ -217,5 +221,14 @@ public sealed class PaymentSettlementService(
 
         var entry = PaymentReceiptEmailBuilder.Build(user, order, subscription, plan, version, nowUtc);
         await emailOutboxRepository.EnqueueAsync(entry, nowUtc, cancellationToken);
+        await EnqueueNotificationAsync(
+            NotificationBuilder.SubscriptionPaid(order.UserId, order.Id, plan.Name, subscription.EndsAt),
+            nowUtc, cancellationToken);
     }
+
+    // Thông báo hộp thư ghi cùng transaction thanh toán, như mail biên nhận.
+    private Task EnqueueNotificationAsync(NotificationEntry entry, DateTime nowUtc, CancellationToken cancellationToken) =>
+        notificationRepository is null
+            ? Task.CompletedTask
+            : notificationRepository.EnqueueAsync(entry, nowUtc, cancellationToken);
 }

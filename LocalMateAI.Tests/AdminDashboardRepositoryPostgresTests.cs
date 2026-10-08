@@ -102,6 +102,56 @@ public sealed class AdminDashboardRepositoryPostgresTests
         Assert.Equal(new PaidRevenueTotals(3, 97000m), totals);
     }
 
+    [Fact]
+    public async Task DailyFinalizedTrips_GroupsByVietnamFinalizeDate_AndMatchesPublicTotal()
+    {
+        await using var db = await IsolatedPlanDatabase.CreateAsync();
+        await using var c = db.Context();
+        var role = await TestRoles.GetUserRoleIdAsync(c);
+        var user = new User { FullName = "Finalized", Email = "finalized@dashboard.test", RoleId = role };
+        c.Users.Add(user);
+
+        // 23:30 VN ngày 01/10 ⇒ ngày 01/10; 00:30 VN ngày 02/10 ⇒ ngày 02/10.
+        var lateEvening = FinalizedTrip(user.Id, DayStart.AddHours(23.5));
+        var afterMidnight = FinalizedTrip(user.Id, NextDayStart.AddMinutes(30));
+        var deleted = FinalizedTrip(user.Id, DayStart.AddHours(1));
+        deleted.DeletedAt = DayStart.AddHours(2);
+        // Trip chốt trước khi có cột FinalizedAt: tính theo CreatedAt.
+        var legacy = FinalizedTrip(user.Id, null);
+        var draft = new Trip { UserId = user.Id };
+        var beforeRange = FinalizedTrip(user.Id, DayStart.AddSeconds(-1));
+        c.Trips.AddRange(lateEvening, afterMidnight, deleted, legacy, draft, beforeRange);
+        await c.SaveChangesAsync();
+
+        // SaveChanges tự ghi CreatedAt = giờ hiện tại ⇒ đặt lại bằng SQL.
+        await SetCreatedAtAsync(c, "Trips", legacy.Id, NextDayStart.AddHours(2));
+        await SetCreatedAtAsync(c, "Trips", draft.Id, DayStart.AddHours(3));
+        // Tạo từ hôm trước nhưng chốt trong ngày vẫn tính theo ngày chốt.
+        await SetCreatedAtAsync(c, "Trips", lateEvening.Id, DayStart.AddDays(-3));
+        await SetCreatedAtAsync(c, "Trips", afterMidnight.Id, DayStart.AddDays(-3));
+        await SetCreatedAtAsync(c, "Trips", deleted.Id, DayStart.AddDays(-3));
+        await SetCreatedAtAsync(c, "Trips", beforeRange.Id, DayStart.AddDays(-3));
+        c.ChangeTracker.Clear();
+        var range = new DashboardDateRange(new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 2));
+
+        var rows = await new AdminDashboardRepository(c).GetDailyFinalizedTripsAsync(range.StartUtc, range.EndUtc);
+        var total = await new PublicStatsRepository(c).CountFinalizedTripsAsync();
+
+        Assert.Equal(
+        [
+            new DailyTripsFinalizedResponse(new DateOnly(2026, 10, 1), 2),
+            new DailyTripsFinalizedResponse(new DateOnly(2026, 10, 2), 2)
+        ], rows);
+        Assert.Equal(5, total);
+    }
+
+    private static Trip FinalizedTrip(Guid userId, DateTime? finalizedAt) => new()
+    {
+        UserId = userId,
+        Status = TripStatus.Finalized,
+        FinalizedAt = finalizedAt
+    };
+
     // Đơn legacy: trigger không bắt đơn Paid phải có kỳ subscription đi kèm (đơn Native thì bắt), đủ cho đếm doanh thu.
     private static PaymentOrder PaidOrder(Guid userId, long code, PlanCode plan, decimal amount, DateTime? paidAt) => new()
     {

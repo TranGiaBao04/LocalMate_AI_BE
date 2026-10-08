@@ -59,18 +59,18 @@ public sealed class PlanVersionFoundationPostgresTests
         Assert.Equal("20260930043206_AddRbacAndUserStatus", (await c.Database.GetAppliedMigrationsAsync()).Last());
         var role = new Role { Name = "Plan Auditor", NormalizedName = "PLAN AUDITOR" };
         role.Permissions.Add(new RolePermission { RoleId = role.Id, Permission = Permissions.ViewRevenue });
+        c.Roles.Add(role);
+        await c.SaveChangesAsync();
         var user = new User
         {
             FullName = "Locked legacy user",
             Email = $"legacy-{Guid.NewGuid():N}@localmate.test",
             RoleId = role.Id,
-            Role = role,
             Status = UserStatus.Locked,
             LockedAt = Now,
             LockReason = "Isolated migration test"
         };
-        c.Users.Add(user);
-        await c.SaveChangesAsync();
+        await PostgresTestDatabase.InsertUserAsync(c, user);
         var orderId = Guid.NewGuid();
         DateTime? paidAt = status == PaymentOrderStatus.Paid ? Now : null;
         await c.Database.ExecuteSqlInterpolatedAsync($"""
@@ -193,7 +193,7 @@ public sealed class PlanVersionFoundationPostgresTests
         var orderId = Guid.NewGuid();
         var historicalId = Guid.NewGuid();
         var usageId = Guid.NewGuid();
-        var trip = await TripAsync(c, user.Id);
+        var trip = await PostgresTestDatabase.InsertTripAsync(c, user.Id);
         await c.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO "UserSubscriptions" ("Id","UserId","PlanCode","StartsAt","EndsAt","CreatedAt","UpdatedAt")
             VALUES ({legacyId},{user.Id},'Membership',{Now},{Now.AddDays(60)},{Now},{Now});
@@ -373,8 +373,7 @@ public sealed class PlanVersionFoundationPostgresTests
             Email = $"version-{Guid.NewGuid():N}@localmate.test",
             RoleId = await TestRoles.GetUserRoleIdAsync(c)
         };
-        c.Users.Add(user);
-        await c.SaveChangesAsync();
+        await PostgresTestDatabase.InsertUserAsync(c, user);
         return user;
     }
     internal static async Task<Trip> TripAsync(AppDbContext c, Guid userId)
@@ -412,6 +411,8 @@ public sealed class PlanVersionFoundationPostgresTests
             DurationDays = days,
             GenerateLimit = generate,
             SavedTripLimit = saved,
+            AiDailyCallLimit = 15,
+            AiExplainCallsPerTripLimit = 3,
             Origin = PlanVersionOrigin.Published,
             PublishedAt = Now
         };

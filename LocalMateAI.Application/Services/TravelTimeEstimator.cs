@@ -26,22 +26,33 @@ public static class TravelTimeEstimator
         TripPlanningSettings? settings = null) =>
         Math.Round(HaversineKm(lat1, lng1, lat2, lng2) * (settings ?? TripPlanningSettings.Default).RoadDetourFactor, 2);
 
+    /// <summary>Quãng đường bộ ước tính (km) từ một khoảng cách chim bay tính bằng mét, vd. địa điểm ↔ ga.</summary>
+    public static double RoadDistanceKmFromMeters(double straightLineMeters, TripPlanningSettings? settings = null) =>
+        Math.Round(straightLineMeters / 1000 * (settings ?? TripPlanningSettings.Default).RoadDetourFactor, 2);
+
     public static int WalkingMinutes(double roadKm, TripPlanningSettings? settings = null) =>
         MinutesAt(roadKm, (settings ?? TripPlanningSettings.Default).WalkingSpeedKmH);
 
     public static int MotorbikeMinutes(double roadKm, TripPlanningSettings? settings = null) =>
         MinutesAt(roadKm, (settings ?? TripPlanningSettings.Default).MotorbikeSpeedKmH);
 
-    public static int EstimateMinutes(double roadKm, TravelMode mode, TripPlanningSettings? settings = null)
+    /// <summary>
+    /// Số phút đi THẲNG một đoạn. Metro ở đây tính như Auto: đoạn đi tàu do TripLegPlanner tính riêng theo lịch tàu.
+    /// </summary>
+    public static int EstimateMinutes(double roadKm, TravelMode mode, TripPlanningSettings? settings = null) =>
+        ResolveDirectMode(roadKm, mode, settings) == TravelMode.Walking
+            ? WalkingMinutes(roadKm, settings)
+            : MotorbikeMinutes(roadKm, settings);
+
+    /// <summary>Cách đi thực tế khi đi thẳng: Auto (và Metro) đi bộ nếu trong ngưỡng đi bộ, xa hơn thì xe máy.</summary>
+    public static TravelMode ResolveDirectMode(double roadKm, TravelMode mode, TripPlanningSettings? settings = null)
     {
         var resolved = settings ?? TripPlanningSettings.Default;
         return mode switch
         {
-            TravelMode.Walking => WalkingMinutes(roadKm, resolved),
-            TravelMode.Motorbike => MotorbikeMinutes(roadKm, resolved),
-            _ => roadKm * 1000 <= resolved.AutoWalkingMaxMeters
-                ? WalkingMinutes(roadKm, resolved)
-                : MotorbikeMinutes(roadKm, resolved)
+            TravelMode.Walking => TravelMode.Walking,
+            TravelMode.Motorbike => TravelMode.Motorbike,
+            _ => roadKm * 1000 <= resolved.AutoWalkingMaxMeters ? TravelMode.Walking : TravelMode.Motorbike
         };
     }
 

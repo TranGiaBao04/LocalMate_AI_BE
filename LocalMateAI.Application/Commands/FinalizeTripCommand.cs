@@ -17,7 +17,8 @@ public sealed class FinalizeTripCommand(
     IUserRepository userRepository,
     IEmailOutboxRepository emailOutboxRepository,
     TimeProvider timeProvider,
-    ISingleItineraryRepository? singleRepository = null) : IFinalizeTripCommand
+    ISingleItineraryRepository? singleRepository = null,
+    INotificationRepository? notificationRepository = null) : IFinalizeTripCommand
 {
     public Task<FinalizeTripResult> ExecuteAsync(
         Guid userId,
@@ -91,7 +92,7 @@ public sealed class FinalizeTripCommand(
                     entitlement.Consume(tripId, nowUtc);
                     await singleRepository!.SaveChangesAsync(transactionCancellationToken);
                 }
-                await EnqueueItineraryEmailAsync(userId, tripId, nowUtc, transactionCancellationToken);
+                await EnqueueFinalizeMessagesAsync(userId, tripId, nowUtc, transactionCancellationToken);
                 return FinalizeTripResult.Succeeded(
                     new FinalizeTripResponse(tripId, TripStatus.Finalized.ToString())
                     { FundingSource = request.FundingSource, EntitlementId = entitlement?.Id, ConsumedAt = entitlement?.ConsumedAt });
@@ -103,8 +104,9 @@ public sealed class FinalizeTripCommand(
             : FinalizeTripResult.MissingTrip();
     }
 
-    // Xếp mail lịch trình vào outbox trong CÙNG transaction chốt trip: chốt thành công thì chắc chắn có mail chờ gửi.
-    private async Task EnqueueItineraryEmailAsync(
+    // Xếp mail lịch trình và thông báo hộp thư trong CÙNG transaction chốt trip:
+    // chốt thành công thì chắc chắn có cả hai.
+    private async Task EnqueueFinalizeMessagesAsync(
         Guid userId,
         Guid tripId,
         DateTime nowUtc,
@@ -120,5 +122,11 @@ public sealed class FinalizeTripCommand(
 
         var entry = TripItineraryEmailBuilder.Build(user, trip, TripDetailService.ToResponse(trip));
         await emailOutboxRepository.EnqueueAsync(entry, nowUtc, cancellationToken);
+
+        if (notificationRepository is not null)
+        {
+            await notificationRepository.EnqueueAsync(
+                NotificationBuilder.TripFinalized(userId, tripId, trip.PlannedStartAt), nowUtc, cancellationToken);
+        }
     }
 }

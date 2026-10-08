@@ -32,12 +32,13 @@ public sealed class PlanFeaturesPostgresTests
     private static SubscriptionPlanVersion Version(int number = 2, Guid? planId = null) => new()
     {
         PlanId = planId ?? TripPlan, VersionNumber = number, Price = 19000, DurationDays = 7,
-        GenerateLimit = null, SavedTripLimit = 3, Origin = PlanVersionOrigin.Published, PublishedAt = Now
+        GenerateLimit = null, SavedTripLimit = 3, AiDailyCallLimit = 15, AiExplainCallsPerTripLimit = 3,
+        Origin = PlanVersionOrigin.Published, PublishedAt = Now
     };
 
     private static SubscriptionService Service(AppDbContext c) => new(new UserRepository(c),
         new SubscriptionRepository(c), new UsageEventRepository(c), new TripRepository(c),
-        new PlanVersionFoundationPostgresTests.Clock(Now));
+        new PlanVersionFoundationPostgresTests.Clock(Now), new AiUsageAdmissionRepository(c, new FakeSystemSettingProvider(), TimeProvider.System), new FakeSystemSettingProvider());
 
     [Fact]
     public async Task FreshMigration_SeedsOnlyMetroForThreeBaselineV1s()
@@ -337,7 +338,7 @@ public sealed class PlanFeaturesPostgresTests
         await using var c = db.Context();
         Assert.Equal(Foundation, (await c.Database.GetAppliedMigrationsAsync()).Last());
         var user = await PlanVersionFoundationPostgresTests.UserAsync(c);
-        var trip = await PlanVersionFoundationPostgresTests.TripAsync(c, user.Id);
+        var trip = await PostgresTestDatabase.InsertTripAsync(c, user.Id);
         var periodId = Guid.NewGuid();
         var paidOrderId = Guid.NewGuid();
         await using (var tx = await c.Database.BeginTransactionAsync())
@@ -376,7 +377,10 @@ public sealed class PlanFeaturesPostgresTests
         {
             // Identifiers cannot be SQL parameters; only these fixed test tables are allowed.
             if (!tables.Contains(table, StringComparer.Ordinal)) throw new ArgumentException("Unknown test table.");
-            var sql = $"SELECT COALESCE(jsonb_agg(to_jsonb(t)-'FeaturePublicationTransactionId'-'ProductKind'-'CheckoutAttemptId'-'SingleItineraryProductVersionId'-'CreditAmount'-'TerminatedAt'-'TerminatedByOrderId' ORDER BY to_jsonb(t)::text),'[]'::jsonb)::text AS \"Value\" FROM \"{table}\" t";
+            var evidence = "to_jsonb(t)-'FeaturePublicationTransactionId'-'ProductKind'-'CheckoutAttemptId'-'SingleItineraryProductVersionId'-'CreditAmount'-'TerminatedAt'-'TerminatedByOrderId'-'LockedByUserId'";
+            if (table == "SubscriptionPlanVersions")
+                evidence += "-'AiDailyCallLimit'-'AiExplainCallsPerTripLimit'";
+            var sql = $"SELECT COALESCE(jsonb_agg({evidence} ORDER BY ({evidence})::text),'[]'::jsonb)::text AS \"Value\" FROM \"{table}\" t";
             return await c.Database.SqlQueryRaw<string>(sql).SingleAsync();
         }
         var before = new Dictionary<string, string>();

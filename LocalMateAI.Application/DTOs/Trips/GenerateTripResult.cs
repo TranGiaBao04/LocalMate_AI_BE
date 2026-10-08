@@ -14,10 +14,11 @@ public sealed record GenerateTripResult(
     GenerateTripResultStatus Status,
     TripDetailResponse? Response = null,
     IReadOnlyDictionary<string, string[]>? ValidationErrors = null,
-    string? Reason = null, // NoPlaces: "OutOfServiceArea" | "InsufficientCandidates"
+    string? Reason = null, // NoPlaces: một giá trị của TripInsufficiencyReasons
     int? Used = null,
     int? Limit = null,
-    DateTime? ResetAt = null)
+    DateTime? ResetAt = null,
+    IReadOnlyList<SuggestedStationDto>? SuggestedStations = null) // NoPlaces + InsufficientCandidates
 {
     public static GenerateTripResult Succeeded(TripDetailResponse response) =>
         new(GenerateTripResultStatus.Success, response);
@@ -29,8 +30,10 @@ public sealed record GenerateTripResult(
 
     public static GenerateTripResult MissingUser() => new(GenerateTripResultStatus.UserNotFound);
 
-    public static GenerateTripResult NoSuitablePlaces(string reason) =>
-        new(GenerateTripResultStatus.NoPlaces, Reason: reason);
+    public static GenerateTripResult NoSuitablePlaces(
+        string reason,
+        IReadOnlyList<SuggestedStationDto>? suggestedStations = null) =>
+        new(GenerateTripResultStatus.NoPlaces, Reason: reason, SuggestedStations: suggestedStations);
 
     public static GenerateTripResult QuotaExceeded(int used, int limit, DateTime resetAt) =>
         new(

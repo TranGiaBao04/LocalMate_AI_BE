@@ -80,6 +80,8 @@ public sealed class AdminPlanService(
             var featureIds = current is null ? [] : await repository.GetVersionFeatureIdsAsync(current.Id, ct);
             var changed = current is null || current.Price != terms.Price || current.DurationDays != terms.DurationDays
                 || current.GenerateLimit != terms.GenerateLimit || current.SavedTripLimit != terms.SavedTripLimit
+                || current.AiDailyCallLimit != terms.AiDailyCallLimit
+                || current.AiExplainCallsPerTripLimit != terms.AiExplainCallsPerTripLimit
                 || !featureIds.SequenceEqual(terms.FeatureIds);
             var name = request.Name!.Trim();
             var renamed = plan.Name != name;
@@ -146,15 +148,23 @@ public sealed class AdminPlanService(
             errors["durationDays"] = [isFree ? "Free has no duration." : "Paid duration must be positive."];
         if (request.GenerateLimit < 0) errors["generateLimit"] = ["Generate limit must be null or non-negative."];
         if (request.SavedTripLimit < 0) errors["savedTripLimit"] = ["Saved trip limit must be null or non-negative."];
+        if (request.AiDailyCallLimit is null or < 0 or > 1000)
+            errors["aiDailyCallLimit"] = ["AI daily call limit is required and must be between 0 and 1000."];
+        if (request.AiExplainCallsPerTripLimit is null or < 0 or > 20)
+            errors["aiExplainCallsPerTripLimit"] = ["AI explain calls per trip limit is required and must be between 0 and 20."];
         return errors;
     }
 
+    // Missing AI metadata is valid for historical versions, but never for new publication requests.
     private static bool ValidVersion(SubscriptionPlanVersion version, bool isFree) =>
         Validate(new UpdateAdminPlanRequest { Name = "Stored contract", Price = version.Price,
-            DurationDays = version.DurationDays, GenerateLimit = version.GenerateLimit, SavedTripLimit = version.SavedTripLimit },
+            DurationDays = version.DurationDays, GenerateLimit = version.GenerateLimit, SavedTripLimit = version.SavedTripLimit,
+            AiDailyCallLimit = version.AiDailyCallLimit ?? 0,
+            AiExplainCallsPerTripLimit = version.AiExplainCallsPerTripLimit ?? 0 },
             isFree).Count == 0 && (version.Origin != PlanVersionOrigin.Published || version.PublishedAt is not null);
     private static PlanVersionTerms Terms(AdminPlanTermsRequest request) =>
         new(request.Price!.Value, request.DurationDays, request.GenerateLimit, request.SavedTripLimit,
+            request.AiDailyCallLimit!.Value, request.AiExplainCallsPerTripLimit!.Value,
             (request.FeatureIds ?? []).ToArray());
     private static AdminPlanResult Invalid(IReadOnlyDictionary<string, string[]> errors) =>
         new(AdminPlanResultStatus.ValidationFailed, ValidationErrors: errors);

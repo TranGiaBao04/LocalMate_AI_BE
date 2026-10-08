@@ -2,6 +2,7 @@ using LocalMateAI.Application.DTOs.Trips;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Interfaces.Services;
 using LocalMateAI.Application.Settings;
+using LocalMateAI.Domain.Enums;
 
 namespace LocalMateAI.Application.Services;
 
@@ -9,7 +10,8 @@ public sealed class TripItemDeletionService(
     IUserRepository userRepository,
     IItineraryItemRepository itineraryItemRepository,
     IItineraryTimelineRecalculator timelineRecalculator,
-    ISystemSettingProvider settings) : ITripItemDeletionService
+    ISystemSettingProvider settings,
+    IMetroTimetableSource metroTimetableSource) : ITripItemDeletionService
 {
     public async Task<DeleteItineraryItemResult> DeleteAsync(
         Guid userId,
@@ -34,7 +36,13 @@ public sealed class TripItemDeletionService(
             tripId,
             itemId,
             userId,
-            input => timelineRecalculator.Recalculate(input, planning),
+            // Trip Metro cần lịch tàu của ngày đi; ngày chỉ biết sau khi repository đọc trip trong transaction.
+            input => timelineRecalculator.Recalculate(
+                input,
+                planning,
+                input.TravelMode == TravelMode.Metro && input.PlannedDate is { } plannedDate
+                    ? MetroDayTimetable.For(metroTimetableSource.Timetable, plannedDate)
+                    : null),
             cancellationToken);
 
         return outcome.Status switch

@@ -35,15 +35,23 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options, TimePro
     public DbSet<Feedback> Feedbacks => Set<Feedback>();
     public DbSet<PlaceReview> PlaceReviews => Set<PlaceReview>();
     public DbSet<TripTag> TripTags => Set<TripTag>();
-        public DbSet<PlaceTag> PlaceTags => Set<PlaceTag>();
+    public DbSet<PlaceTag> PlaceTags => Set<PlaceTag>();
+    public DbSet<PlaceImage> PlaceImages => Set<PlaceImage>();
+    public DbSet<PlaceOpeningHour> PlaceOpeningHours => Set<PlaceOpeningHour>();
         public DbSet<UserExternalLogin> UserExternalLogins => Set<UserExternalLogin>();
     public DbSet<PendingRegistration> PendingRegistrations => Set<PendingRegistration>();
     public DbSet<EmailOtpCode> EmailOtpCodes => Set<EmailOtpCode>();
     public DbSet<EmailOutboxMessage> EmailOutboxMessages => Set<EmailOutboxMessage>();
     public DbSet<SystemSetting> SystemSettings => Set<SystemSetting>();
+    public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<PlaceEmbedding> PlaceEmbeddings => Set<PlaceEmbedding>();
+    public DbSet<LlmCallLog> LlmCallLogs => Set<LlmCallLog>();
+    public DbSet<AiUsageAdmission> AiUsageAdmissions => Set<AiUsageAdmission>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        // Tìm kiếm không dấu (unaccent(...) ILIKE unaccent(...)), dùng ở danh sách user admin (BE-132).
+        modelBuilder.HasPostgresExtension("unaccent");
         SubscriptionModelConfiguration.Configure(modelBuilder);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
 

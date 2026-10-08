@@ -89,20 +89,40 @@ public sealed class TripItemDeletionServiceTests
             items.RecalculatedUpdates!.ToArray());
     }
 
+    [Fact]
+    public async Task DeleteAsync_MetroTrip_RecalculatesWithTimetableOfThePlannedDate()
+    {
+        // Ga 2 → ga 5, rời 09:00: đi bộ về ga 3', chờ 14', tàu 6', đi bộ 5' ⇒ 09:28 (xe máy thẳng chỉ mất 8').
+        var first = new TimelineItemSnapshot(Guid.NewGuid(), 0, new TimeOnly(8, 0), 60, 10.770, 106.70, 2, 152);
+        var third = new TimelineItemSnapshot(Guid.NewGuid(), 2, new TimeOnly(11, 0), 60, 10.790, 106.70, 5, 300);
+        var (sut, items) = Create(
+            snapshotsToRecalculate: [first, third],
+            travelMode: TravelMode.Metro,
+            plannedDate: new DateOnly(2026, 10, 10));
+
+        await sut.DeleteAsync(UserId, TripId, ItemId);
+
+        Assert.Equal([new TimelineItemUpdate(third.ItemId, 1, new TimeOnly(9, 28))], items.RecalculatedUpdates);
+    }
+
     private static (TripItemDeletionService Sut, FakeItineraryItemRepository Items) Create(
         Guid? userId = null,
         DeleteItineraryItemPersistenceResult? persistence = null,
-        IReadOnlyList<TimelineItemSnapshot>? snapshotsToRecalculate = null)
+        IReadOnlyList<TimelineItemSnapshot>? snapshotsToRecalculate = null,
+        TravelMode travelMode = TravelMode.Auto,
+        DateOnly? plannedDate = null)
     {
         var items = new FakeItineraryItemRepository(
             persistence ?? new DeleteItineraryItemPersistenceResult(
                 DeleteItineraryItemPersistenceStatus.Deleted,
                 []),
-            snapshotsToRecalculate ?? []);
+            snapshotsToRecalculate ?? [],
+            travelMode,
+            plannedDate);
         var sut = new TripItemDeletionService(
             new FakeUserRepository(userId ?? UserId),
             items,
-            new ItineraryTimelineRecalculator(), new FakeSystemSettingProvider());
+            new ItineraryTimelineRecalculator(), new FakeSystemSettingProvider(), new StubMetroTimetableSource());
 
         return (sut, items);
     }
@@ -133,7 +153,9 @@ public sealed class TripItemDeletionServiceTests
 
     private sealed class FakeItineraryItemRepository(
         DeleteItineraryItemPersistenceResult persistence,
-        IReadOnlyList<TimelineItemSnapshot> snapshotsToRecalculate) : IItineraryItemRepository
+        IReadOnlyList<TimelineItemSnapshot> snapshotsToRecalculate,
+        TravelMode travelMode,
+        DateOnly? plannedDate) : IItineraryItemRepository
     {
         public IReadOnlyList<TimelineItemUpdate>? RecalculatedUpdates { get; private set; }
 
@@ -144,7 +166,8 @@ public sealed class TripItemDeletionServiceTests
             Func<TimelineRecalculationInput, IReadOnlyList<TimelineItemUpdate>> recalculateTimeline,
             CancellationToken cancellationToken = default)
         {
-            RecalculatedUpdates = recalculateTimeline(new TimelineRecalculationInput(snapshotsToRecalculate, new TimeOnly(8, 0), TravelMode.Auto));
+            RecalculatedUpdates = recalculateTimeline(new TimelineRecalculationInput(
+                snapshotsToRecalculate, new TimeOnly(8, 0), travelMode, plannedDate));
             return Task.FromResult(persistence);
         }
 
@@ -155,12 +178,13 @@ public sealed class TripItemDeletionServiceTests
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
-        public Task<ReplacedItemReadModel?> ReplaceItemPlaceIfEligibleAsync(
+        public Task<ReplaceItemPersistenceResult> ReplaceItemPlaceAndRecalculateTimelineAsync(
             Guid tripId,
             Guid itemId,
             Guid userId,
             Guid newPlaceId,
             decimal newEstimatedBudget,
+            Func<TimelineRecalculationInput, IReadOnlyList<TimelineItemUpdate>?> recalculateTimeline,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
     }

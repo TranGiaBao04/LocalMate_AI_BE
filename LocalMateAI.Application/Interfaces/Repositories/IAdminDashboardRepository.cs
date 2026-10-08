@@ -14,6 +14,10 @@ public interface IAdminDashboardRepository
     Task<IReadOnlyList<DailyRevenueRow>> GetDailyRevenueAsync(DateTime startUtc, DateTime endUtc,
         CancellationToken cancellationToken = default);
 
+    /// <summary>Số trip đã chốt theo ngày chốt (giờ VN), tăng dần. Chỉ trả những ngày có ≥ 1 trip.</summary>
+    Task<IReadOnlyList<DailyTripsFinalizedResponse>> GetDailyFinalizedTripsAsync(DateTime startUtc, DateTime endUtc,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Số trip tạo trong khoảng, gom theo ga gần điểm xuất phát nhất. Chỉ trả ga có ≥ 1 trip.</summary>
     Task<IReadOnlyList<StationTripCountRow>> GetTripCountsByStationAsync(DateTime startUtc, DateTime endUtc,
         CancellationToken cancellationToken = default);

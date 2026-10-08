@@ -4,6 +4,7 @@ using LocalMateAI.Application.Interfaces.Services;
 using LocalMateAI.Application.Services;
 using LocalMateAI.Domain.Entities;
 using LocalMateAI.Domain.Enums;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace LocalMateAI.Tests;
 
@@ -271,7 +272,9 @@ public sealed class AuthServicePasswordResetTests
                 new FakeAccessTokenService(),
                 new FakeGoogleValidator(),
                 new FakeSystemRoleProvider(),
-                new FixedTimeProvider(new DateTimeOffset(Now)));
+                new FixedTimeProvider(new DateTimeOffset(Now)),
+                new RecordingNotificationRepository(),
+                NullLogger<AuthService>.Instance);
         }
 
         public FakeUserRepository Users { get; } = new();

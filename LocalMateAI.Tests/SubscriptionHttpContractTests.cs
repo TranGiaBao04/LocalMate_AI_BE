@@ -37,6 +37,10 @@ public sealed class SubscriptionHttpContractTests
             .Select(plan => plan.GetProperty("code").GetString()!)
             .ToArray();
         Assert.Equal(new[] { "Free", "TripPass", "Membership" }, codes);
+        Assert.Equal(new[] { 3, 15, 30 }, json.RootElement.EnumerateArray()
+            .Select(plan => plan.GetProperty("aiDailyCallLimit").GetInt32()));
+        Assert.Equal(new[] { 1, 3, 3 }, json.RootElement.EnumerateArray()
+            .Select(plan => plan.GetProperty("aiExplainCallsPerTripLimit").GetInt32()));
     }
 
     [Theory]
@@ -124,6 +128,13 @@ public sealed class SubscriptionHttpContractTests
         Assert.Equal("Free", json.RootElement.GetProperty("plan").GetString());
         Assert.Equal(1, json.RootElement.GetProperty("usage").GetProperty("generateLimit").GetInt32());
         Assert.Equal(1, json.RootElement.GetProperty("savedTrips").GetProperty("limit").GetInt32());
+        var ai = json.RootElement.GetProperty("ai");
+        Assert.Equal(new[] { "dailyLimit", "dailyUsed", "resetAt" },
+            ai.EnumerateObject().Select(p => p.Name).OrderBy(name => name));
+        Assert.Equal(2, ai.GetProperty("dailyUsed").GetInt32());
+        Assert.Equal(3, ai.GetProperty("dailyLimit").GetInt32());
+        Assert.Equal(new DateTime(2026, 10, 5, 17, 0, 0, DateTimeKind.Utc),
+            ai.GetProperty("resetAt").GetDateTime());
     }
 
     [Theory]
@@ -355,13 +366,14 @@ public sealed class SubscriptionHttpContractTests
                 0,
                 1,
                 new DateTime(2026, 10, 31, 17, 0, 0, DateTimeKind.Utc)),
-            new SubscriptionSavedTripsResponse(0, 1));
+            new SubscriptionSavedTripsResponse(0, 1),
+            new SubscriptionAiResponse(2, 3, new DateTime(2026, 10, 5, 17, 0, 0, DateTimeKind.Utc)));
 
         public Task<IReadOnlyList<SubscriptionPlanResponse>> GetPlansAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<SubscriptionPlanResponse>>([
-            new("Free", 0m, null, 1, 1) { Features = [MetroFeature] },
-            new("TripPass", 19000m, 7, null, 3) { Features = [MetroFeature] },
-            new("Membership", 59000m, 30, null, null) { Features = [MetroFeature] }
+            new("Free", 0m, null, 1, 1) { Features = [MetroFeature], AiDailyCallLimit = 3, AiExplainCallsPerTripLimit = 1 },
+            new("TripPass", 19000m, 7, null, 3) { Features = [MetroFeature], AiDailyCallLimit = 15, AiExplainCallsPerTripLimit = 3 },
+            new("Membership", 59000m, 30, null, null) { Features = [MetroFeature], AiDailyCallLimit = 30, AiExplainCallsPerTripLimit = 3 }
         ]);
 
         private static readonly SubscriptionFeatureResponse MetroFeature =

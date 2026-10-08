@@ -30,4 +30,15 @@ public static class ReviewQuickTags
         InaccurateDescription,
         WantsReplacement
     ];
+
+    // Nhãn khen: được hiện ở nơi quảng bá (thẻ đánh giá trang landing). Nhãn mới phải tự xếp vào đây nếu là nhãn khen.
+    public static IReadOnlyList<string> Positive { get; } =
+    [
+        WorthVisiting,
+        NearMetro,
+        EasyToReach,
+        GoodValue,
+        NiceAtmosphere,
+        GoodForGroups
+    ];
 }

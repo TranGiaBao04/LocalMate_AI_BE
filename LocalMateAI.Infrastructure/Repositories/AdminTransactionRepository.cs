@@ -47,6 +47,7 @@ public sealed class AdminTransactionRepository(AppDbContext context, TimeProvide
         if (filter.OperationType is { } type) rows = rows.Where(r => r.OperationType == type);
         if (filter.CreatedFromUtc is { } from) rows = rows.Where(r => r.CreatedAt >= from);
         if (filter.CreatedToUtc is { } to) rows = rows.Where(r => r.CreatedAt < to);
+        if (filter.UserId is { } userId) rows = rows.Where(r => r.UserId == userId);
         if (filter.Search is { } search)
         {
             Guid? id = Guid.TryParse(search, out var parsedId) ? parsedId : null;

@@ -17,4 +17,9 @@ public interface IFeedbackRepository
     Task<bool> TryAddAsync(
         Feedback feedback,
         CancellationToken cancellationToken = default);
+
+    Task<Feedback?> GetAsync(
+        Guid userId,
+        Guid tripId,
+        CancellationToken cancellationToken = default);
 }

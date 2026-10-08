@@ -13,7 +13,7 @@ public sealed class GeneratedTripBuilderTests
     [Fact]
     public void Build_CopiesRequestIntoDraftTrip()
     {
-        var trip = GeneratedTripBuilder.Build(UserId, Request(), [Stop(0, 8, 0)], [], PlannedStart);
+        var trip = GeneratedTripBuilder.Build(UserId, Request(), Origin(), [Stop(0, 8, 0)], [], PlannedStart);
 
         Assert.Equal(PlannedStart, trip.PlannedStartAt);
         Assert.Equal(UserId, trip.UserId);
@@ -24,6 +24,58 @@ public sealed class GeneratedTripBuilderTests
         Assert.Equal(50_000m, trip.BudgetMin);
         Assert.Equal(900_000m, trip.BudgetMax);
         Assert.Equal(TravelMode.Motorbike, trip.TravelMode);
+        Assert.Null(trip.StartStationId);
+        Assert.Null(trip.DestinationStationId);
+    }
+
+    [Fact]
+    public void Build_WithoutNote_LeavesNoteEmpty()
+    {
+        var trip = GeneratedTripBuilder.Build(UserId, Request(), Origin(), [Stop(0, 8, 0)], [], PlannedStart);
+
+        Assert.Null(trip.Note);
+        Assert.False(trip.NoteApplied);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Build_StoresNormalizedNote_AndWhetherItWasApplied(bool noteApplied)
+    {
+        var request = Request() with { Note = "  muốn chỗ   yên tĩnh " };
+
+        var trip = GeneratedTripBuilder.Build(UserId, request, Origin(), [Stop(0, 8, 0)], [], PlannedStart, noteApplied);
+
+        Assert.Equal("muốn chỗ yên tĩnh", trip.Note);
+        Assert.Equal(noteApplied, trip.NoteApplied);
+    }
+
+    [Fact]
+    public void Build_BlankNote_IsStoredAsNull()
+    {
+        var trip = GeneratedTripBuilder.Build(
+            UserId, Request() with { Note = "   " }, Origin(), [Stop(0, 8, 0)], [], PlannedStart);
+
+        Assert.Null(trip.Note);
+    }
+
+    [Fact]
+    public void Build_StartingFromStation_TakesCoordinatesAndStationsFromResolvedOrigin()
+    {
+        var startStationId = Guid.NewGuid();
+        var destinationStationId = Guid.NewGuid();
+        var request = new TripRequestDto(null, null, 6, 0m, 900_000m, [],
+            StartStationOrder: 13, DestinationStationOrder: 2);
+        var origin = TestTripOrigins.At(
+            startLatitude: 10.8664, startLongitude: 106.8013,
+            startStationId: startStationId, destinationStationId: destinationStationId);
+
+        var trip = GeneratedTripBuilder.Build(UserId, request, origin, [Stop(0, 8, 0)], [], PlannedStart);
+
+        Assert.Equal(10.8664, trip.StartLatitude);
+        Assert.Equal(106.8013, trip.StartLongitude);
+        Assert.Equal(startStationId, trip.StartStationId);
+        Assert.Equal(destinationStationId, trip.DestinationStationId);
     }
 
     [Fact]
@@ -32,7 +84,7 @@ public sealed class GeneratedTripBuilderTests
         var first = Stop(0, 8, 0, minutes: 60, budget: 100_000m, reasoning: "Lý do A");
         var second = Stop(1, 9, 5, minutes: 45, budget: 0m, reasoning: "Lý do B");
 
-        var trip = GeneratedTripBuilder.Build(UserId, Request(), [first, second], [], PlannedStart);
+        var trip = GeneratedTripBuilder.Build(UserId, Request(), Origin(), [first, second], [], PlannedStart);
 
         var items = trip.Items.OrderBy(item => item.OrderIndex).ToList();
         Assert.Equal(2, items.Count);
@@ -53,7 +105,7 @@ public sealed class GeneratedTripBuilderTests
         var tagA = Guid.NewGuid();
         var tagB = Guid.NewGuid();
 
-        var trip = GeneratedTripBuilder.Build(UserId, Request(), [Stop(0, 8, 0)], [tagA, tagB], PlannedStart);
+        var trip = GeneratedTripBuilder.Build(UserId, Request(), Origin(), [Stop(0, 8, 0)], [tagA, tagB], PlannedStart);
 
         Assert.Equal([tagA, tagB], trip.Tags.Select(tag => tag.TagId));
         Assert.All(trip.Tags, tag => Assert.Equal(trip.Id, tag.TripId));
@@ -62,11 +114,13 @@ public sealed class GeneratedTripBuilderTests
     [Fact]
     public void Build_NoStops_Throws()
     {
-        Assert.Throws<ArgumentException>(() => GeneratedTripBuilder.Build(UserId, Request(), [], [], PlannedStart));
+        Assert.Throws<ArgumentException>(() => GeneratedTripBuilder.Build(UserId, Request(), Origin(), [], [], PlannedStart));
     }
 
     private static TripRequestDto Request() =>
         new(10.77, 106.69, 6, 50_000m, 900_000m, [], TravelMode.Motorbike);
+
+    private static TripOriginResolution Origin() => TestTripOrigins.At(startLatitude: 10.77, startLongitude: 106.69);
 
     private static FallbackStopDto Stop(
         int order, int hour, int minute, int minutes = 60, decimal budget = 50_000m, string reasoning = "lý do") =>

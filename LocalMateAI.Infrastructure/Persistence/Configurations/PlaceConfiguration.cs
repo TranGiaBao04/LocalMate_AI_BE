@@ -26,6 +26,9 @@ public sealed class PlaceConfiguration : IEntityTypeConfiguration<Place>
         builder.Property(x => x.EstimatedCostMax)
             .HasColumnType("numeric(12,0)");
 
+        builder.Property(x => x.GooglePlaceId)
+            .HasMaxLength(255);
+
         builder.Property(x => x.Category)
             .HasConversion<string>()
             .HasMaxLength(20);

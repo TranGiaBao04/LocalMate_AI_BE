@@ -82,7 +82,7 @@ public sealed class PaymentEvidencePostgresTests
         await using var db = await IsolatedPlanDatabase.CreateAsync(targetMigration: ParentMigration);
         await using var c = db.Context();
         var user = await PlanVersionFoundationPostgresTests.UserAsync(c);
-        var trip = await PlanVersionFoundationPostgresTests.TripAsync(c, user.Id);
+        var trip = await PostgresTestDatabase.InsertTripAsync(c, user.Id);
         foreach (var (amount, plan, status) in new[]
         {
             (19000, "TripPass", "Paid"), (49000, "TripPass", "Pending"), (59000, "Membership", "Paid"),
@@ -110,7 +110,9 @@ public sealed class PaymentEvidencePostgresTests
         async Task<string> Snapshot(string table)
         {
             if (!tables.Contains(table)) throw new ArgumentException("Not a snapshot table.");
-            var sql = $"SELECT COALESCE(jsonb_agg(to_jsonb(t)-'ProductKind'-'CheckoutAttemptId'-'SingleItineraryProductVersionId'-'CreditAmount'-'TerminatedAt'-'TerminatedByOrderId' ORDER BY to_jsonb(t)::text),'[]'::jsonb)::text AS \"Value\" FROM \"{table}\" t";
+            var aiMetadata = table == "SubscriptionPlanVersions"
+                ? "-'AiDailyCallLimit'-'AiExplainCallsPerTripLimit'" : "";
+            var sql = $"SELECT COALESCE(jsonb_agg(to_jsonb(t)-'ProductKind'-'CheckoutAttemptId'-'SingleItineraryProductVersionId'-'CreditAmount'-'TerminatedAt'-'TerminatedByOrderId'-'LockedByUserId'{aiMetadata} ORDER BY to_jsonb(t)::text),'[]'::jsonb)::text AS \"Value\" FROM \"{table}\" t";
             return await c.Database.SqlQueryRaw<string>(sql).SingleAsync();
         }
         foreach (var table in tables) before[table] = await Snapshot(table);

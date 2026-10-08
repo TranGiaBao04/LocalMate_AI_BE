@@ -29,15 +29,6 @@ public static class DataSeeder
         PropertyNameCaseInsensitive = true
     };
 
-    private static readonly IReadOnlyDictionary<string, string[]> PlaceTagMappingsByCategory =
-        new Dictionary<string, string[]>
-        {
-            ["Food"] = new[] { "Ẩm thực", "Chill nhẹ" },
-            ["Cafe"] = new[] { "Cà phê", "Chụp ảnh" },
-            ["Culture"] = new[] { "Văn hóa", "Chụp ảnh" },
-            ["CheckIn"] = new[] { "Check-in", "Chill nhẹ" }
-        };
-
     public static async Task SeedAsync(AppDbContext context, CancellationToken cancellationToken = default)
     {
         await SeedMetroStationsAsync(context, cancellationToken);
@@ -141,7 +132,8 @@ public static class DataSeeder
             Category = Enum.Parse<PlaceCategory>(record.Category),
             Status = PlaceStatus.Active,
             EstimatedCostMin = record.EstimatedCostMin,
-            EstimatedCostMax = record.EstimatedCostMax
+            EstimatedCostMax = record.EstimatedCostMax,
+            GooglePlaceId = record.GooglePlaceId
         });
 
         await context.Places.AddRangeAsync(places, cancellationToken);
@@ -189,9 +181,7 @@ public static class DataSeeder
                 continue;
             }
 
-            var tagNames = PlaceTagMappingsByCategory.GetValueOrDefault(record.Category, []);
-
-            foreach (var tagName in tagNames)
+            foreach (var tagName in record.Tags ?? [])
             {
                 if (tagsByName.TryGetValue(tagName, out var tag))
                 {
@@ -268,7 +258,9 @@ public static class DataSeeder
         double Longitude,
         decimal EstimatedCostMin,
         decimal EstimatedCostMax,
-        string Description);
+        string Description,
+        string[]? Tags = null,
+        string? GooglePlaceId = null);
 
     private sealed record CuratedItinerarySeedRecord(
         string Title,

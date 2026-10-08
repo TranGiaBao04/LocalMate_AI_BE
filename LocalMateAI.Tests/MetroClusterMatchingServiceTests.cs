@@ -1,3 +1,4 @@
+using LocalMateAI.Application.DTOs.Common;
 using LocalMateAI.Application.DTOs.Geo;
 using LocalMateAI.Application.DTOs.MasterData;
 using LocalMateAI.Application.DTOs.Places;
@@ -76,12 +77,21 @@ public sealed class MetroClusterMatchingServiceTests
         public Task<NearestStationResult?> FindNearestAsync(double latitude, double longitude,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
+        public Task<NearestStationResult?> GetDistanceToStationAsync(
+            Guid stationId, double latitude, double longitude, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         public Task<IReadOnlyList<MetroStationSummaryResponse>> GetAllAsync(
             CancellationToken cancellationToken = default) => Task.FromResult(Stations);
     }
 
     private sealed class FakePlaceRepository : IPlaceRepository
     {
+        public Task<IReadOnlyList<Guid>> GetTagIdsAsync(Guid placeId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task AddTagAsync(Guid placeId, Guid tagId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<bool> RemoveTagAsync(Guid placeId, Guid tagId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<IReadOnlyList<DuplicatePlaceCandidate>> FindNearbyPlacesAsync(double latitude, double longitude, double radiusMeters, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
         public double? LastRadius { get; private set; }
 
         public Task<IReadOnlyList<MetroClusterPlaceReadModel>> GetMetroClusterPlacesAsync(double radiusMeters,
@@ -109,6 +119,11 @@ public sealed class MetroClusterMatchingServiceTests
 
         public Task<IReadOnlyList<AdminPlaceResponse>> GetAllForAdminAsync(
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task<PagedResult<AdminPlaceResponse>> GetPagedForAdminAsync(
+            AdminPlaceQuery query,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
 
         public Task<AdminPlaceResponse?> GetAdminByIdAsync(Guid placeId,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();

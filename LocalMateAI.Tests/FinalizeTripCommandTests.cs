@@ -2,6 +2,7 @@ using LocalMateAI.Application.Commands;
 using LocalMateAI.Application.DTOs.Email;
 using LocalMateAI.Application.DTOs.Trips;
 using LocalMateAI.Application.Interfaces.Repositories;
+using LocalMateAI.Application.Services;
 using LocalMateAI.Domain.Entities;
 using LocalMateAI.Domain.Enums;
 
@@ -237,18 +238,48 @@ public sealed class FinalizeTripCommandTests
         Assert.Empty(outbox.Entries);
     }
 
+    [Fact]
+    public async Task Execute_Success_EnqueuesFinalizedNotification()
+    {
+        var trip = Trip(TripStatus.Draft, UserId);
+        var notifications = new RecordingNotificationRepository();
+
+        await Command(new FakeTripRepository([trip]), notifications: notifications).ExecuteAsync(UserId, trip.Id);
+
+        var (entry, now) = Assert.Single(notifications.Entries);
+        Assert.Equal(Now, now);
+        Assert.Equal(NotificationBuilder.TripFinalized(UserId, trip.Id, null), entry);
+    }
+
+    [Fact]
+    public async Task Execute_Rejected_DoesNotEnqueueNotification()
+    {
+        var notifications = new RecordingNotificationRepository();
+        var alreadyFinalized = Trip(TripStatus.Finalized, UserId);
+        var lostRace = Trip(TripStatus.Draft, UserId);
+
+        await Command(new FakeTripRepository([alreadyFinalized]), notifications: notifications)
+            .ExecuteAsync(UserId, alreadyFinalized.Id);
+        await Command(new FakeTripRepository([lostRace], finalizeResult: false), notifications: notifications)
+            .ExecuteAsync(UserId, lostRace.Id);
+
+        Assert.Empty(notifications.Entries);
+    }
+
     private static FinalizeTripCommand Command(
         FakeTripRepository tripRepository,
         IReadOnlyList<UserSubscription>? subscriptions = null,
         FakeQuotaExecutor? executor = null,
-        FakeEmailOutboxRepository? outbox = null) =>
+        FakeEmailOutboxRepository? outbox = null,
+        RecordingNotificationRepository? notifications = null) =>
         new(
             tripRepository,
             new FakeSubscriptionRepository(subscriptions ?? []),
             executor ?? new FakeQuotaExecutor(),
             new FakeUserRepository(new User { Id = UserId, FullName = "Nguyễn An", Email = "an@example.com" }),
             outbox ?? new FakeEmailOutboxRepository(),
-            new FixedTimeProvider(Now));
+            new FixedTimeProvider(Now),
+            notificationRepository: notifications ?? new RecordingNotificationRepository());
 
     private static Trip Trip(TripStatus status, Guid userId) =>
         new()

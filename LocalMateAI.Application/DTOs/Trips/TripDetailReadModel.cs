@@ -17,4 +17,11 @@ public sealed record TripDetailReadModel(
     DateTime UpdatedAt,
     DateTime? FinalizedAt,
     TravelMode TravelMode = TravelMode.Auto,
-    DateTime? PlannedStartAt = null);
+    DateTime? PlannedStartAt = null,
+    int? StationOrder = null, // ga lên: ga gần điểm xuất phát nhất (cùng ga với StationName)
+    double? DistanceToStationMeters = null, // đường chim bay từ điểm xuất phát tới ga lên
+    StationRefDto? StartStation = null,
+    StationRefDto? DestinationStation = null,
+    string? Note = null,
+    bool NoteApplied = false,
+    DateTime? AiExplainedAt = null);

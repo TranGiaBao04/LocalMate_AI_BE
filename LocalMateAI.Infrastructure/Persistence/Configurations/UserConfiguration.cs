@@ -64,6 +64,11 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
             .HasMaxLength(500)
             .IsRequired(false);
 
+        builder.HasOne<User>()
+            .WithMany()
+            .HasForeignKey(user => user.LockedByUserId)
+            .OnDelete(DeleteBehavior.SetNull);
+
         builder.Property(user => user.CreatedAt)
             .HasColumnType("timestamp with time zone")
             .HasDefaultValueSql("CURRENT_TIMESTAMP")

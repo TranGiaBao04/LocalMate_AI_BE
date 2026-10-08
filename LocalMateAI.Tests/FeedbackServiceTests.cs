@@ -173,6 +173,70 @@ public sealed class FeedbackServiceTests
         Assert.Contains("\"quickTag\":\"TooFewStops\"", json);
     }
 
+    [Fact]
+    public async Task Get_NonPersistedIdentity_IsRejectedWithoutTripLookup()
+    {
+        var feedbackRepository = new FakeFeedbackRepository();
+        var service = new FeedbackService(feedbackRepository, new FakeUserRepository());
+
+        var result = await service.GetAsync(Guid.NewGuid(), Guid.NewGuid());
+
+        Assert.Equal(GetFeedbackResultStatus.NonPersistedUser, result.Status);
+        Assert.Equal(0, feedbackRepository.OwnedTripLookups);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Get_MissingOrForeignTrip_ReturnsTripNotFound(bool foreignTrip)
+    {
+        var user = ExistingUser();
+        var trip = foreignTrip ? OwnedTrip(Guid.NewGuid(), TripStatus.Finalized) : null;
+        var service = new FeedbackService(new FakeFeedbackRepository(trip), new FakeUserRepository(user));
+
+        var result = await service.GetAsync(user.Id, trip?.Id ?? Guid.NewGuid());
+
+        Assert.Equal(GetFeedbackResultStatus.TripNotFound, result.Status);
+        Assert.Null(result.Response);
+    }
+
+    [Fact]
+    public async Task Get_OwnedTripWithoutFeedback_ReturnsFeedbackNotFound()
+    {
+        var user = ExistingUser();
+        var trip = OwnedTrip(user.Id, TripStatus.Draft);
+        var service = new FeedbackService(new FakeFeedbackRepository(trip), new FakeUserRepository(user));
+
+        var result = await service.GetAsync(user.Id, trip.Id);
+
+        Assert.Equal(GetFeedbackResultStatus.FeedbackNotFound, result.Status);
+    }
+
+    [Fact]
+    public async Task Get_OwnedTripWithFeedback_ReturnsIt()
+    {
+        var user = ExistingUser();
+        var trip = OwnedTrip(user.Id, TripStatus.Finalized);
+        var existing = new Feedback
+        {
+            UserId = user.Id,
+            TripId = trip.Id,
+            QuickTag = FeedbackQuickTag.TooFewStops,
+            Comment = "Ít điểm quá",
+            CreatedAt = new DateTime(2026, 10, 6, 3, 0, 0, DateTimeKind.Utc)
+        };
+        var service = new FeedbackService(
+            new FakeFeedbackRepository(trip) { Existing = existing },
+            new FakeUserRepository(user));
+
+        var result = await service.GetAsync(user.Id, trip.Id);
+
+        Assert.Equal(GetFeedbackResultStatus.Success, result.Status);
+        Assert.Equal(
+            new FeedbackResponse(existing.Id, trip.Id, FeedbackQuickTag.TooFewStops, "Ít điểm quá", existing.CreatedAt),
+            result.Response);
+    }
+
     private static User ExistingUser() =>
         new() { Id = Guid.NewGuid(), FullName = "Feedback User", Email = "feedback@example.invalid" };
 
@@ -184,6 +248,14 @@ public sealed class FeedbackServiceTests
         public bool ExistsResult { get; init; }
 
         public bool TryAddResult { get; init; } = true;
+
+        public Feedback? Existing { get; init; }
+
+        public Task<Feedback?> GetAsync(
+            Guid userId,
+            Guid tripId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(Existing?.UserId == userId && Existing.TripId == tripId ? Existing : null);
 
         public Feedback? AddedFeedback { get; private set; }
 

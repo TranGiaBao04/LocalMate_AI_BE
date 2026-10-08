@@ -25,7 +25,7 @@ public sealed record AdminTransactionQuery : AdminTransactionFilterQuery
 }
 
 public sealed record AdminTransactionFilter(string? Search, PaymentOrderStatus? Status,
-    PaymentOrderType? OperationType, DateTime? CreatedFromUtc, DateTime? CreatedToUtc);
+    PaymentOrderType? OperationType, DateTime? CreatedFromUtc, DateTime? CreatedToUtc, Guid? UserId = null);
 
 public record AdminTransactionResponse(Guid Id, long ProviderOrderCode,
     Guid UserId, string UserFullName, string UserEmail, string ProductKind,

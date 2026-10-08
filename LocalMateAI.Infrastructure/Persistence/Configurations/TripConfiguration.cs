@@ -23,6 +23,8 @@ public sealed class TripConfiguration : IEntityTypeConfiguration<Trip>
         builder.Property(trip => trip.PlannedStartAt)
             .HasColumnType("timestamp without time zone");
 
+        builder.Property(trip => trip.Note).HasMaxLength(300);
+
         builder.Property(trip => trip.BudgetMin)
             .HasColumnType("numeric(12,0)");
 
@@ -34,6 +36,16 @@ public sealed class TripConfiguration : IEntityTypeConfiguration<Trip>
             .HasForeignKey(trip => trip.UserId)
             .OnDelete(DeleteBehavior.Restrict)
             .HasConstraintName("FK_Trips_Users_UserId");
+
+        builder.HasOne<MetroStation>()
+            .WithMany()
+            .HasForeignKey(trip => trip.StartStationId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne<MetroStation>()
+            .WithMany()
+            .HasForeignKey(trip => trip.DestinationStationId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasMany(trip => trip.Items)
             .WithOne(item => item.Trip)

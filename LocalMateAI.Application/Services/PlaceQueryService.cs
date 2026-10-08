@@ -9,7 +9,8 @@ namespace LocalMateAI.Application.Services;
 public sealed class PlaceQueryService(
     IPlaceRepository placeRepository,
     IGeoService geoService,
-    ISystemSettingProvider settings) : IPlaceQueryService
+    ISystemSettingProvider settings,
+    IPlaceReviewRepository placeReviewRepository) : IPlaceQueryService
 {
     public async Task<IReadOnlyList<MetroExperienceClusterResponse>> GetMetroClustersAsync(
         CancellationToken cancellationToken = default)
@@ -89,6 +90,7 @@ public sealed class PlaceQueryService(
 
         var nearestStation = await geoService.FindNearestStationForPlaceAsync(id, cancellationToken)
             ?? throw new InvalidOperationException("No metro stations found.");
+        var reviews = await placeReviewRepository.GetSummaryAsync(id, cancellationToken);
 
         return new PlaceDetailResponse(
             place.Id,
@@ -104,6 +106,9 @@ public sealed class PlaceQueryService(
             place.EstimatedCostMax,
             place.ImageUrl,
             place.Tags,
-            nearestStation);
+            nearestStation,
+            place.GooglePlaceId,
+            reviews.AverageRating,
+            reviews.ReviewCount);
     }
 }

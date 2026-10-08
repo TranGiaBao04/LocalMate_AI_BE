@@ -128,16 +128,23 @@ public sealed class TripsController(
                 StatusCode(
                     StatusCodes.Status403Forbidden,
                     CreateGenerateQuotaProblem(result)),
-            GenerateTripResultStatus.NoPlaces when result.Reason == "OutOfServiceArea" =>
+            GenerateTripResultStatus.NoPlaces when result.Reason == TripInsufficiencyReasons.OutOfServiceArea =>
                 Conflict(CreateProblem(
                     StatusCodes.Status409Conflict,
-                    "The start location is outside the Metro Line 1 service area.",
+                    "The start location is outside Ho Chi Minh City.",
                     "out_of_service_area")),
-            GenerateTripResultStatus.NoPlaces =>
+            GenerateTripResultStatus.NoPlaces when result.Reason == TripInsufficiencyReasons.TooFarFromStationForMetro =>
                 Conflict(CreateProblem(
                     StatusCodes.Status409Conflict,
-                    "No suitable places were found for this request.",
-                    "insufficient_candidates")),
+                    "The start location is too far from the nearest station to travel by Metro.",
+                    "too_far_from_station_for_metro")),
+            GenerateTripResultStatus.NoPlaces when result.Reason == TripInsufficiencyReasons.DurationTooShort =>
+                Conflict(CreateProblem(
+                    StatusCodes.Status409Conflict,
+                    "The available time is too short to reach and visit any place.",
+                    "duration_too_short")),
+            GenerateTripResultStatus.NoPlaces =>
+                Conflict(CreateInsufficientCandidatesProblem(result)),
             _ => throw new InvalidOperationException("Unsupported generate trip result status.")
         };
     }
@@ -414,6 +421,11 @@ public sealed class TripsController(
                     StatusCodes.Status404NotFound,
                     "New place was not found or is not active.",
                     "place_not_found")),
+            ReplaceItineraryItemResultStatus.CrossesMidnight =>
+                Conflict(CreateProblem(
+                    StatusCodes.Status409Conflict,
+                    "Replacing this place would push the itinerary past midnight.",
+                    "replacement_crosses_midnight")),
             _ => throw new InvalidOperationException("Unsupported replace itinerary item result status.")
         };
     }
@@ -646,6 +658,18 @@ public sealed class TripsController(
         };
 
         problem.Extensions["code"] = code;
+        return problem;
+    }
+
+    private ProblemDetails CreateInsufficientCandidatesProblem(GenerateTripResult result)
+    {
+        var problem = CreateProblem(
+            StatusCodes.Status409Conflict,
+            "No suitable places were found for this request.",
+            "insufficient_candidates");
+
+        // Ga gần điểm xuất phát nhất có đủ địa điểm, để FE gợi ý người dùng đổi khu chơi.
+        problem.Extensions["suggestedStations"] = result.SuggestedStations ?? [];
         return problem;
     }
 

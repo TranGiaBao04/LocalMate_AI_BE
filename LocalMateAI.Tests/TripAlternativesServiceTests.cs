@@ -225,12 +225,13 @@ public sealed class TripAlternativesServiceTests
             CancellationToken cancellationToken = default) =>
             Task.FromResult(item);
 
-        public Task<ReplacedItemReadModel?> ReplaceItemPlaceIfEligibleAsync(
+        public Task<ReplaceItemPersistenceResult> ReplaceItemPlaceAndRecalculateTimelineAsync(
             Guid tripId,
             Guid itemId,
             Guid userId,
             Guid newPlaceId,
             decimal newEstimatedBudget,
+            Func<TimelineRecalculationInput, IReadOnlyList<TimelineItemUpdate>?> recalculateTimeline,
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
@@ -268,6 +269,11 @@ public sealed class TripAlternativesServiceTests
 
     private sealed class FakePlaceRepository : IPlaceRepository
     {
+        public Task<IReadOnlyList<Guid>> GetTagIdsAsync(Guid placeId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task AddTagAsync(Guid placeId, Guid tagId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<bool> RemoveTagAsync(Guid placeId, Guid tagId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<IReadOnlyList<DuplicatePlaceCandidate>> FindNearbyPlacesAsync(double latitude, double longitude, double radiusMeters, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
         public Task<IReadOnlyDictionary<Guid, IReadOnlyList<Guid>>> GetPlaceTagIdsByPlaceIdsAsync(
             IReadOnlyList<Guid> placeIds,
             CancellationToken cancellationToken = default) =>

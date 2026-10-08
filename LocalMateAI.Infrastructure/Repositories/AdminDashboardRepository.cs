@@ -54,6 +54,25 @@ public sealed class AdminDashboardRepository(AppDbContext context) : IAdminDashb
         return rows.Select(row => new DailyRevenueRow(row.Date, row.PaidOrders, row.Revenue)).ToList();
     }
 
+    public async Task<IReadOnlyList<DailyTripsFinalizedResponse>> GetDailyFinalizedTripsAsync(DateTime startUtc,
+        DateTime endUtc, CancellationToken cancellationToken = default)
+    {
+        // Ngày chốt = FinalizedAt; trip chốt trước khi có cột này (FinalizedAt null) lấy CreatedAt.
+        // Đếm cả trip đã xoá mềm để số của ngày cũ không đổi và khớp tổng ở PublicStatsRepository.
+        var rows = await context.Database.SqlQuery<DailyTripsFinalizedSqlRow>($"""
+            SELECT (COALESCE("FinalizedAt", "CreatedAt") AT TIME ZONE 'Asia/Ho_Chi_Minh')::date AS "Date",
+                   count(*) AS "TripsFinalized"
+            FROM "Trips"
+            WHERE "Status" = 'Finalized'
+              AND COALESCE("FinalizedAt", "CreatedAt") >= {startUtc}
+              AND COALESCE("FinalizedAt", "CreatedAt") < {endUtc}
+            GROUP BY 1
+            ORDER BY 1
+            """).ToListAsync(cancellationToken);
+
+        return rows.Select(row => new DailyTripsFinalizedResponse(row.Date, row.TripsFinalized)).ToList();
+    }
+
     public async Task<IReadOnlyList<StationTripCountRow>> GetTripCountsByStationAsync(DateTime startUtc,
         DateTime endUtc, CancellationToken cancellationToken = default)
     {
@@ -89,6 +108,12 @@ public sealed class AdminDashboardRepository(AppDbContext context) : IAdminDashb
         public DateOnly Date { get; init; }
         public long PaidOrders { get; init; }
         public decimal Revenue { get; init; }
+    }
+
+    private sealed class DailyTripsFinalizedSqlRow
+    {
+        public DateOnly Date { get; init; }
+        public long TripsFinalized { get; init; }
     }
 
     private sealed class StationTripCountSqlRow

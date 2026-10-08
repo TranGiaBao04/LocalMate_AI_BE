@@ -36,7 +36,7 @@ public sealed class PlaceRepository(AppDbContext dbContext) : IPlaceRepository
                     ST_X(p."Location") AS "PlaceLongitude",
                     p."Category" AS "PlaceCategory",
                     p."EstimatedCostMin", p."EstimatedCostMax", p."ImageUrl",
-                    nearest."DistanceFromStationMeters"
+                    nearest."DistanceFromStationMeters", p."Description"
              FROM "Places" p
              CROSS JOIN LATERAL (
                  SELECT ms."Id" AS "StationId", ms."Name" AS "StationName",
@@ -113,6 +113,75 @@ public sealed class PlaceRepository(AppDbContext dbContext) : IPlaceRepository
                 group => (IReadOnlyList<Guid>)group.Select(row => row.TagId).ToList());
     }
 
+    public async Task<IReadOnlyList<Guid>> GetTagIdsAsync(
+        Guid placeId,
+        CancellationToken cancellationToken = default) =>
+        await dbContext.PlaceTags
+            .Where(placeTag => placeTag.PlaceId == placeId)
+            .Select(placeTag => placeTag.TagId)
+            .ToListAsync(cancellationToken);
+
+    public async Task AddTagAsync(
+        Guid placeId,
+        Guid tagId,
+        CancellationToken cancellationToken = default)
+    {
+        var exists = await dbContext.PlaceTags
+            .AnyAsync(placeTag => placeTag.PlaceId == placeId && placeTag.TagId == tagId, cancellationToken);
+
+        if (exists)
+        {
+            return;
+        }
+
+        dbContext.PlaceTags.Add(new PlaceTag { PlaceId = placeId, TagId = tagId });
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<bool> RemoveTagAsync(
+        Guid placeId,
+        Guid tagId,
+        CancellationToken cancellationToken = default)
+    {
+        var placeTag = await dbContext.PlaceTags
+            .SingleOrDefaultAsync(placeTag => placeTag.PlaceId == placeId && placeTag.TagId == tagId, cancellationToken);
+
+        if (placeTag is null)
+        {
+            return false;
+        }
+
+        dbContext.PlaceTags.Remove(placeTag);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
+    public async Task<IReadOnlyList<DuplicatePlaceCandidate>> FindNearbyPlacesAsync(
+        double latitude,
+        double longitude,
+        double radiusMeters,
+        CancellationToken cancellationToken = default)
+    {
+        return await dbContext.Database.SqlQuery<DuplicatePlaceCandidate>(
+            $"""
+             SELECT p."Id", p."Name", p."Address",
+                    ST_Y(p."Location") AS "Latitude", ST_X(p."Location") AS "Longitude",
+                    ST_Distance(
+                        p."Location"::geography,
+                        ST_SetSRID(ST_MakePoint({longitude}, {latitude}), 4326)::geography
+                    ) AS "DistanceMeters"
+             FROM "Places" p
+             WHERE p."DeletedAt" IS NULL
+               AND ST_DWithin(
+                   p."Location"::geography,
+                   ST_SetSRID(ST_MakePoint({longitude}, {latitude}), 4326)::geography,
+                   {radiusMeters}
+               )
+             ORDER BY "DistanceMeters"
+             """)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyList<AdminPlaceResponse>> GetAllForAdminAsync(
         CancellationToken cancellationToken = default)
     {
@@ -135,7 +204,8 @@ public sealed class PlaceRepository(AppDbContext dbContext) : IPlaceRepository
                 place.EstimatedCostMax,
                 place.ImageUrl,
                 place.CreatedAt,
-                place.UpdatedAt))
+                place.UpdatedAt,
+                place.GooglePlaceId))
             .ToListAsync(cancellationToken);
     }
 
@@ -177,7 +247,8 @@ public sealed class PlaceRepository(AppDbContext dbContext) : IPlaceRepository
 
             if (stationLocation is not null)
             {
-                places = places.Where(place => place.Location.IsWithinDistance(stationLocation, 1500));
+                const double distanceInDegrees = 1500.0 / 111320.0;
+                places = places.Where(place => place.Location.IsWithinDistance(stationLocation, distanceInDegrees));
             }
         }
 
@@ -197,7 +268,8 @@ public sealed class PlaceRepository(AppDbContext dbContext) : IPlaceRepository
                 place.EstimatedCostMax,
                 place.ImageUrl,
                 place.CreatedAt,
-                place.UpdatedAt))
+                place.UpdatedAt,
+                place.GooglePlaceId))
             .ToPagedResultAsync(query, cancellationToken);
     }
 
@@ -222,7 +294,8 @@ public sealed class PlaceRepository(AppDbContext dbContext) : IPlaceRepository
                 place.EstimatedCostMax,
                 place.ImageUrl,
                 place.CreatedAt,
-                place.UpdatedAt))
+                place.UpdatedAt,
+                place.GooglePlaceId))
             .SingleOrDefaultAsync(cancellationToken);
     }
 
@@ -296,7 +369,8 @@ public sealed class PlaceRepository(AppDbContext dbContext) : IPlaceRepository
                 candidate.IsVerified,
                 candidate.EstimatedCostMin,
                 candidate.EstimatedCostMax,
-                candidate.ImageUrl
+                candidate.ImageUrl,
+                candidate.GooglePlaceId
             })
             .SingleOrDefaultAsync(cancellationToken);
 
@@ -328,6 +402,7 @@ public sealed class PlaceRepository(AppDbContext dbContext) : IPlaceRepository
             place.EstimatedCostMin,
             place.EstimatedCostMax,
             place.ImageUrl,
-            tags);
+            tags,
+            place.GooglePlaceId);
     }
 }

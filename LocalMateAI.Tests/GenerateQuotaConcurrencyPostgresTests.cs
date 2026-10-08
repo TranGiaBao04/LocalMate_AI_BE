@@ -293,6 +293,7 @@ public sealed class GenerateQuotaConcurrencyPostgresTests
             usageRepository,
             new TripGenerationQuotaExecutor(context),
             new SuccessfulDetailService(),
+            new FakeStationSuggestionService(),
             clock);
         return new GenerateScope(context, service);
     }
@@ -303,7 +304,7 @@ public sealed class GenerateQuotaConcurrencyPostgresTests
             new SubscriptionRepository(context),
             new UsageEventRepository(context),
             new TripRepository(context),
-            new FixedTimeProvider(nowUtc));
+            new FixedTimeProvider(nowUtc), new AiUsageAdmissionRepository(context, new FakeSystemSettingProvider(), TimeProvider.System), new FakeSystemSettingProvider());
 
     private static async Task CleanupAsync(string connectionString, SeedData seed)
     {
@@ -380,7 +381,9 @@ public sealed class GenerateQuotaConcurrencyPostgresTests
                         "Test",
                         1,
                         100,
-                        "Bến Thành")).ToList())));
+                        "Bến Thành")).ToList(),
+                    new StationRefDto(1, "Bến Thành")),
+                Origin: TestTripOrigins.At(startLatitude: 10.77, startLongitude: 106.69)));
     }
 
     private sealed class SuccessfulDetailService : ITripDetailService

@@ -48,7 +48,8 @@ internal sealed class EntitlementRepairPostgresFixture(IsolatedPlanDatabase data
                 await new SubscriptionRepository(c).PublishVersionAsync(new SubscriptionPlanVersion
                 {
                     PlanId = plan.Id, VersionNumber = 1, Price = 79000, DurationDays = 11,
-                    GenerateLimit = 4, SavedTripLimit = 3, Origin = PlanVersionOrigin.Published, PublishedAt = Day
+                    GenerateLimit = 4, SavedTripLimit = 3, AiDailyCallLimit = 15, AiExplainCallsPerTripLimit = 3,
+                    Origin = PlanVersionOrigin.Published, PublishedAt = Day
                 });
             }
             var orders = Enumerable.Range(0, count).Select(i => new PaymentOrder

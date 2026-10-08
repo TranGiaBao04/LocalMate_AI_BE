@@ -197,6 +197,12 @@ public sealed class TripRepository(AppDbContext dbContext) : ITripRepository
             UserId = userId,
             StartLatitude = source.StartLatitude,
             StartLongitude = source.StartLongitude,
+            StartStationId = source.StartStationId,
+            DestinationStationId = source.DestinationStationId,
+            Note = source.Note,
+            NoteApplied = source.NoteApplied,
+            // Bản sao mang theo các câu lý do, nên giữ luôn dấu "AI đã viết".
+            AiExplainedAt = source.AiExplainedAt,
             DurationHours = source.DurationHours,
             BudgetMin = source.BudgetMin,
             BudgetMax = source.BudgetMax,
@@ -263,7 +269,12 @@ public sealed class TripRepository(AppDbContext dbContext) : ITripRepository
                 candidate.CreatedAt,
                 candidate.UpdatedAt,
                 candidate.FinalizedAt,
-                candidate.PlannedStartAt
+                candidate.PlannedStartAt,
+                candidate.StartStationId,
+                candidate.DestinationStationId,
+                candidate.Note,
+                candidate.NoteApplied,
+                candidate.AiExplainedAt
             })
             .SingleOrDefaultAsync(cancellationToken);
 
@@ -291,6 +302,7 @@ public sealed class TripRepository(AppDbContext dbContext) : ITripRepository
                 item.Place.Address,
                 item.Place.Category,
                 item.Place.ImageUrl,
+                item.Place.GooglePlaceId,
                 Latitude = item.Place.Location.Y,
                 Longitude = item.Place.Location.X,
                 item.OrderIndex,
@@ -303,40 +315,35 @@ public sealed class TripRepository(AppDbContext dbContext) : ITripRepository
             })
             .ToListAsync(cancellationToken);
 
-        // Ga gần nhất (đường chim bay, geography — cùng cách tính với MetroStationRepository.FindNearestAsync).
-        var tripStation = await dbContext.Database.SqlQuery<string>(
-                $"""
-                 SELECT ms."Name" AS "Value"
-                 FROM "MetroStations" ms
-                 ORDER BY ST_Distance(
-                     ST_SetSRID(ST_MakePoint({trip.StartLongitude}, {trip.StartLatitude}), 4326)::geography,
-                     ms."Location"::geography)
-                 LIMIT 1
-                 """)
-            .FirstOrDefaultAsync(cancellationToken);
+        // Ga lên: ga gần điểm xuất phát nhất (với trip xuất phát từ ga thì chính là ga đó, khoảng cách 0).
+        var tripStation = await TripStationQueries.GetNearestStationAsync(
+            dbContext, trip.StartLatitude, trip.StartLongitude, cancellationToken);
 
-        var stationsByItemId = (await dbContext.Database.SqlQuery<ItemStationRow>(
-                $"""
-                 SELECT i."Id" AS "ItemId", s."Name" AS "StationName"
-                 FROM "ItineraryItems" i
-                 JOIN "Places" p ON p."Id" = i."PlaceId"
-                 CROSS JOIN LATERAL (
-                     SELECT ms."Name"
-                     FROM "MetroStations" ms
-                     ORDER BY ST_Distance(p."Location"::geography, ms."Location"::geography)
-                     LIMIT 1
-                 ) s
-                 WHERE i."TripId" = {tripId}
-                 """)
-            .ToListAsync(cancellationToken))
-            .ToDictionary(row => row.ItemId, row => row.StationName);
+        var stationsByItemId = (await TripStationQueries.GetItemStationsAsync(dbContext, tripId, cancellationToken))
+            .ToDictionary(row => row.ItemId);
+
+        // Ga người dùng đã chọn lúc tạo lịch (xuất phát từ ga / muốn chơi quanh ga); phần lớn trip không có.
+        var chosenStationIds = new[] { trip.StartStationId, trip.DestinationStationId }
+            .Where(stationId => stationId.HasValue)
+            .Select(stationId => stationId!.Value)
+            .Distinct()
+            .ToList();
+        var chosenStations = chosenStationIds.Count == 0
+            ? new Dictionary<Guid, StationRefDto>()
+            : await dbContext.MetroStations
+                .AsNoTracking()
+                .Where(station => chosenStationIds.Contains(station.Id))
+                .ToDictionaryAsync(
+                    station => station.Id,
+                    station => new StationRefDto(station.Order, station.Name),
+                    cancellationToken);
 
         return new TripDetailReadModel(
             trip.Id,
             trip.Status,
             trip.StartLatitude,
             trip.StartLongitude,
-            tripStation,
+            tripStation?.StationName,
             trip.DurationHours,
             trip.BudgetMin,
             trip.BudgetMax,
@@ -350,7 +357,7 @@ public sealed class TripRepository(AppDbContext dbContext) : ITripRepository
                     item.ImageUrl,
                     item.Latitude,
                     item.Longitude,
-                    stationsByItemId.GetValueOrDefault(item.Id),
+                    stationsByItemId.GetValueOrDefault(item.Id)?.StationName,
                     item.OrderIndex,
                     item.ScheduledTime,
                     item.EstimatedDurationMinutes,
@@ -358,13 +365,25 @@ public sealed class TripRepository(AppDbContext dbContext) : ITripRepository
                     item.Reasoning,
                     item.IsVisited,
                     item.VisitedAt,
-                    item.Address))
+                    item.Address,
+                    stationsByItemId.GetValueOrDefault(item.Id)?.StationOrder,
+                    stationsByItemId.GetValueOrDefault(item.Id)?.DistanceMeters,
+                    item.GooglePlaceId))
                 .ToList(),
             trip.CreatedAt,
             trip.UpdatedAt,
             trip.FinalizedAt,
             trip.TravelMode,
-            trip.PlannedStartAt);
+            trip.PlannedStartAt,
+            tripStation?.StationOrder,
+            tripStation?.DistanceMeters,
+            trip.StartStationId is { } startStationId ? chosenStations.GetValueOrDefault(startStationId) : null,
+            trip.DestinationStationId is { } destinationStationId
+                ? chosenStations.GetValueOrDefault(destinationStationId)
+                : null,
+            trip.Note,
+            trip.NoteApplied,
+            trip.AiExplainedAt);
     }
 
     public async Task AddAsync(
@@ -392,5 +411,4 @@ public sealed class TripRepository(AppDbContext dbContext) : ITripRepository
 
     private sealed record TripStationRow(Guid TripId, string StationName);
 
-    private sealed record ItemStationRow(Guid ItemId, string StationName);
 }

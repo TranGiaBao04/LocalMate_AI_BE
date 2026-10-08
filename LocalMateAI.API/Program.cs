@@ -11,12 +11,16 @@ using LocalMateAI.Application.Interfaces.Payments;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Interfaces.Services;
 using LocalMateAI.Application.Services;
+using LocalMateAI.Application.Settings;
 using LocalMateAI.Application.Validators.Trips;
 using LocalMateAI.Domain.Enums;
 using LocalMateAI.Infrastructure.Email;
+using LocalMateAI.Infrastructure.Embeddings;
+using LocalMateAI.Infrastructure.Llm;
 using LocalMateAI.Infrastructure.Metro;
 using LocalMateAI.Infrastructure.Persistence;
 using LocalMateAI.Infrastructure.Payments;
+using LocalMateAI.Infrastructure.Services;
 using LocalMateAI.Infrastructure.Repositories;
 using LocalMateAI.Infrastructure.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -132,6 +136,10 @@ builder.Services.Configure<OtpOptions>(builder.Configuration.GetSection(OtpOptio
 builder.Services.AddSingleton<IValidateOptions<OtpOptions>, OtpOptionsValidator>();
 builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection(SmtpOptions.SectionName));
 builder.Services.AddSingleton<IValidateOptions<SmtpOptions>, SmtpOptionsValidator>();
+builder.Services.Configure<EmbeddingOptions>(builder.Configuration.GetSection(EmbeddingOptions.SectionName));
+builder.Services.AddHttpClient<IEmbeddingClient, GeminiEmbeddingClient>(client => client.Timeout = TimeSpan.FromSeconds(30));
+builder.Services.Configure<LlmOptions>(builder.Configuration.GetSection(LlmOptions.SectionName));
+builder.Services.AddHttpClient<ILlmClient, GeminiLlmClient>(client => client.Timeout = TimeSpan.FromSeconds(30));
 builder.Services.Configure<PasswordHasherOptions>(options =>
 {
     options.CompatibilityMode = PasswordHasherCompatibilityMode.IdentityV3;
@@ -151,8 +159,14 @@ builder.Services.AddScoped<IAdminTransactionRepository, AdminTransactionReposito
 builder.Services.AddScoped<IAdminTransactionService, AdminTransactionService>();
 builder.Services.AddScoped<IAdminDashboardRepository, AdminDashboardRepository>();
 builder.Services.AddScoped<IAdminDashboardService, AdminDashboardService>();
+builder.Services.AddScoped<IPublicStatsRepository, PublicStatsRepository>();
+builder.Services.AddScoped<IPublicStatsService, PublicStatsService>();
+builder.Services.AddScoped<IPublicReviewRepository, PublicReviewRepository>();
+builder.Services.AddScoped<IPublicReviewService, PublicReviewService>();
 builder.Services.AddScoped<IAdminStationRepository, AdminStationRepository>();
 builder.Services.AddScoped<IAdminStationService, AdminStationService>();
+builder.Services.AddScoped<IAdminUserRepository, AdminUserRepository>();
+builder.Services.AddScoped<IAdminUserService, AdminUserService>();
 builder.Services.AddScoped<ISystemSettingRepository, SystemSettingRepository>();
 builder.Services.AddScoped<ISystemSettingProvider, SystemSettingProvider>();
 builder.Services.AddScoped<IAdminSystemSettingService, AdminSystemSettingService>();
@@ -227,7 +241,41 @@ builder.Services.AddScoped<IFeedbackRepository, FeedbackRepository>();
 builder.Services.AddScoped<IPlaceReviewRepository, PlaceReviewRepository>();
 builder.Services.AddScoped<IGeoService, GeoService>();
 builder.Services.AddScoped<IPlaceQueryService, PlaceQueryService>();
+builder.Services.AddScoped<ISearchRepository, SearchRepository>();
+builder.Services.AddScoped<INotificationRepository, NotificationRepository>();
+builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddScoped<IPlaceEmbeddingRepository, PlaceEmbeddingRepository>();
+builder.Services.AddScoped<IPlaceEmbeddingSyncService, PlaceEmbeddingSyncService>();
+builder.Services.AddScoped<ISemanticPlaceScorer, SemanticPlaceScorer>();
+builder.Services.AddScoped<ILlmCallLogRepository, LlmCallLogRepository>();
+builder.Services.AddScoped<IAiUsageAdmissionRepository, AiUsageAdmissionRepository>();
+builder.Services.AddScoped<IAiUsageAccountingRepository>(sp => sp.GetRequiredService<IAiUsageAdmissionRepository>());
+builder.Services.AddHostedService<AiUsageRecoveryWorker>();
+builder.Services.AddScoped<IAiUsageCoordinator, AiUsageCoordinator>();
+builder.Services.AddScoped<IAiUsageGuard, AiUsageGuard>();
+builder.Services.AddScoped<ITripExplanationRepository, TripExplanationRepository>();
+builder.Services.AddScoped<ITripExplanationService, TripExplanationService>();
+builder.Services.AddScoped<ITripRequestParsingService, TripRequestParsingService>();
+builder.Services.AddHostedService<PlaceEmbeddingSyncWorker>();
+builder.Services.AddScoped<ISearchService, SearchService>();
 builder.Services.AddScoped<IAdminPlaceService, AdminPlaceService>();
+builder.Services.AddScoped<IPlaceDistanceValidationService, PlaceDistanceValidationService>();
+builder.Services.AddScoped<IPlaceImportService, PlaceImportService>();
+builder.Services.AddScoped<IPlaceImportParser, PlaceImportParser>();
+builder.Services.AddScoped<IPriceNormalizer, PriceNormalizer>();
+builder.Services.AddScoped<ICoordinateNormalizer, CoordinateNormalizer>();
+builder.Services.AddScoped<IStationMapperService, StationMapperService>();
+builder.Services.AddScoped<ICategoryValidationService, CategoryValidationService>();
+builder.Services.AddScoped<IPlaceImportEngineService, PlaceImportEngineService>();
+var cloudinaryOptions = new CloudinaryUploadOptions
+{
+    CloudName = builder.Configuration["Cloudinary:CloudName"] ?? string.Empty,
+    ApiKey = builder.Configuration["Cloudinary:ApiKey"] ?? string.Empty,
+    ApiSecret = builder.Configuration["Cloudinary:ApiSecret"] ?? string.Empty,
+    Folder = builder.Configuration["Cloudinary:Folder"] ?? "localmate/places"
+};
+builder.Services.AddSingleton(cloudinaryOptions);
+builder.Services.AddScoped<IImageStorageService, CloudinaryImageStorageService>();
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<IMasterDataService, MasterDataService>();
 // Đọc + kiểm tra metro-timetable.json ngay lúc khởi động: file sai thì app không chạy.
@@ -238,6 +286,7 @@ builder.Services.AddScoped<ICuratedItineraryService, CuratedItineraryService>();
 builder.Services.AddValidatorsFromAssemblyContaining<TripRequestValidator>();
 builder.Services.AddScoped<ITripCriteriaNormalizationService, TripCriteriaNormalizationService>();
 builder.Services.AddScoped<ITripOriginResolverService, TripOriginResolverService>();
+builder.Services.AddScoped<IStationSuggestionService, StationSuggestionService>();
 builder.Services.AddScoped<ITripFeasibilityService, TripFeasibilityService>();
 builder.Services.AddScoped<IMetroClusterMatchingService, MetroClusterMatchingService>();
 builder.Services.AddScoped<ICandidateFilterService, CandidateFilterService>();
@@ -258,6 +307,9 @@ builder.Services.AddScoped<IFinalizeTripCommand, FinalizeTripCommand>();
 builder.Services.AddScoped<IForkTripCommand, ForkTripCommand>();
 builder.Services.AddScoped<IFeedbackService, FeedbackService>();
 builder.Services.AddScoped<IPlaceReviewService, PlaceReviewService>();
+builder.Services.AddScoped<IPlaceReviewQueryService, PlaceReviewQueryService>();
+builder.Services.AddScoped<IAdminFeedbackRepository, AdminFeedbackRepository>();
+builder.Services.AddScoped<IAdminFeedbackService, AdminFeedbackService>();
 
 // Register Application Services for Google Maps & Navigation (BE-60, BE-61, BE-62, BE-63)
 builder.Services.AddSingleton<IGoogleMapsUrlBuilderService, GoogleMapsUrlBuilderService>();
@@ -333,6 +385,7 @@ if (app.Environment.IsDevelopment())
 app.UseSerilogRequestLogging();
 app.UseExceptionHandler();
 app.UseHttpsRedirection();
+app.UseStaticFiles();
 app.UseCors(frontendClientPolicy);
 app.UseRateLimiter();
 app.UseAuthentication();

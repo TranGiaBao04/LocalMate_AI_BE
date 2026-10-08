@@ -105,6 +105,7 @@ public static class TripItineraryEmailBuilder
     {
         TravelMode.Walking => "Đi bộ",
         TravelMode.Motorbike => "Xe máy",
+        TravelMode.Metro => "Metro",
         _ => "Tự chọn (đi bộ hoặc xe máy)"
     };
 }

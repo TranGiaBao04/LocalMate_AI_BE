@@ -18,6 +18,7 @@ public sealed class TripGenerationService(
     IUsageEventRepository usageEventRepository,
     ITripGenerationQuotaExecutor quotaExecutor,
     ITripDetailService tripDetailService,
+    IStationSuggestionService stationSuggestionService,
     TimeProvider timeProvider) : ITripGenerationService
 {
     public async Task<GenerateTripResult> GenerateAsync(
@@ -64,12 +65,23 @@ public sealed class TripGenerationService(
         var payload = fallback.Payload!;
         if (!payload.IsSufficient || payload.Stops.Count == 0)
         {
-            return GenerateTripResult.NoSuitablePlaces(payload.InsufficiencyReason ?? "InsufficientCandidates");
+            var reason = payload.InsufficiencyReason ?? TripInsufficiencyReasons.InsufficientCandidates;
+
+            // Chỉ gợi ý ga khác khi vấn đề là thiếu địa điểm; thiếu giờ hay ngoài vùng thì đổi ga không giúp gì.
+            var suggestedStations = reason == TripInsufficiencyReasons.InsufficientCandidates && fallback.Origin is not null
+                ? await stationSuggestionService.SuggestAsync(fallback.Origin, cancellationToken)
+                : [];
+
+            return GenerateTripResult.NoSuitablePlaces(reason, suggestedStations);
         }
+
+        var origin = fallback.Origin
+            ?? throw new InvalidOperationException("The itinerary was built without a resolved origin.");
 
         var plannedStartAt = TripTimingRules.ResolveStart(
             request.PlannedDate, request.StartTime, VietnamTime.Now(timeProvider));
-        var trip = GeneratedTripBuilder.Build(userId, request, payload.Stops, tagIds, plannedStartAt);
+        var trip = GeneratedTripBuilder.Build(
+            userId, request, origin, payload.Stops, tagIds, plannedStartAt, payload.NoteApplied);
 
         var execution = await quotaExecutor.ExecuteForUserAsync(
             userId,

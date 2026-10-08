@@ -32,6 +32,15 @@ public sealed class AdminDashboardController(IAdminDashboardService service) : C
         return result.Status == AdminDashboardResultStatus.Success ? Ok(result.Response) : InvalidQuery(result);
     }
 
+    [HttpGet("trips-finalized-daily")]
+    [ProducesResponseType<AdminDashboardTripsFinalizedDailyResponse>(StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetTripsFinalizedDailyAsync([FromQuery] DashboardDateRangeQuery query,
+        CancellationToken cancellationToken)
+    {
+        var result = await service.GetTripsFinalizedDailyAsync(query, cancellationToken);
+        return result.Status == AdminDashboardResultStatus.Success ? Ok(result.Response) : InvalidQuery(result);
+    }
+
     [HttpGet("top-stations")]
     [ProducesResponseType<AdminDashboardTopStationsResponse>(StatusCodes.Status200OK)]
     public async Task<IActionResult> GetTopStationsAsync([FromQuery] DashboardTopStationsQuery query,

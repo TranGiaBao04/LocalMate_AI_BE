@@ -1,4 +1,5 @@
 using FluentValidation;
+using LocalMateAI.Application.DTOs.Matching;
 using LocalMateAI.Application.DTOs.Trips;
 using LocalMateAI.Application.Interfaces.Services;
 using LocalMateAI.Application.Settings;
@@ -11,6 +12,7 @@ public sealed class TripFeasibilityService(
     ITripCriteriaNormalizationService tripCriteriaNormalizationService,
     IMetroClusterMatchingService metroClusterMatchingService,
     ICandidateFilterService candidateFilterService,
+    IStationSuggestionService stationSuggestionService,
     ISystemSettingProvider settings) : ITripFeasibilityService
 {
     public async Task<TripFeasibilityResult> CheckFeasibilityAsync(
@@ -28,50 +30,69 @@ public sealed class TripFeasibilityService(
         var origin = await tripOriginResolverService.ResolveAsync(request, cancellationToken)
             ?? throw new InvalidOperationException("No metro stations found.");
 
+        var anchorStation = new StationRefDto(origin.AnchorStation.Order, origin.AnchorStation.Name);
+
         if (!origin.IsWithinServiceArea)
         {
             return TripFeasibilityResult.Succeeded(new TripFeasibilityResponse(
                 false,
-                "OutOfServiceArea",
+                origin.ServiceAreaFailure,
                 origin.NearestStation,
                 criteria.DurationCategory.ToString(),
                 criteria.BudgetTier.ToString(),
                 0,
-                0));
+                0,
+                anchorStation,
+                []));
         }
 
         // Cùng nguồn ứng viên và cùng luật lọc ngân sách với /match và /generate.
         var candidates = await metroClusterMatchingService.GetCandidatesAsync(
-            origin.NearestStation.StationId,
+            origin.AnchorStation.Id,
             cancellationToken);
 
         var filtered = candidateFilterService.Filter(candidates, criteria);
 
-        // Chưa chấm điểm theo tag nên xếp theo khoảng cách tới ga: đúng thứ tự của generate khi user không chọn tag
-        // (mọi điểm 0,5, hoà thì gần ga trước). Có chọn tag thì số chặng chỉ gần đúng.
+        // Chưa chấm điểm theo tag nên xếp theo khoảng cách tới ga cột mốc: đúng thứ tự của generate khi user
+        // không chọn tag (mọi điểm 0,5, hoà thì gần ga cột mốc trước). Có chọn tag thì số chặng chỉ gần đúng.
         var planning = await TripPlanningSettings.LoadAsync(settings, cancellationToken);
         var planned = ItineraryScheduler.Schedule(
             filtered.Passed
-                .OrderBy(candidate => candidate.DistanceFromStationMeters)
+                .OrderBy(candidate => CandidateRanking.DistanceToAnchorKm(candidate, origin.AnchorStation))
+                .ThenBy(candidate => candidate.PlaceId)
                 .Select(candidate => ItineraryScheduler.ToScheduleInput(candidate, planning))
                 .ToList(),
             request.StartTime ?? ItineraryScheduler.DefaultStartTime,
             request.DurationHours,
             request.TravelMode,
             request.BudgetMax,
-            new ScheduleOrigin(request.StartLatitude, request.StartLongitude),
+            origin.ToScheduleOrigin(),
             planning);
 
         var isFeasible = planned.Count >= 1;
 
+        // Không có ứng viên nào trong ngân sách = thiếu địa điểm; có ứng viên mà không chặng nào vừa = thiếu giờ.
+        var reason = isFeasible
+            ? null
+            : filtered.Passed.Count == 0
+                ? TripInsufficiencyReasons.InsufficientCandidates
+                : TripInsufficiencyReasons.DurationTooShort;
+
+        // Chỉ gợi ý ga khác khi vấn đề là thiếu địa điểm; thiếu giờ thì đổi ga không giúp gì.
+        var suggestedStations = reason == TripInsufficiencyReasons.InsufficientCandidates
+            ? await stationSuggestionService.SuggestAsync(origin, cancellationToken)
+            : [];
+
         return TripFeasibilityResult.Succeeded(new TripFeasibilityResponse(
             isFeasible,
-            isFeasible ? null : "InsufficientCandidates",
+            reason,
             origin.NearestStation,
             criteria.DurationCategory.ToString(),
             criteria.BudgetTier.ToString(),
             planned.Count,
-            candidates.Count));
+            candidates.Count,
+            anchorStation,
+            suggestedStations));
     }
 
     private static IReadOnlyDictionary<string, string[]> ToValidationErrors(

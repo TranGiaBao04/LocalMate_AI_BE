@@ -94,6 +94,43 @@ public sealed class ItineraryTimelineRecalculatorTests
     }
 
     [Fact]
+    public void Recalculate_MetroTrip_UsesTrainBetweenStopsOfDifferentStations()
+    {
+        // Còn lại: chặng ở ga 2 (cách ga 152 m) lúc 08:00 trong 60', rồi chặng ở ga 5 (cách ga 300 m), cách nhau 2,89 km.
+        // Rời 09:00, đi bộ về ga 3' (09:03), tàu qua ga 2 lúc 09:17 ⇒ chờ 14', ngồi tàu 6', đi bộ 5' ⇒ tới 09:28.
+        var first = Snap(order: 0, hour: 8, minute: 0) with { StationOrder = 2, DistanceFromStationMeters = 152 };
+        var third = Snap(order: 2, hour: 11, minute: 0, latitude: 10.790) with
+        {
+            StationOrder = 5, DistanceFromStationMeters = 300
+        };
+        var input = new TimelineRecalculationInput([first, third], Start, TravelMode.Metro, new DateOnly(2026, 10, 10));
+
+        var byTrain = _sut.Recalculate(
+            input, TripPlanningSettings.Default, TestTripOrigins.MetroDay(new DateOnly(2026, 10, 10)));
+        var withoutTimetable = _sut.Recalculate(input, TripPlanningSettings.Default);
+
+        Assert.Equal([new TimelineItemUpdate(third.ItemId, 1, new TimeOnly(9, 28))], byTrain);
+        Assert.Equal([new TimelineItemUpdate(third.ItemId, 1, new TimeOnly(9, 8))], withoutTimetable); // như Auto: xe máy 8'
+    }
+
+    [Fact]
+    public void EndMinuteOfDay_IsWhenTheLastStopFinishes_AndCanExceedOneDay()
+    {
+        // 08:00 + 60' + xe máy 8' (2,89 km) + 60' = 10:08. Cùng lịch bắt đầu 22:30 thì xong 00:38 hôm sau = phút 1478.
+        var first = Snap(order: 0, hour: 8, minute: 0);
+        var second = Snap(order: 1, hour: 11, minute: 0, latitude: 10.790);
+
+        var morning = _sut.EndMinuteOfDay(
+            new TimelineRecalculationInput([first, second], Start, TravelMode.Auto), TripPlanningSettings.Default);
+        var lateNight = _sut.EndMinuteOfDay(
+            new TimelineRecalculationInput([first, second], new TimeOnly(22, 30), TravelMode.Auto),
+            TripPlanningSettings.Default);
+
+        Assert.Equal(10 * 60 + 8, morning);
+        Assert.Equal(24 * 60 + 38, lateNight);
+    }
+
+    [Fact]
     public void Recalculate_EmptyInput_ReturnsEmpty()
     {
         Assert.Empty(Recalculate([]));

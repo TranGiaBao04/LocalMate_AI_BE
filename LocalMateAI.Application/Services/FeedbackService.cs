@@ -64,13 +64,39 @@ public sealed class FeedbackService(
             return CreateFeedbackResult.AlreadyExists();
         }
 
-        return CreateFeedbackResult.Succeeded(new FeedbackResponse(
+        return CreateFeedbackResult.Succeeded(Map(feedback));
+    }
+
+    public async Task<GetFeedbackResult> GetAsync(
+        Guid currentUserId,
+        Guid tripId,
+        CancellationToken cancellationToken = default)
+    {
+        var user = await userRepository.GetByIdAsync(currentUserId, cancellationToken);
+        if (user is null)
+        {
+            return GetFeedbackResult.MissingPersistedUser();
+        }
+
+        var trip = await feedbackRepository.GetOwnedTripAsync(tripId, currentUserId, cancellationToken);
+        if (trip is null)
+        {
+            return GetFeedbackResult.MissingTrip();
+        }
+
+        var feedback = await feedbackRepository.GetAsync(currentUserId, tripId, cancellationToken);
+        return feedback is null
+            ? GetFeedbackResult.MissingFeedback()
+            : GetFeedbackResult.Succeeded(Map(feedback));
+    }
+
+    private static FeedbackResponse Map(Feedback feedback) =>
+        new(
             feedback.Id,
             feedback.TripId,
             feedback.QuickTag,
             feedback.Comment,
-            feedback.CreatedAt));
-    }
+            feedback.CreatedAt);
 
     private static Dictionary<string, string[]> Validate(CreateFeedbackRequest request)
     {

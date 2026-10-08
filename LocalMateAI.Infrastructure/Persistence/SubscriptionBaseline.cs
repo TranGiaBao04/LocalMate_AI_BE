@@ -26,11 +26,12 @@ public static class SubscriptionBaseline
         };
     public static SubscriptionPlanVersion[] Versions() =>
     [
-        Version(PlanCode.Free, 0, null, 1, 1),
-        Version(PlanCode.TripPass, 19000, 7, null, 3),
-        Version(PlanCode.Membership, 59000, 30, null, null)
+        Version(PlanCode.Free, 0, null, 1, 1, 3, 1),
+        Version(PlanCode.TripPass, 19000, 7, null, 3, 15, 3),
+        Version(PlanCode.Membership, 59000, 30, null, null, 30, 3)
     ];
-    private static SubscriptionPlanVersion Version(PlanCode code, decimal price, int? duration, int? generate, int? saved) =>
+    private static SubscriptionPlanVersion Version(PlanCode code, decimal price, int? duration, int? generate, int? saved,
+        int aiDaily, int aiExplain) =>
         new()
         {
             Id = VersionId(code),
@@ -40,6 +41,8 @@ public static class SubscriptionBaseline
             DurationDays = duration,
             GenerateLimit = generate,
             SavedTripLimit = saved,
+            AiDailyCallLimit = aiDaily,
+            AiExplainCallsPerTripLimit = aiExplain,
             Origin = PlanVersionOrigin.LegacyBaseline
         };
 }

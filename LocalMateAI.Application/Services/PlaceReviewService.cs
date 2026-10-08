@@ -10,8 +10,8 @@ public sealed class PlaceReviewService(
     IUserRepository userRepository,
     IPlaceReviewRepository reviewRepository) : IPlaceReviewService
 {
-    private const int MinRating = 1;
-    private const int MaxRating = 5;
+    public const int MinRating = 1;
+    public const int MaxRating = 5;
     private const int MaxQuickTags = 3;
     private const int MaxCommentLength = 1000;
 
@@ -101,6 +101,33 @@ public sealed class PlaceReviewService(
         return review is null
             ? GetPlaceReviewResult.MissingReview()
             : GetPlaceReviewResult.Succeeded(Map(review));
+    }
+
+    public async Task<DeletePlaceReviewResultStatus> DeleteAsync(
+        Guid userId,
+        Guid itemId,
+        CancellationToken cancellationToken = default)
+    {
+        if (itemId == Guid.Empty)
+        {
+            return DeletePlaceReviewResultStatus.InvalidItemId;
+        }
+
+        var user = await userRepository.GetByIdAsync(userId, cancellationToken);
+        if (user is null)
+        {
+            return DeletePlaceReviewResultStatus.UserNotFound;
+        }
+
+        var item = await reviewRepository.GetOwnedItemAsync(itemId, userId, cancellationToken);
+        if (item is null)
+        {
+            return DeletePlaceReviewResultStatus.ItemNotFound;
+        }
+
+        return await reviewRepository.DeleteAsync(userId, itemId, cancellationToken) > 0
+            ? DeletePlaceReviewResultStatus.Success
+            : DeletePlaceReviewResultStatus.ReviewNotFound;
     }
 
     private static Dictionary<string, string[]> Validate(int rating, string[] quickTags, string? comment)

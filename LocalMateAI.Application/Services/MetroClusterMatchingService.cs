@@ -46,7 +46,8 @@ public sealed class MetroClusterMatchingService(
                 row.StationId,
                 row.StationName,
                 row.StationOrder,
-                row.DistanceFromStationMeters))
+                row.DistanceFromStationMeters,
+                row.Description))
             .OrderBy(candidate => candidate.StationOrder)
             .ThenBy(candidate => candidate.DistanceFromStationMeters)
             .ToList();

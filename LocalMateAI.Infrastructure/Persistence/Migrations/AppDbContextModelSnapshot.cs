@@ -22,9 +22,107 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "postgis");
+            NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "unaccent");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
             modelBuilder.HasSequence("PaymentOrderCodeSequence");
+
+            modelBuilder.Entity("LocalMateAI.Domain.Entities.AiUsageAdmission", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("AdmittedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("AdmittedDailyLimit")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("AdmittedExplainLimit")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("DispatchAuthorizedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("FencingGeneration")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("FencingToken")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<Guid?>("LlmCallLogId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Outcome")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTime?>("RecoveryAfter")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ReservedUntil")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("ResolvedPlanVersionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<Guid?>("TripId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("TripIdSnapshot")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("VietnamUsageDate")
+                        .HasColumnType("date");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LlmCallLogId")
+                        .IsUnique()
+                        .HasFilter("\"LlmCallLogId\" IS NOT NULL");
+
+                    b.HasIndex("ResolvedPlanVersionId");
+
+                    b.HasIndex("TripId");
+
+                    b.HasIndex("RecoveryAfter", "State")
+                        .HasFilter("\"RecoveryAfter\" IS NOT NULL");
+
+                    b.HasIndex("ReservedUntil", "State");
+
+                    b.HasIndex("TripIdSnapshot", "Kind", "State");
+
+                    b.HasIndex("UserId", "VietnamUsageDate", "State");
+
+                    b.ToTable("AiUsageAdmissions", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_AiAdmissions_Identity", "\"Id\" <> '00000000-0000-0000-0000-000000000000'::uuid AND \"FencingToken\" <> '00000000-0000-0000-0000-000000000000'::uuid AND \"FencingGeneration\" > 0 AND (\"TripId\" IS NULL OR \"TripId\"=\"TripIdSnapshot\")");
+
+                            t.HasCheckConstraint("CK_AiAdmissions_Kind", "\"Kind\" IN ('ParseRequest','Explain')");
+
+                            t.HasCheckConstraint("CK_AiAdmissions_State", "(\"State\"='Reserved' AND \"DispatchAuthorizedAt\" IS NULL AND \"CompletedAt\" IS NULL AND \"Outcome\" IS NULL AND \"LlmCallLogId\" IS NULL AND \"RecoveryAfter\" IS NULL) OR (\"State\"='DispatchAuthorized' AND \"DispatchAuthorizedAt\" IS NOT NULL AND \"CompletedAt\" IS NULL AND \"Outcome\" IS NULL AND \"LlmCallLogId\" IS NULL) OR (\"State\"='Completed' AND \"DispatchAuthorizedAt\" IS NOT NULL AND \"CompletedAt\" IS NOT NULL AND \"Outcome\" IS NOT NULL AND \"Outcome\" IN ('Succeeded','ProviderFailed','InvalidOutput') AND \"LlmCallLogId\" IS NOT NULL AND \"RecoveryAfter\" IS NULL) OR (\"State\"='Released' AND \"DispatchAuthorizedAt\" IS NULL AND \"CompletedAt\" IS NOT NULL AND \"Outcome\" IS NULL AND \"LlmCallLogId\" IS NULL AND \"RecoveryAfter\" IS NULL) OR (\"State\"='Abandoned' AND \"DispatchAuthorizedAt\" IS NOT NULL AND \"CompletedAt\" IS NOT NULL AND \"Outcome\" IS NULL AND \"LlmCallLogId\" IS NULL AND \"RecoveryAfter\" IS NULL)");
+
+                            t.HasCheckConstraint("CK_AiAdmissions_Terms", "\"AdmittedDailyLimit\" BETWEEN 0 AND 1000 AND ((\"Kind\"='ParseRequest' AND \"TripId\" IS NULL AND \"TripIdSnapshot\" IS NULL AND \"AdmittedExplainLimit\" IS NULL) OR (\"Kind\"='Explain' AND \"TripIdSnapshot\" IS NOT NULL AND \"AdmittedExplainLimit\" IS NOT NULL AND \"AdmittedExplainLimit\" BETWEEN 0 AND 20))");
+
+                            t.HasCheckConstraint("CK_AiAdmissions_Time", "\"ReservedUntil\"=\"AdmittedAt\" + interval '30 seconds' AND \"VietnamUsageDate\"=((\"AdmittedAt\" AT TIME ZONE 'UTC') + interval '7 hours')::date AND (\"DispatchAuthorizedAt\" IS NULL OR \"DispatchAuthorizedAt\">=\"AdmittedAt\") AND (\"CompletedAt\" IS NULL OR \"CompletedAt\">=COALESCE(\"DispatchAuthorizedAt\",\"AdmittedAt\")) AND (\"RecoveryAfter\" IS NULL OR \"RecoveryAfter\">=\"DispatchAuthorizedAt\")");
+                        });
+                });
 
             modelBuilder.Entity("LocalMateAI.Domain.Entities.CuratedItinerary", b =>
                 {
@@ -359,6 +457,59 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
                     b.ToTable("ItineraryItems");
                 });
 
+            modelBuilder.Entity("LocalMateAI.Domain.Entities.LlmCallLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DurationMilliseconds")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("InputTokens")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("Model")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Outcome")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<int>("OutputTokens")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("TripId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TripId", "Kind")
+                        .HasDatabaseName("IX_LlmCallLogs_TripId_Kind");
+
+                    b.HasIndex("UserId", "CreatedAt")
+                        .HasDatabaseName("IX_LlmCallLogs_UserId_CreatedAt");
+
+                    b.ToTable("LlmCallLogs", (string)null);
+                });
+
             modelBuilder.Entity("LocalMateAI.Domain.Entities.MetroStation", b =>
                 {
                     b.Property<Guid>("Id")
@@ -390,6 +541,69 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Location"), "gist");
 
                     b.ToTable("MetroStations");
+                });
+
+            modelBuilder.Entity("LocalMateAI.Domain.Entities.Notification", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DeduplicationKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("ReadAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("TargetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TargetType")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DeduplicationKey")
+                        .IsUnique()
+                        .HasDatabaseName("UX_Notifications_DeduplicationKey");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("IX_Notifications_UserId_Unread")
+                        .HasFilter("\"ReadAt\" IS NULL");
+
+                    b.HasIndex("UserId", "CreatedAt")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("IX_Notifications_UserId_CreatedAt");
+
+                    b.ToTable("Notifications", (string)null);
                 });
 
             modelBuilder.Entity("LocalMateAI.Domain.Entities.PaymentOrder", b =>
@@ -566,7 +780,7 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("CK_OrderCredits_Days", "\"RemainingDays\" >= 0");
 
-                            t.HasCheckConstraint("CK_OrderCredits_ReleaseProof", "(\"ReleasedAt\" IS NULL AND \"ReleaseProviderCheckedAt\" IS NULL AND \"ReleaseProviderStatus\" IS NULL\n AND \"ReleaseProviderRequestedAmount\" IS NULL AND \"ReleaseProviderAmountPaid\" IS NULL\n AND \"ReleaseProviderAmountRemaining\" IS NULL AND \"ReleaseReasonCode\" IS NULL) OR\n(\"ReleasedAt\" IS NOT NULL AND \"ReleaseProviderCheckedAt\" IS NOT NULL AND \"ReleaseProviderStatus\" IS NOT NULL\n AND \"ReleaseProviderRequestedAmount\" IS NOT NULL AND \"ReleaseProviderAmountPaid\" IS NOT NULL\n AND \"ReleaseProviderAmountRemaining\" IS NOT NULL AND \"ReleaseReasonCode\" IS NOT NULL\n AND \"ReleaseProviderStatus\" = 'Cancelled' AND \"ReleaseProviderRequestedAmount\" > 0\n AND \"ReleaseProviderAmountPaid\" = 0 AND \"ReleaseProviderAmountRemaining\" = \"ReleaseProviderRequestedAmount\"\n AND \"ReleaseReasonCode\" = 'provider_cancelled_no_funds'\n AND \"ReleaseProviderCheckedAt\" <= \"ReleasedAt\"\n AND \"ReleasedAt\" - \"ReleaseProviderCheckedAt\" <= interval '1 minute')");
+                            t.HasCheckConstraint("CK_OrderCredits_ReleaseProof", "(\"ReleasedAt\" IS NULL AND \"ReleaseProviderCheckedAt\" IS NULL AND \"ReleaseProviderStatus\" IS NULL\r\n AND \"ReleaseProviderRequestedAmount\" IS NULL AND \"ReleaseProviderAmountPaid\" IS NULL\r\n AND \"ReleaseProviderAmountRemaining\" IS NULL AND \"ReleaseReasonCode\" IS NULL) OR\r\n(\"ReleasedAt\" IS NOT NULL AND \"ReleaseProviderCheckedAt\" IS NOT NULL AND \"ReleaseProviderStatus\" IS NOT NULL\r\n AND \"ReleaseProviderRequestedAmount\" IS NOT NULL AND \"ReleaseProviderAmountPaid\" IS NOT NULL\r\n AND \"ReleaseProviderAmountRemaining\" IS NOT NULL AND \"ReleaseReasonCode\" IS NOT NULL\r\n AND \"ReleaseProviderStatus\" = 'Cancelled' AND \"ReleaseProviderRequestedAmount\" > 0\r\n AND \"ReleaseProviderAmountPaid\" = 0 AND \"ReleaseProviderAmountRemaining\" = \"ReleaseProviderRequestedAmount\"\r\n AND \"ReleaseReasonCode\" = 'provider_cancelled_no_funds'\r\n AND \"ReleaseProviderCheckedAt\" <= \"ReleasedAt\"\r\n AND \"ReleasedAt\" - \"ReleaseProviderCheckedAt\" <= interval '1 minute')");
                         });
                 });
 
@@ -745,6 +959,10 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
                     b.Property<decimal>("EstimatedCostMin")
                         .HasColumnType("numeric(12,0)");
 
+                    b.Property<string>("GooglePlaceId")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
                     b.Property<string>("ImageUrl")
                         .HasColumnType("text");
 
@@ -783,6 +1001,115 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
                     NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("Location"), "gist");
 
                     b.ToTable("Places");
+                });
+
+            modelBuilder.Entity("LocalMateAI.Domain.Entities.PlaceEmbedding", b =>
+                {
+                    b.Property<Guid>("PlaceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContentHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Model")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.PrimitiveCollection<float[]>("Vector")
+                        .IsRequired()
+                        .HasColumnType("real[]");
+
+                    b.HasKey("PlaceId");
+
+                    b.ToTable("PlaceEmbeddings", (string)null);
+                });
+
+            modelBuilder.Entity("LocalMateAI.Domain.Entities.PlaceImage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Caption")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DisplayOrder")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<bool>("IsPrimary")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<Guid>("PlaceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PlaceId", "DisplayOrder");
+
+                    b.HasIndex("PlaceId", "IsPrimary");
+
+                    b.ToTable("PlaceImages");
+                });
+
+            modelBuilder.Entity("LocalMateAI.Domain.Entities.PlaceOpeningHour", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<TimeOnly?>("CloseTime")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DayOfWeek")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<bool>("IsClosed")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<TimeOnly?>("OpenTime")
+                        .HasColumnType("time without time zone");
+
+                    b.Property<Guid>("PlaceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PlaceId", "DayOfWeek")
+                        .IsUnique();
+
+                    b.ToTable("PlaceOpeningHours");
                 });
 
             modelBuilder.Entity("LocalMateAI.Domain.Entities.PlaceReview", b =>
@@ -1166,6 +1493,12 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<int?>("AiDailyCallLimit")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("AiExplainCallsPerTripLimit")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -1210,6 +1543,10 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
 
                     b.ToTable("SubscriptionPlanVersions", null, t =>
                         {
+                            t.HasCheckConstraint("CK_Versions_AiDaily", "\"AiDailyCallLimit\" IS NULL OR \"AiDailyCallLimit\" BETWEEN 0 AND 1000");
+
+                            t.HasCheckConstraint("CK_Versions_AiExplain", "\"AiExplainCallsPerTripLimit\" IS NULL OR \"AiExplainCallsPerTripLimit\" BETWEEN 0 AND 20");
+
                             t.HasCheckConstraint("CK_Versions_Duration", "\"DurationDays\" IS NULL OR \"DurationDays\" > 0");
 
                             t.HasCheckConstraint("CK_Versions_Generate", "\"GenerateLimit\" IS NULL OR \"GenerateLimit\" >= 0");
@@ -1317,6 +1654,9 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<DateTime?>("AiExplainedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<decimal>("BudgetMax")
                         .HasColumnType("numeric(12,0)");
 
@@ -1329,11 +1669,21 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("DestinationStationId")
+                        .HasColumnType("uuid");
+
                     b.Property<int>("DurationHours")
                         .HasColumnType("integer");
 
                     b.Property<DateTime?>("FinalizedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<bool>("NoteApplied")
+                        .HasColumnType("boolean");
 
                     b.Property<DateTime?>("PlannedStartAt")
                         .HasColumnType("timestamp without time zone");
@@ -1343,6 +1693,9 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
 
                     b.Property<double>("StartLongitude")
                         .HasColumnType("double precision");
+
+                    b.Property<Guid?>("StartStationId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -1366,6 +1719,10 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("CreatedAt")
                         .HasDatabaseName("IX_Trips_CreatedAt");
+
+                    b.HasIndex("DestinationStationId");
+
+                    b.HasIndex("StartStationId");
 
                     b.HasIndex("UserId");
 
@@ -1457,6 +1814,9 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("LockedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid?>("LockedByUserId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("PasswordHash")
                         .HasColumnType("text");
 
@@ -1483,6 +1843,8 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
                     b.HasIndex("Email")
                         .IsUnique()
                         .HasDatabaseName("UX_Users_Email");
+
+                    b.HasIndex("LockedByUserId");
 
                     b.HasIndex("RoleId");
 
@@ -1567,6 +1929,31 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
                     b.ToTable("UserSubscriptions", (string)null);
                 });
 
+            modelBuilder.Entity("LocalMateAI.Domain.Entities.AiUsageAdmission", b =>
+                {
+                    b.HasOne("LocalMateAI.Domain.Entities.LlmCallLog", null)
+                        .WithMany()
+                        .HasForeignKey("LlmCallLogId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("LocalMateAI.Domain.Entities.SubscriptionPlanVersion", null)
+                        .WithMany()
+                        .HasForeignKey("ResolvedPlanVersionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("LocalMateAI.Domain.Entities.Trip", null)
+                        .WithMany()
+                        .HasForeignKey("TripId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("LocalMateAI.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("LocalMateAI.Domain.Entities.CuratedItineraryItem", b =>
                 {
                     b.HasOne("LocalMateAI.Domain.Entities.CuratedItinerary", "CuratedItinerary")
@@ -1642,6 +2029,29 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
                     b.Navigation("Trip");
                 });
 
+            modelBuilder.Entity("LocalMateAI.Domain.Entities.LlmCallLog", b =>
+                {
+                    b.HasOne("LocalMateAI.Domain.Entities.Trip", null)
+                        .WithMany()
+                        .HasForeignKey("TripId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("LocalMateAI.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("LocalMateAI.Domain.Entities.Notification", b =>
+                {
+                    b.HasOne("LocalMateAI.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("LocalMateAI.Domain.Entities.PaymentOrder", b =>
                 {
                     b.HasOne("LocalMateAI.Domain.Entities.SubscriptionPlan", null)
@@ -1709,6 +2119,37 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("PaymentOrderId")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("LocalMateAI.Domain.Entities.PlaceEmbedding", b =>
+                {
+                    b.HasOne("LocalMateAI.Domain.Entities.Place", null)
+                        .WithMany()
+                        .HasForeignKey("PlaceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("LocalMateAI.Domain.Entities.PlaceImage", b =>
+                {
+                    b.HasOne("LocalMateAI.Domain.Entities.Place", "Place")
+                        .WithMany("Images")
+                        .HasForeignKey("PlaceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Place");
+                });
+
+            modelBuilder.Entity("LocalMateAI.Domain.Entities.PlaceOpeningHour", b =>
+                {
+                    b.HasOne("LocalMateAI.Domain.Entities.Place", "Place")
+                        .WithMany("OpeningHours")
+                        .HasForeignKey("PlaceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Place");
                 });
 
             modelBuilder.Entity("LocalMateAI.Domain.Entities.PlaceReview", b =>
@@ -1874,6 +2315,16 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("LocalMateAI.Domain.Entities.Trip", b =>
                 {
+                    b.HasOne("LocalMateAI.Domain.Entities.MetroStation", null)
+                        .WithMany()
+                        .HasForeignKey("DestinationStationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("LocalMateAI.Domain.Entities.MetroStation", null)
+                        .WithMany()
+                        .HasForeignKey("StartStationId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("LocalMateAI.Domain.Entities.User", null)
                         .WithMany()
                         .HasForeignKey("UserId")
@@ -1923,6 +2374,11 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("LocalMateAI.Domain.Entities.User", b =>
                 {
+                    b.HasOne("LocalMateAI.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("LockedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("LocalMateAI.Domain.Entities.Role", "Role")
                         .WithMany()
                         .HasForeignKey("RoleId")
@@ -1977,6 +2433,10 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("LocalMateAI.Domain.Entities.Place", b =>
                 {
+                    b.Navigation("Images");
+
+                    b.Navigation("OpeningHours");
+
                     b.Navigation("Tags");
                 });
 

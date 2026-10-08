@@ -3,6 +3,7 @@ using LocalMateAI.Application.DTOs.MasterData;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Services;
 using LocalMateAI.Domain.Constants;
+using LocalMateAI.Domain.Enums;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace LocalMateAI.Tests;
@@ -19,8 +20,19 @@ public sealed class MasterDataServiceTests
         Assert.Equal(ReviewQuickTags.All, result.ReviewQuickTags.Select(tag => tag.Code));
         Assert.All(result.ReviewQuickTags, tag => Assert.NotEqual(tag.Code, tag.Label));
         Assert.Equal(["Draft", "Finalized"], result.TripStatuses);
-        Assert.Equal(["Auto", "Walking", "Motorbike"], result.TravelModes);
+        Assert.Equal(["Auto", "Walking", "Motorbike", "Metro"], result.TravelModes);
         Assert.Equal(new TripLimitsResponse(1, 24), result.TripLimits);
+    }
+
+    [Fact]
+    public async Task GetMasterDataAsync_ReturnsEveryFeedbackQuickTagWithAVietnameseLabel()
+    {
+        var service = new MasterDataService(new FakeStationRepository(), new MemoryCache(new MemoryCacheOptions()));
+
+        var result = await service.GetMasterDataAsync();
+
+        Assert.Equal(Enum.GetNames<FeedbackQuickTag>(), result.FeedbackQuickTags.Select(tag => tag.Code));
+        Assert.All(result.FeedbackQuickTags, tag => Assert.NotEqual(tag.Code, tag.Label));
     }
 
     [Fact]
@@ -42,6 +54,10 @@ public sealed class MasterDataServiceTests
     {
         public Task<NearestStationResult?> FindNearestAsync(
             double latitude, double longitude, CancellationToken cancellationToken = default)
+            => Task.FromResult<NearestStationResult?>(null);
+
+        public Task<NearestStationResult?> GetDistanceToStationAsync(
+            Guid stationId, double latitude, double longitude, CancellationToken cancellationToken = default)
             => Task.FromResult<NearestStationResult?>(null);
 
         public Task<IReadOnlyList<MetroStationSummaryResponse>> GetAllAsync(

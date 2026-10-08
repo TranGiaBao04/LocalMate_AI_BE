@@ -1,4 +1,5 @@
 using LocalMateAI.Application.DTOs.Email;
+using LocalMateAI.Application.DTOs.Notifications;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Payments;
 using LocalMateAI.Application.Services;
@@ -241,6 +242,45 @@ public sealed class PaymentSettlementServiceTests
         Assert.Single(duplicate.Outbox.Entries);
     }
 
+    [Fact]
+    public async Task CorrectPayment_EnqueuesOneNotificationWithExpiryDate()
+    {
+        var fixture = new Fixture(Order(PlanCode.TripPass, 19000));
+
+        await fixture.Service.ApplyVerifiedPaymentAsync(
+            new VerifiedPaymentNotification(fixture.Order.ProviderOrderCode, 19000, true));
+
+        var (entry, now) = Assert.Single(fixture.Notifications.Entries);
+        Assert.Equal(Now, now);
+        Assert.Equal(UserId, entry.UserId);
+        Assert.Equal(NotificationTypes.SubscriptionPaymentSucceeded, entry.Type);
+        Assert.Equal($"payment:{fixture.Order.Id}", entry.DeduplicationKey);
+        // Trip Pass 7 ngày từ 05/10 04:00 UTC ⇒ hết hạn 12/10 theo giờ Việt Nam.
+        Assert.StartsWith("Gói ", entry.Body);
+        Assert.EndsWith("có hiệu lực đến 12/10/2026.", entry.Body);
+    }
+
+    [Fact]
+    public async Task FailedMismatchedOrDuplicatePayment_DoesNotAddNotifications()
+    {
+        var failed = new Fixture(Order(PlanCode.TripPass, 19000));
+        await failed.Service.ApplyVerifiedPaymentAsync(
+            new VerifiedPaymentNotification(failed.Order.ProviderOrderCode, 19000, false));
+
+        var mismatch = new Fixture(Order(PlanCode.TripPass, 19000));
+        await mismatch.Service.ApplyVerifiedPaymentAsync(
+            new VerifiedPaymentNotification(mismatch.Order.ProviderOrderCode, 1000, true));
+
+        var duplicate = new Fixture(Order(PlanCode.TripPass, 19000));
+        var notification = new VerifiedPaymentNotification(duplicate.Order.ProviderOrderCode, 19000, true);
+        await duplicate.Service.ApplyVerifiedPaymentAsync(notification);
+        await duplicate.Service.ApplyVerifiedPaymentAsync(notification);
+
+        Assert.Empty(failed.Notifications.Entries);
+        Assert.Empty(mismatch.Notifications.Entries);
+        Assert.Single(duplicate.Notifications.Entries);
+    }
+
     private static PaymentOrder Order(PlanCode planCode, decimal amount) => new()
     {
         UserId = UserId,
@@ -268,9 +308,11 @@ public sealed class PaymentSettlementServiceTests
                 new FakeUserRepository(new User { Id = UserId, FullName = "Nguyễn An", Email = "an@example.com" }),
                 Outbox,
                 new FixedTimeProvider(Now),
-                NullLogger<PaymentSettlementService>.Instance);
+                NullLogger<PaymentSettlementService>.Instance,
+                notificationRepository: Notifications);
         }
 
+        public RecordingNotificationRepository Notifications { get; } = new();
         public PaymentOrder Order { get; }
         public FakeSubscriptionRepository Subscriptions { get; }
         public FakeEmailOutboxRepository Outbox { get; }

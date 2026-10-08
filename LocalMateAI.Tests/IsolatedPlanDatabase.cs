@@ -18,6 +18,9 @@ public sealed class IsolatedPlanDatabase : IAsyncDisposable
     internal AppDbContext ContextBeforeSingleItinerary() => new(new DbContextOptionsBuilder<AppDbContext>()
         .UseNpgsql(Connection, o => o.UseNetTopologySuite())
         .ReplaceService<IModelCustomizer, BeforeSingleItineraryModelCustomizer>().Options);
+    internal AppDbContext ContextBeforeUserLockedBy() => new(new DbContextOptionsBuilder<AppDbContext>()
+        .UseNpgsql(Connection, o => o.UseNetTopologySuite())
+        .ReplaceService<IModelCustomizer, BeforeUserLockedByModelCustomizer>().Options);
     public static async Task<IsolatedPlanDatabase> CreateAsync(bool previousSchema = false, string? targetMigration = null)
     {
         var builder = new NpgsqlConnectionStringBuilder(PostgresTestDatabase.RequireConnection());
@@ -74,5 +77,36 @@ internal sealed class BeforeSingleItineraryModelCustomizer(ModelCustomizerDepend
         order.Ignore(o => o.CheckoutAttemptId);
         order.Ignore(o => o.SingleItineraryProductVersionId);
         order.Ignore(o => o.CreditAmount);
+        BeforeUserLockedByModelCustomizer.IgnoreUserLockedBy(modelBuilder);
+        BeforeUserLockedByModelCustomizer.IgnoreAiEntitlements(modelBuilder);
+    }
+}
+
+// Schema trước AddUserLockedBy: bỏ cột Users.LockedByUserId để đọc/ghi User bằng EF không chạm cột chưa có.
+internal sealed class BeforeUserLockedByModelCustomizer(ModelCustomizerDependencies dependencies)
+    : ModelCustomizer(dependencies)
+{
+    public override void Customize(ModelBuilder modelBuilder, DbContext context)
+    {
+        base.Customize(modelBuilder, context);
+        IgnoreUserLockedBy(modelBuilder);
+        IgnoreAiEntitlements(modelBuilder);
+    }
+
+    internal static void IgnoreUserLockedBy(ModelBuilder modelBuilder)
+    {
+        var user = modelBuilder.Entity<User>();
+        foreach (var fk in user.Metadata.GetForeignKeys()
+                     .Where(f => f.Properties.Any(p => p.Name == nameof(User.LockedByUserId))).ToArray())
+            user.Metadata.RemoveForeignKey(fk);
+        user.Ignore(u => u.LockedByUserId);
+    }
+
+    internal static void IgnoreAiEntitlements(ModelBuilder modelBuilder)
+    {
+        // These columns do not exist in the historical schemas used by these fixtures.
+        var version = modelBuilder.Entity<SubscriptionPlanVersion>();
+        version.Ignore(v => v.AiDailyCallLimit);
+        version.Ignore(v => v.AiExplainCallsPerTripLimit);
     }
 }

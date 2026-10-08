@@ -35,6 +35,12 @@ public static class SystemSettingKeys
     public const string MotorbikeSpeedKmH = "Travel.MotorbikeSpeedKmH";
     public const string RoadDetourFactor = "Travel.RoadDetourFactor";
     public const string AutoWalkingMaxMeters = "Travel.AutoWalkingMaxMeters";
+    public const string NoteWeightPercent = "Planning.NoteWeightPercent";
+    public const string SemanticMinSimilarityPercent = "Semantic.MinSimilarityPercent";
+    public const string SemanticMaxGapFromTopPercent = "Semantic.MaxGapFromTopPercent";
+    public const string AiEnabled = "Ai.Enabled";
+    public const string AiDailyCallsPerUser = "Ai.DailyCallsPerUser";
+    public const string AiExplainCallsPerTrip = "Ai.ExplainCallsPerTrip";
 }
 
 /// <summary>
@@ -46,14 +52,16 @@ public static class SystemSettingDefinitions
     public static readonly IReadOnlyList<SystemSettingDefinition> All =
     [
         new(SystemSettingKeys.MinActivePlacesPerStation, "Stations", "Số địa điểm tối thiểu mỗi ga",
-            "Ga có ít địa điểm đang hoạt động hơn số này bị đánh dấu thiếu dữ liệu trên màn quản lý ga.",
+            "Ga có ít địa điểm đang hoạt động hơn số này bị đánh dấu thiếu dữ liệu trên màn quản lý ga. "
+            + "Khi tạo lịch mà khu người dùng chọn chưa có địa điểm, chỉ gợi ý những ga có từ ngần này địa điểm "
+            + "trở lên (tính cả các ga kề).",
             SystemSettingValueType.Integer, "địa điểm", DefaultValue: 5, MinValue: 1, MaxValue: 100),
         new(SystemSettingKeys.BreakEvenMonthlyRevenue, "Dashboard", "Mục tiêu doanh thu hoà vốn mỗi tháng",
             "Doanh thu (VNĐ, chưa trừ phí cổng thanh toán) cần đạt mỗi tháng; dùng cho tiến độ hoà vốn trên dashboard.",
             SystemSettingValueType.Integer, "VNĐ", DefaultValue: 5_000_000, MinValue: 1, MaxValue: 10_000_000_000),
-        new(SystemSettingKeys.MaxServiceAreaDistanceMeters, "Trips", "Bán kính vùng phục vụ",
-            "Khoảng cách đường chim bay tối đa từ điểm xuất phát tới ga Metro gần nhất để còn tạo được lịch trình. "
-            + "12.000 m phủ các quận nội thành, TP Thủ Đức và Nhà Bè.",
+        new(SystemSettingKeys.MaxServiceAreaDistanceMeters, "Trips", "Khoảng cách tối đa tới ga khi đi Metro",
+            "Chỉ áp dụng khi người dùng chọn phương tiện Metro: khoảng cách đường chim bay tối đa từ điểm xuất phát "
+            + "tới ga lên. Các phương tiện khác không xét khoảng cách này, chỉ cần điểm xuất phát nằm trong TP.HCM.",
             SystemSettingValueType.Integer, "m", DefaultValue: 12_000, MinValue: 1_000, MaxValue: 50_000),
         new(SystemSettingKeys.AlternativeMaxCostIncreasePercent, "Trips", "Mức đắt hơn tối đa khi gợi ý thay thế",
             "Địa điểm gợi ý thay thế được đắt hơn địa điểm hiện tại tối đa bao nhiêu phần trăm. "
@@ -82,7 +90,32 @@ public static class SystemSettingDefinitions
             SystemSettingValueType.Decimal, "lần", DefaultValue: 1.3m, MinValue: 1m, MaxValue: 2m),
         new(SystemSettingKeys.AutoWalkingMaxMeters, "Travel", "Ngưỡng tự chọn đi bộ",
             "Ở chế độ Tự động, đoạn đường bộ không quá ngưỡng này thì tính đi bộ, xa hơn thì tính xe máy.",
-            SystemSettingValueType.Integer, "m", DefaultValue: 700, MinValue: 100, MaxValue: 2_000)
+            SystemSettingValueType.Integer, "m", DefaultValue: 700, MinValue: 100, MaxValue: 2_000),
+        new(SystemSettingKeys.NoteWeightPercent, "Planning", "Trọng số ghi chú khi tạo lịch",
+            "Ghi chú của người dùng ảnh hưởng bao nhiêu phần trăm tới thứ hạng địa điểm, phần còn lại là tag sở thích. "
+            + "0 = bỏ qua ghi chú.",
+            SystemSettingValueType.Integer, "%", DefaultValue: 50, MinValue: 0, MaxValue: 100),
+        new(SystemSettingKeys.SemanticMinSimilarityPercent, "Semantic", "Độ tương đồng tối thiểu",
+            "Khi tìm theo nghĩa, nếu địa điểm khớp nhất có độ tương đồng với câu của người dùng thấp hơn mức này "
+            + "thì coi như không có kết quả liên quan. Đặt cao hơn thì ít gợi ý sai nhưng dễ bỏ sót.",
+            SystemSettingValueType.Integer, "%", DefaultValue: 66, MinValue: 0, MaxValue: 100),
+        new(SystemSettingKeys.SemanticMaxGapFromTopPercent, "Semantic", "Khoảng cách tối đa tới kết quả khớp nhất",
+            "Chỉ lấy những địa điểm có độ tương đồng thấp hơn địa điểm khớp nhất không quá số này. "
+            + "Đặt nhỏ hơn thì kết quả gọn hơn; 0 = chỉ lấy địa điểm khớp nhất.",
+            SystemSettingValueType.Integer, "điểm %", DefaultValue: 4, MinValue: 0, MaxValue: 100),
+        new(SystemSettingKeys.AiEnabled, "Ai", "Bật tính năng AI viết nội dung",
+            "1 = bật, 0 = tắt mọi tính năng dùng mô hình ngôn ngữ (AI viết lý do cho từng chặng, AI hiểu câu nhập). "
+            + "Khi tắt, ứng dụng vẫn tạo lịch bình thường với câu lý do mặc định.",
+            SystemSettingValueType.Integer, null, DefaultValue: 1, MinValue: 0, MaxValue: 1),
+        new(SystemSettingKeys.AiDailyCallsPerUser, "Ai", "Số lần dùng AI tối đa mỗi người mỗi ngày",
+            "Dự phòng cho PlanVersion thiếu AiDailyCallLimit; không giới hạn quyền AI đã có trên phiên bản gói. "
+            + "Tính chung mọi tính năng AI viết nội dung, kể cả lần gọi bị lỗi. Đặt lại lúc 00:00 giờ Việt Nam.",
+            SystemSettingValueType.Integer, "lần", DefaultValue: 10, MinValue: 1, MaxValue: 1_000),
+        new(SystemSettingKeys.AiExplainCallsPerTrip, "Ai", "Số lần AI viết lại lý do cho một chuyến đi",
+            "Dự phòng cho PlanVersion thiếu AiExplainCallsPerTripLimit; không giới hạn quyền AI đã có trên phiên bản gói. "
+            + "Mỗi chuyến đi được nhờ AI viết lý do tối đa từng này lần. Chỉ tính lần thành công; "
+            + "lần bị lỗi không làm mất lượt của chuyến đi nhưng vẫn tính vào trần mỗi ngày.",
+            SystemSettingValueType.Integer, "lần", DefaultValue: 3, MinValue: 1, MaxValue: 20)
     ];
 
     private static SystemSettingDefinition VisitMinutes(string key, string categoryLabel, int defaultMinutes) =>

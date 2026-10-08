@@ -37,7 +37,7 @@ public sealed class MetroStationRepository(AppDbContext dbContext) : IMetroStati
                         ms."Location"::geography
                     ) AS "DistanceMeters"
              FROM "MetroStations" ms
-             ORDER BY "DistanceMeters"
+             ORDER BY "DistanceMeters", ms."Order"
              LIMIT 1
              """)
             .FirstOrDefaultAsync(cancellationToken);
@@ -50,6 +50,37 @@ public sealed class MetroStationRepository(AppDbContext dbContext) : IMetroStati
                 nearest.StationLatitude,
                 nearest.StationLongitude,
                 nearest.DistanceMeters);
+    }
+
+    public async Task<NearestStationResult?> GetDistanceToStationAsync(
+        Guid stationId,
+        double latitude,
+        double longitude,
+        CancellationToken cancellationToken = default)
+    {
+        var stationRow = await dbContext.Database.SqlQuery<NearestStationRow>(
+            $"""
+             SELECT ms."Id" AS "StationId", ms."Name" AS "StationName",
+                    ST_Y(ms."Location") AS "StationLatitude",
+                    ST_X(ms."Location") AS "StationLongitude",
+                    ST_Distance(
+                        ST_SetSRID(ST_MakePoint({longitude}, {latitude}), 4326)::geography,
+                        ms."Location"::geography
+                    ) AS "DistanceMeters"
+             FROM "MetroStations" ms
+             WHERE ms."Id" = {stationId}
+             LIMIT 1
+             """)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return stationRow is null
+            ? null
+            : new NearestStationResult(
+                stationRow.StationId,
+                stationRow.StationName,
+                stationRow.StationLatitude,
+                stationRow.StationLongitude,
+                stationRow.DistanceMeters);
     }
 
     private sealed record NearestStationRow(

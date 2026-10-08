@@ -304,7 +304,7 @@ public sealed class SubscriptionUpgradeFoundationPostgresTests
     {
         await using var db = await IsolatedPlanDatabase.CreateAsync();
         await using var c = db.Context();
-        Assert.Equal(Migration, (await c.Database.GetAppliedMigrationsAsync()).Last());
+        Assert.Contains(Migration, await c.Database.GetAppliedMigrationsAsync());
         Assert.False(c.Database.HasPendingModelChanges());
         var (order, p) = await Source(c);
         Assert.Equal(0, (await c.PaymentOrders.AsNoTracking().SingleAsync(x => x.Id == order.Id)).CreditAmount);
@@ -379,7 +379,7 @@ public sealed class SubscriptionUpgradeFoundationPostgresTests
         Assert.Equal("8", preservedSetting.Value);
         Assert.Equal(Now, preservedSetting.UpdatedAt);
         Assert.Equal(user.Id, preservedSetting.UpdatedByUserId);
-        Assert.Equal(Migration, (await c.Database.GetAppliedMigrationsAsync()).Last());
+        Assert.Contains(Migration, await c.Database.GetAppliedMigrationsAsync());
         Assert.False(c.Database.HasPendingModelChanges());
         Assert.All(await c.PaymentOrders.ToListAsync(), o => Assert.Equal(0, o.CreditAmount));
         Assert.Single(await c.SubscriptionPeriods.Where(p => p.TerminatedAt == null).ToListAsync());

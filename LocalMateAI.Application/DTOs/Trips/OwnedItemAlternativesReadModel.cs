@@ -7,4 +7,6 @@ public sealed record OwnedItemAlternativesReadModel(
     Guid TripId,
     TripStatus TripStatus,
     Guid PlaceId,
-    IReadOnlyList<Guid> TripPlaceIds);
+    IReadOnlyList<Guid> TripPlaceIds,
+    DateTime? TripPlannedStartAt = null, // giờ rời điểm xuất phát; null với trip cũ chưa đặt giờ
+    int TripDurationHours = 0);
