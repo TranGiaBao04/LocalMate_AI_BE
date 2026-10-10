@@ -1,0 +1,69 @@
+# Production trên VPS: chỉ Caddy mở cổng ra ngoài, database và API chỉ nghe trong mạng nội bộ của Docker.
+# Chạy từ thư mục gốc repo: docker compose -f compose.prod.yaml up -d --build
+# Biến lấy từ file .env cạnh file này (xem .env.example, thêm API_DOMAIN và Cors__AllowedOrigins__0).
+name: localmate
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  database:
+    image: postgis/postgis:17-3.5
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB:-localmateai}"
+      POSTGRES_USER: "${POSTGRES_USER:-localmate}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}"
+    volumes:
+      - localmate-postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    logging: *default-logging
+
+  api:
+    build:
+      context: .
+      dockerfile: LocalMateAI.API/Dockerfile
+    restart: unless-stopped
+    # Mọi khoá Section__Key trong .env (Jwt, Smtp, PayOS, Cloudinary, Cors...) đi thẳng vào API.
+    env_file: .env
+    # Các dòng dưới đây đè lên giá trị cùng tên trong .env.
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:5286
+      # API đứng sau Caddy: đọc X-Forwarded-For/Proto để giới hạn OTP tính theo IP thật của người dùng.
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+      ConnectionStrings__DefaultConnection: "Host=database;Port=5432;Database=${POSTGRES_DB:-localmateai};Username=${POSTGRES_USER:-localmate};Password=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}"
+    depends_on:
+      database:
+        condition: service_healthy
+    logging: *default-logging
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    environment:
+      API_DOMAIN: "${API_DOMAIN:?Set API_DOMAIN in .env}"
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - localmate-caddy-data:/data
+      - localmate-caddy-config:/config
+    depends_on:
+      - api
+    logging: *default-logging
+
+volumes:
+  localmate-postgres-data:
+  localmate-caddy-data:
+  localmate-caddy-config:

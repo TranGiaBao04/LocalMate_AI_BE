@@ -13,6 +13,7 @@ public sealed class CuratedItineraryRepository(AppDbContext dbContext) : ICurate
     {
         // Chỉ hiện địa điểm Active (địa điểm bị xoá mềm luôn Inactive); lịch trình không còn địa điểm nào thì ẩn.
         var itineraries = await dbContext.CuratedItineraries
+            .Where(itinerary => itinerary.DeletedAt == null)
             .Include(itinerary => itinerary.Items.Where(item => item.Place.Status == PlaceStatus.Active))
                 .ThenInclude(item => item.Place)
             .OrderBy(itinerary => itinerary.Title)
@@ -41,7 +42,7 @@ public sealed class CuratedItineraryRepository(AppDbContext dbContext) : ICurate
     {
         var itinerary = await dbContext.CuratedItineraries
             .AsNoTracking()
-            .Where(candidate => candidate.Id == id)
+            .Where(candidate => candidate.Id == id && candidate.DeletedAt == null)
             .Select(candidate => new
             {
                 candidate.Id,
