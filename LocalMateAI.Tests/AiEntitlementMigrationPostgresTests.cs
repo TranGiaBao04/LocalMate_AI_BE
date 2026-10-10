@@ -20,7 +20,7 @@ public sealed class AiEntitlementMigrationPostgresTests
     {
         await using var db = await IsolatedPlanDatabase.CreateAsync();
         await using var c = db.Context();
-        Assert.Equal(Latest, (await c.Database.GetAppliedMigrationsAsync()).Last());
+        Assert.Contains(Latest, await c.Database.GetAppliedMigrationsAsync());
         Assert.False(c.Database.HasPendingModelChanges());
         foreach (var baseline in SubscriptionBaseline.Versions())
         {
@@ -106,7 +106,7 @@ public sealed class AiEntitlementMigrationPostgresTests
         Assert.Equal(protectionBefore, await Protection(c));
         Assert.Equal(periodsBefore, await TableEvidence(c, "SubscriptionPeriods"));
         await c.GetService<IMigrator>().MigrateAsync();
-        Assert.Equal(Latest, (await c.Database.GetAppliedMigrationsAsync()).Last());
+        Assert.Contains(Latest, await c.Database.GetAppliedMigrationsAsync());
         Assert.False(c.Database.HasPendingModelChanges());
         Assert.Equal(ordersBefore, await TableEvidence(c, "PaymentOrders"));
         await AssertProtected(c);

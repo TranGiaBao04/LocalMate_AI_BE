@@ -1,0 +1,5 @@
+# Caddy tự xin và gia hạn chứng chỉ HTTPS cho tên miền trong API_DOMAIN (đặt ở .env).
+{$API_DOMAIN} {
+	encode gzip
+	reverse_proxy api:5286
+}
