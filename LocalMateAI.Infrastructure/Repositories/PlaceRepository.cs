@@ -219,8 +219,12 @@ public sealed class PlaceRepository(AppDbContext dbContext) : IPlaceRepository
 
         if (query.NormalizedSearch is { } search)
         {
-            var upper = search.ToUpperInvariant();
-            places = places.Where(place => place.Name.ToUpper().Contains(upper) || place.Address.ToUpper().Contains(upper));
+            // So khớp không dấu (extension unaccent): "ben thanh" tìm ra "Bến Thành".
+            // "%" và "_" người dùng gõ là ký tự thường, không phải ký tự đại diện.
+            var pattern = "%" + search.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_") + "%";
+            places = places.Where(place =>
+                EF.Functions.ILike(EF.Functions.Unaccent(place.Name), EF.Functions.Unaccent(pattern), "\\")
+                || EF.Functions.ILike(EF.Functions.Unaccent(place.Address), EF.Functions.Unaccent(pattern), "\\"));
         }
 
         if (query.Category is { } category)

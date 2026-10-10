@@ -317,7 +317,7 @@ public sealed class AiUsageAdmissionPostgresTests
         Assert.NotEqual("[]", before["PaymentOrders"]);
         Assert.NotEqual("[]", before["SubscriptionPeriods"]);
         await c.GetService<IMigrator>().MigrateAsync();
-        Assert.Equal("AddAiUsageAdmissions", (await c.Database.GetAppliedMigrationsAsync()).Last()[15..]);
+        Assert.Contains(await c.Database.GetAppliedMigrationsAsync(), name => name.EndsWith("AddAiUsageAdmissions"));
         Assert.Empty(await c.AiUsageAdmissions.ToListAsync());
         Assert.False(c.Database.HasPendingModelChanges());
         foreach (var table in tables) Assert.Equal(before[table], await Evidence(c, table));

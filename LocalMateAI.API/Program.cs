@@ -283,6 +283,8 @@ builder.Services.AddSingleton<IMetroTimetableSource>(EmbeddedMetroTimetableSourc
 builder.Services.AddScoped<IMetroTimetableService, MetroTimetableService>();
 builder.Services.AddScoped<ICuratedItineraryRepository, CuratedItineraryRepository>();
 builder.Services.AddScoped<ICuratedItineraryService, CuratedItineraryService>();
+builder.Services.AddScoped<IAdminCuratedItineraryRepository, AdminCuratedItineraryRepository>();
+builder.Services.AddScoped<IAdminCuratedItineraryService, AdminCuratedItineraryService>();
 builder.Services.AddValidatorsFromAssemblyContaining<TripRequestValidator>();
 builder.Services.AddScoped<ITripCriteriaNormalizationService, TripCriteriaNormalizationService>();
 builder.Services.AddScoped<ITripOriginResolverService, TripOriginResolverService>();

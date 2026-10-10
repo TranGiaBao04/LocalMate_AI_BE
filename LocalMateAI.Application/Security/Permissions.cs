@@ -19,7 +19,8 @@ public static class Permissions
 
     public static readonly IReadOnlyList<PermissionDefinition> All =
     [
-        new(ManagePlaces, "Quản lý địa điểm", "Tạo, sửa, xoá, duyệt địa điểm; xem ga Metro; import địa điểm."),
+        new(ManagePlaces, "Quản lý địa điểm",
+            "Tạo, sửa, xoá, duyệt địa điểm; xem ga Metro; import địa điểm; quản lý lịch trình mẫu."),
         new(ManagePlans, "Quản lý gói", "Sửa gói và giá; cấp quyền thủ công, hoàn tiền, đối soát giao dịch."),
         new(ViewRevenue, "Xem doanh thu", "Xem dashboard, danh sách và tổng hợp giao dịch."),
         new(ManageUsers, "Quản lý người dùng", "Xem, khoá và mở khoá tài khoản."),

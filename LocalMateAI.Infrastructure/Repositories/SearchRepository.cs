@@ -178,7 +178,8 @@ public sealed class SearchRepository(AppDbContext dbContext) : ISearchRepository
                             ELSE 2
                         END AS "MatchRank"
                  FROM "CuratedItineraries" ci
-                 WHERE (unaccent(ci."Title") ILIKE unaccent({contains})
+                 WHERE ci."DeletedAt" IS NULL
+                   AND (unaccent(ci."Title") ILIKE unaccent({contains})
                         OR unaccent(COALESCE(ci."Description", '')) ILIKE unaccent({contains}))
                    AND EXISTS (
                        SELECT 1
