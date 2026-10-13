@@ -23,10 +23,14 @@ public static class DashboardDateRules
             return null;
         }
 
-        var from = to.AddDays(-(DefaultRangeDays - 1));
-        if (!string.IsNullOrWhiteSpace(query.From) && !TryParseDate(query.From, out from))
+        DateOnly from;
+        if (!string.IsNullOrWhiteSpace(query.From))
         {
-            return null;
+            if (!TryParseDate(query.From, out from)) return null;
+        }
+        else
+        {
+            from = to.AddDays(-(DefaultRangeDays - 1));
         }
 
         return new DashboardDateRange(from, to);
