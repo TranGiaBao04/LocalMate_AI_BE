@@ -62,7 +62,8 @@ public sealed class AdminAiUsageIntegratedHttpPostgresTests
         Assert.Equal(1, Number(totals, "invalidOutput"));
         Assert.Equal(1, Number(totals, "abandoned"));
         Assert.Equal(4, a.RootElement.GetProperty("days").EnumerateArray().Sum(row => Number(row, "failed")));
-        Assert.Equal(7, Number(b.RootElement.GetProperty("today"), "used"));
+        // Seven calls today, one of them a provider failure inside the free allowance: six charged.
+        Assert.Equal(6, Number(b.RootElement.GetProperty("today"), "used"));
         Assert.Equal(7, Number(calls.RootElement, "totalCount"));
         var day = b.RootElement.GetProperty("days").EnumerateArray().Single(row => row.GetProperty("date").GetString() == "2026-10-13");
         Assert.Equal(7, Number(day, "calls"));
@@ -75,7 +76,7 @@ public sealed class AdminAiUsageIntegratedHttpPostgresTests
         Assert.Equal(me.Ai.DailyUsed, Number(b.RootElement.GetProperty("today"), "used"));
         Assert.Equal(me.Ai.DailyLimit, Number(b.RootElement.GetProperty("today"), "limit"));
         Assert.Equal(me.Ai.ResetAt, b.RootElement.GetProperty("today").GetProperty("resetAt").GetDateTime());
-        Assert.Equal(7, await scope.ServiceProvider.GetRequiredService<IAiUsageAccountingRepository>().CountDailyAsync(Id(10), Today));
+        Assert.Equal(6, await scope.ServiceProvider.GetRequiredService<IAiUsageAccountingRepository>().CountDailyAsync(Id(10), Today));
         var items = calls.RootElement.GetProperty("items").EnumerateArray().ToArray();
         Assert.DoesNotContain(items, row => row.GetProperty("id").GetGuid() == Id(106));
         Assert.DoesNotContain(items, row => row.GetProperty("id").GetGuid() == Id(1103));
@@ -132,7 +133,7 @@ public sealed class AdminAiUsageIntegratedHttpPostgresTests
         Assert.Equal(first.RootElement.ToString(), cached.RootElement.ToString());
         using var b = await host.Get(B());
         using var calls = await host.Get(C() + "?from=2026-10-13&to=2026-10-13");
-        Assert.Equal(8, Number(b.RootElement.GetProperty("today"), "used"));
+        Assert.Equal(7, Number(b.RootElement.GetProperty("today"), "used"));
         Assert.Equal(8, Number(calls.RootElement, "totalCount"));
         host.Clock.Now = new DateTimeOffset(Now.AddMinutes(5));
         using var expired = await host.Get(A);

@@ -57,11 +57,16 @@ public enum ParseTripRequestResultStatus
     InvalidText,
     UserNotFound,
     AiUnavailable,
-    DailyLimitReached
+    DailyLimitReached,
+    CoolingDown
 }
 
+/// <param name="RetryAfterSeconds">Số giây còn phải chờ; có khi CoolingDown, hoặc khi AiUnavailable do nhà cung cấp lỗi.</param>
+/// <param name="Charged">Lần gọi không dùng được này có tính vào trần ngày không; chỉ có nghĩa khi AiUnavailable.</param>
 public sealed record ParseTripRequestResult(
     ParseTripRequestResultStatus Status,
     ParseTripRequestResponse? Response = null,
     IReadOnlyDictionary<string, string[]>? ValidationErrors = null,
-    DateTime? ResetAtUtc = null);
+    DateTime? ResetAtUtc = null,
+    int RetryAfterSeconds = 0,
+    bool Charged = false);

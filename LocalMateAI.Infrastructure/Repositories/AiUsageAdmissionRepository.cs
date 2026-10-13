@@ -2,6 +2,7 @@ using System.Data;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Interfaces.Services;
 using LocalMateAI.Application.Services;
+using LocalMateAI.Application.Settings;
 using LocalMateAI.Domain.Entities;
 using LocalMateAI.Domain.Enums;
 using LocalMateAI.Domain.Services;
@@ -48,6 +49,18 @@ public sealed class AiUsageAdmissionRepository(AppDbContext context, ISystemSett
         var date = DateOnly.FromDateTime(now.AddHours(7));
         if (await CountDailyAsync(userId, date, cancellationToken) >= dailyLimit)
             return new(new(AiUsageStatus.DailyLimitReached, VietnamTime.StartOfDayUtc(now).AddDays(1)));
+
+        var cooldownSeconds = await settings.GetIntAsync(SystemSettingKeys.AiFailureCooldownSeconds, cancellationToken);
+        if (cooldownSeconds > 0)
+        {
+            var since = now.AddSeconds(-cooldownSeconds);
+            var lastFailureAt = await context.AiUsageAdmissions.Where(a => a.UserId == userId
+                    && a.VietnamUsageDate >= date.AddDays(-1) && a.State == AiUsageAdmissionState.Completed
+                    && a.Outcome == LlmCallOutcome.ProviderFailed && a.CompletedAt > since)
+                .MaxAsync(a => a.CompletedAt, cancellationToken);
+            if (lastFailureAt is { } failedAt)
+                return new(new(AiUsageStatus.CoolingDown, RetryAtUtc: failedAt.AddSeconds(cooldownSeconds)));
+        }
 
         var admission = new AiUsageAdmission
         {
@@ -119,8 +132,11 @@ public sealed class AiUsageAdmissionRepository(AppDbContext context, ISystemSett
                 || existing.InputTokens != completion.InputTokens || existing.OutputTokens != completion.OutputTokens
                 || existing.DurationMilliseconds != completion.DurationMilliseconds)
                 throw new InvalidOperationException("An AI completion retry cannot change the recorded result.");
+            var countedBefore = await CountsTowardDailyLimitAsync(a, existing.Outcome, cancellationToken);
+            var retryBefore = await CooldownSecondsAsync(existing.Outcome, a.CompletedAt!.Value,
+                clock.GetUtcNow().UtcDateTime, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
-            return new(existing.Id, false);
+            return new(existing.Id, false, countedBefore, retryBefore);
         }
         if (a.State != AiUsageAdmissionState.DispatchAuthorized)
             throw new InvalidOperationException("AI completion requires a live authorized dispatch.");
@@ -140,8 +156,10 @@ public sealed class AiUsageAdmissionRepository(AppDbContext context, ISystemSett
                     .SetProperty(x => x.Outcome, completion.Outcome).SetProperty(x => x.LlmCallLogId, log.Id)
                     .SetProperty(x => x.CompletedAt, now).SetProperty(x => x.RecoveryAfter, (DateTime?)null), cancellationToken);
             if (changed != 1) throw new InvalidOperationException("AI completion lost its dispatch fence.");
+            var counted = await CountsTowardDailyLimitAsync(a, completion.Outcome, cancellationToken);
+            var retryAfter = await CooldownSecondsAsync(completion.Outcome, now, now, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
-            return new(log.Id, true);
+            return new(log.Id, true, counted, retryAfter);
         }
         finally
         {
@@ -194,16 +212,47 @@ public sealed class AiUsageAdmissionRepository(AppDbContext context, ISystemSett
             throw new InvalidOperationException("Admission owner is not persisted.");
     }
 
-    public Task<int> CountDailyAsync(Guid userId, DateOnly vietnamUsageDate, CancellationToken cancellationToken = default)
+    public async Task<int> CountDailyAsync(Guid userId, DateOnly vietnamUsageDate, CancellationToken cancellationToken = default)
     {
         var start = vietnamUsageDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc).AddHours(-7);
         var end = start.AddDays(1);
+        var allowance = await settings.GetIntAsync(SystemSettingKeys.AiUncountedFailedCallsPerDay, cancellationToken);
         // One SQL snapshot for both admission and /me; linked evidence never counts a second time.
         var legacy = context.LlmCallLogs.Where(l => l.UserId == userId && l.CreatedAt >= start && l.CreatedAt < end
-            && !context.AiUsageAdmissions.Any(a => a.LlmCallLogId == l.Id)).Select(l => l.Id);
+                && !context.AiUsageAdmissions.Any(a => a.LlmCallLogId == l.Id))
+            .Select(l => l.Outcome == LlmCallOutcome.ProviderFailed);
         var ledger = context.AiUsageAdmissions.Where(a => a.UserId == userId && a.VietnamUsageDate == vietnamUsageDate
-            && a.State != AiUsageAdmissionState.Released).Select(a => a.Id);
-        return legacy.Concat(ledger).CountAsync(cancellationToken);
+                && a.State != AiUsageAdmissionState.Released)
+            .Select(a => a.State == AiUsageAdmissionState.Completed && a.Outcome == LlmCallOutcome.ProviderFailed);
+        var groups = await legacy.Concat(ledger).GroupBy(providerFailed => providerFailed)
+            .Select(g => new { ProviderFailed = g.Key, Count = g.Count() }).ToListAsync(cancellationToken);
+        var failed = groups.Where(g => g.ProviderFailed).Sum(g => g.Count);
+        // Provider failures are free up to the daily allowance; every other attempt still consumes a slot.
+        return groups.Sum(g => g.Count) - Math.Min(failed, allowance);
+    }
+
+    // Must agree with CountDailyAsync: the first allowance of provider failures in a day is free.
+    private async Task<bool> CountsTowardDailyLimitAsync(AiUsageAdmission a, LlmCallOutcome outcome, CancellationToken ct)
+    {
+        if (outcome != LlmCallOutcome.ProviderFailed) return true;
+        var allowance = await settings.GetIntAsync(SystemSettingKeys.AiUncountedFailedCallsPerDay, ct);
+        var start = a.VietnamUsageDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc).AddHours(-7);
+        var end = start.AddDays(1);
+        var failed = await context.AiUsageAdmissions.CountAsync(x => x.UserId == a.UserId
+                && x.VietnamUsageDate == a.VietnamUsageDate && x.State == AiUsageAdmissionState.Completed
+                && x.Outcome == LlmCallOutcome.ProviderFailed, ct)
+            + await context.LlmCallLogs.CountAsync(l => l.UserId == a.UserId && l.CreatedAt >= start && l.CreatedAt < end
+                && l.Outcome == LlmCallOutcome.ProviderFailed
+                && !context.AiUsageAdmissions.Any(x => x.LlmCallLogId == l.Id), ct);
+        return failed > allowance;
+    }
+
+    // Must agree with the cooldown check in AdmitAsync: only a provider failure starts one.
+    private async Task<int> CooldownSecondsAsync(LlmCallOutcome outcome, DateTime completedAt, DateTime now, CancellationToken ct)
+    {
+        if (outcome != LlmCallOutcome.ProviderFailed) return 0;
+        var cooldown = await settings.GetIntAsync(SystemSettingKeys.AiFailureCooldownSeconds, ct);
+        return Math.Max(0, (int)Math.Ceiling((completedAt.AddSeconds(cooldown) - now).TotalSeconds));
     }
 
     private async Task<int> CountExplainAsync(Guid tripId, CancellationToken ct)

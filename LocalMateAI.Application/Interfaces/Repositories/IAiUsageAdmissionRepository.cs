@@ -12,7 +12,10 @@ public sealed record AiUsageHandle(Guid AttemptId, Guid UserId, LlmCallKind Kind
 public sealed record AiUsageCompletion(LlmCallOutcome Outcome, string Model, int InputTokens,
     int OutputTokens, int DurationMilliseconds);
 
-public sealed record AiUsageCompletionResult(Guid LlmCallLogId, bool CompletedNow);
+/// <param name="CountsTowardDailyLimit">false khi lần lỗi do nhà cung cấp còn nằm trong số lần được miễn của ngày.</param>
+/// <param name="RetryAfterSeconds">Số giây phải chờ trước lần gọi AI kế tiếp; 0 khi lần gọi này không bắt đầu thời gian chờ.</param>
+public sealed record AiUsageCompletionResult(Guid LlmCallLogId, bool CompletedNow,
+    bool CountsTowardDailyLimit = true, int RetryAfterSeconds = 0);
 
 public interface IAiUsageAdmissionRepository : IAiUsageAccountingRepository
 {

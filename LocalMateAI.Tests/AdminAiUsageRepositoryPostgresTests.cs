@@ -225,8 +225,12 @@ public sealed class AdminAiUsageRepositoryPostgresTests
         await Log(c, other.Id, 21, Now, kind: LlmCallKind.Explain);
         var repo = new AdminAiUsageRepository(c);
         var personal = await repo.GetUserSummaryAsync(user.Id, Day, Day);
-        var count = await new AiUsageAdmissionRepository(c, new FakeSystemSettingProvider(),
-            new PlanVersionFoundationPostgresTests.Clock(Now)).CountDailyAsync(user.Id, Day);
+        // Calls and charged usage only coincide when no provider failure is free.
+        var clock = new PlanVersionFoundationPostgresTests.Clock(Now);
+        var count = await new AiUsageAdmissionRepository(c, new FakeSystemSettingProvider()
+            .Set(SystemSettingKeys.AiUncountedFailedCallsPerDay, 0), clock).CountDailyAsync(user.Id, Day);
+        Assert.Equal(count - 1, await new AiUsageAdmissionRepository(c, new FakeSystemSettingProvider(), clock)
+            .CountDailyAsync(user.Id, Day));
         Assert.Equal(count, personal.Totals.Calls);
         Assert.Equal(count, (await repo.GetUserCallsAsync(user.Id, new() { From = Day, To = Day })).TotalCount);
         var global = await repo.GetSystemSummaryAsync(Day, Day);

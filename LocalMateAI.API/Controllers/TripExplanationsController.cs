@@ -1,3 +1,4 @@
+using System.Globalization;
 using LocalMateAI.API.Authorization;
 using LocalMateAI.Application.DTOs.Trips;
 using LocalMateAI.Application.Interfaces.Services;
@@ -62,16 +63,46 @@ public sealed class TripExplanationsController(ITripExplanationService explanati
                     "Bạn đã dùng hết lượt AI của hôm nay.",
                     "ai_daily_limit_reached",
                     result.ResetAtUtc)),
+            ExplainTripResultStatus.CoolingDown => CreateCooldownResult(result.RetryAfterSeconds),
             ExplainTripResultStatus.AiUnavailable =>
-                StatusCode(StatusCodes.Status503ServiceUnavailable, CreateProblem(
-                    StatusCodes.Status503ServiceUnavailable,
+                CreateUnavailableResult(
                     "Tính năng AI tạm thời chưa dùng được. Lịch trình của bạn không bị thay đổi.",
-                    "ai_unavailable")),
+                    result.Charged,
+                    result.RetryAfterSeconds),
             _ => throw new InvalidOperationException("Unsupported trip explanation result status.")
         };
     }
 
-    private ProblemDetails CreateProblem(int status, string title, string code, DateTime? resetAt = null)
+    // retryAfterSeconds > 0 khi lần lỗi này bắt đầu thời gian chờ: client khoá nút ngay, không cần gọi lại để biết.
+    private ObjectResult CreateUnavailableResult(string title, bool charged, int retryAfterSeconds)
+    {
+        var problem = CreateProblem(
+            StatusCodes.Status503ServiceUnavailable, title, "ai_unavailable", charged: charged);
+
+        if (retryAfterSeconds > 0)
+        {
+            Response.Headers.RetryAfter = retryAfterSeconds.ToString(CultureInfo.InvariantCulture);
+            problem.Extensions["retryAfterSeconds"] = retryAfterSeconds;
+        }
+
+        return new ObjectResult(problem) { StatusCode = StatusCodes.Status503ServiceUnavailable };
+    }
+
+    private ObjectResult CreateCooldownResult(int retryAfterSeconds)
+    {
+        Response.Headers.RetryAfter = retryAfterSeconds.ToString(CultureInfo.InvariantCulture);
+
+        var problem = CreateProblem(
+            StatusCodes.Status429TooManyRequests,
+            "AI vừa gặp lỗi. Bạn vui lòng thử lại sau ít giây.",
+            "ai_cooldown");
+        problem.Extensions["retryAfterSeconds"] = retryAfterSeconds;
+
+        return new ObjectResult(problem) { StatusCode = StatusCodes.Status429TooManyRequests };
+    }
+
+    private ProblemDetails CreateProblem(
+        int status, string title, string code, DateTime? resetAt = null, bool? charged = null)
     {
         var problem = new ProblemDetails
         {
@@ -85,6 +116,11 @@ public sealed class TripExplanationsController(ITripExplanationService explanati
         if (resetAt is { } value)
         {
             problem.Extensions["resetAt"] = value;
+        }
+
+        if (charged is { } wasCharged)
+        {
+            problem.Extensions["charged"] = wasCharged;
         }
 
         return problem;

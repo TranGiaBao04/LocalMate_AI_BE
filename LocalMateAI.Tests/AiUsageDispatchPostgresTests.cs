@@ -105,7 +105,7 @@ public sealed class AiUsageDispatchPostgresTests
     [InlineData(LlmCallOutcome.InvalidOutput, false)]
     [InlineData(LlmCallOutcome.ProviderFailed, true)]
     [InlineData(LlmCallOutcome.InvalidOutput, true)]
-    public async Task C05_C06_C07_FailedProviderOrInvalidOutput_DailyCharged_ExplainHoldReleased(
+    public async Task C05_C06_C07_InvalidOutputCharged_ProviderFailureFree_ExplainHoldReleased(
         LlmCallOutcome outcome, bool explain)
     {
         await using var db = await IsolatedPlanDatabase.CreateAsync();
@@ -113,11 +113,27 @@ public sealed class AiUsageDispatchPostgresTests
         var user = await User(c);
         var trip = await Trip(c, user.Id);
         var place = await c.ItineraryItems.Where(i => i.TripId == trip.Id).Select(i => i.PlaceId).SingleAsync();
-        var llm = new FakeLlm((_, _) => outcome == LlmCallOutcome.ProviderFailed
+        var clock = new Clock(Now);
+        var providerFailed = outcome == LlmCallOutcome.ProviderFailed;
+        var llm = new FakeLlm((_, _) => providerFailed
             ? Task.FromException<LlmJsonResponse>(new LlmUnavailableException("test provider failed"))
             : Task.FromResult(new LlmJsonResponse("not json", 7, 4)));
-        if (explain) Assert.Equal(ExplainTripResultStatus.AiUnavailable, (await Explainer(c, llm).ExplainAsync(user.Id, trip.Id)).Status);
-        else Assert.Equal(ParseTripRequestResultStatus.AiUnavailable, (await Parser(c, llm).ParseAsync(user.Id, ParseRequest)).Status);
+        bool charged;
+        int retryAfterSeconds;
+        if (explain)
+        {
+            var failed = await Explainer(c, llm, clock).ExplainAsync(user.Id, trip.Id);
+            Assert.Equal(ExplainTripResultStatus.AiUnavailable, failed.Status);
+            (charged, retryAfterSeconds) = (failed.Charged, failed.RetryAfterSeconds);
+        }
+        else
+        {
+            var failed = await Parser(c, llm, clock).ParseAsync(user.Id, ParseRequest);
+            Assert.Equal(ParseTripRequestResultStatus.AiUnavailable, failed.Status);
+            (charged, retryAfterSeconds) = (failed.Charged, failed.RetryAfterSeconds);
+        }
+        Assert.Equal(!providerFailed, charged);
+        Assert.Equal(providerFailed ? 30 : 0, retryAfterSeconds);
         var completed = await c.AiUsageAdmissions.AsNoTracking().SingleAsync();
         var log = await c.LlmCallLogs.AsNoTracking().SingleAsync();
         Assert.Equal(AiUsageAdmissionState.Completed, completed.State);
@@ -126,16 +142,21 @@ public sealed class AiUsageDispatchPostgresTests
         Assert.Equal(outcome, log.Outcome);
         Assert.Equal("fake", log.Model);
         Assert.Null(completed.RecoveryAfter);
+        var repository = Repository(c, clock);
+        if (providerFailed)
+        {
+            Assert.Equal(AiUsageStatus.CoolingDown, (await repository.AdmitAsync(Guid.NewGuid(), user.Id, LlmCallKind.ParseRequest)).Decision.Status);
+            clock.Now = Now.AddSeconds(31);
+        }
         if (explain)
         {
             Assert.Null(await c.Trips.Where(t => t.Id == trip.Id).Select(t => t.AiExplainedAt).SingleAsync());
             var later = new FakeLlm((_, _) => Task.FromResult(ExplainAnswer(place)));
-            Assert.Equal(ExplainTripResultStatus.Success, (await Explainer(c, later).ExplainAsync(user.Id, trip.Id)).Status);
+            Assert.Equal(ExplainTripResultStatus.Success, (await Explainer(c, later, clock).ExplainAsync(user.Id, trip.Id)).Status);
             Assert.Equal(1, later.Calls);
         }
-        // Original failure still occupies a daily slot; never refunded by completion.
-        var repository = Repository(c);
-        for (var i = explain ? 2 : 1; i < 3; i++)
+        // A provider failure inside the allowance leaves every daily slot; invalid output still occupies one.
+        for (var i = (providerFailed ? 0 : 1) + (explain ? 1 : 0); i < 3; i++)
             Assert.Equal(AiUsageStatus.Allowed, (await repository.AdmitAsync(Guid.NewGuid(), user.Id, LlmCallKind.ParseRequest)).Decision.Status);
         Assert.Equal(AiUsageStatus.DailyLimitReached, (await repository.AdmitAsync(Guid.NewGuid(), user.Id, LlmCallKind.ParseRequest)).Decision.Status);
     }

@@ -42,7 +42,8 @@ public sealed class LlmCallLogRepositoryPostgresTests
             new UsageEventRepository(c), new TripRepository(c), clock, new AiUsageAdmissionRepository(c, new FakeSystemSettingProvider(), clock),
             new FakeSystemSettingProvider());
         var me = (await subscriptions.GetMySubscriptionAsync(user.Id))!;
-        Assert.Equal(new LocalMateAI.Application.DTOs.Subscription.SubscriptionAiResponse(3, 3, midnight), me.Ai);
+        // The live accounting no longer charges the provider failure; the retired guard above still does.
+        Assert.Equal(new LocalMateAI.Application.DTOs.Subscription.SubscriptionAiResponse(2, 3, midnight), me.Ai);
 
         clock.Now = new DateTimeOffset(midnight);
         Assert.Equal(AiUsageStatus.Allowed, (await guard.CheckAsync(user.Id, LlmCallKind.ParseRequest)).Status);

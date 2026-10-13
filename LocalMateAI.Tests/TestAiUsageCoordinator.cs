@@ -13,6 +13,8 @@ internal sealed class TestAiUsageCoordinator : IAiUsageCoordinator, IAiUsageAdmi
     public List<(Guid UserId, LlmCallKind Kind, Guid? TripId, LlmCallOutcome Outcome, LlmJsonResponse? Response)> Records { get; } = [];
     public int Releases { get; private set; }
     public int Authorizations { get; private set; }
+    public bool CountsTowardDailyLimit { get; set; } = true;
+    public int RetryAfterSeconds { get; set; }
 
     public Task<AiUsageStart> AdmitAsync(Guid userId, LlmCallKind kind, Guid? tripId = null,
         CancellationToken cancellationToken = default)
@@ -29,7 +31,7 @@ internal sealed class TestAiUsageCoordinator : IAiUsageCoordinator, IAiUsageAdmi
         Records.Add((handle.UserId, handle.Kind, handle.TripIdSnapshot, completion.Outcome,
             completion.Outcome == LlmCallOutcome.ProviderFailed ? null
                 : new LlmJsonResponse("", completion.InputTokens, completion.OutputTokens)));
-        return Task.FromResult(new AiUsageCompletionResult(Guid.NewGuid(), true));
+        return Task.FromResult(new AiUsageCompletionResult(Guid.NewGuid(), true, CountsTowardDailyLimit, RetryAfterSeconds));
     }
 
     public Task<bool> AuthorizeDispatchAsync(Guid userId, Guid attemptId, Guid fencingToken, long fencingGeneration,
