@@ -11,6 +11,7 @@ public interface ISubscriptionRepository
     Task<SubscriptionPlan?> GetPlanAsync(Guid id, CancellationToken cancellationToken = default);
     Task<SubscriptionPlanVersion?> GetVersionAsync(Guid id, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<SubscriptionPeriod>> GetPeriodsAsync(Guid userId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<PlanGrant>> GetGrantsAsync(Guid userId, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<SubscriptionQuoteSource>> GetQuoteSourcesAsync(
         Guid userId, CancellationToken cancellationToken = default);
     Task AddPeriodAsync(SubscriptionPeriod period, CancellationToken cancellationToken = default);

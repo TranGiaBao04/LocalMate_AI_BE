@@ -12,6 +12,7 @@ public abstract class TestSubscriptionRepository : ISubscriptionRepository
     public List<SubscriptionPlan> Plans { get; } = [.. SubscriptionBaseline.Plans()];
     public List<SubscriptionPlanVersion> Versions { get; } = [.. SubscriptionBaseline.Versions()];
     public List<SubscriptionPeriod> Periods { get; } = [];
+    public List<PlanGrant> Grants { get; } = [];
     public List<PaymentOrder> QuoteOrders { get; } = [];
     public List<PlanFeature> Features { get; } = [PlanFeatureBaseline.MetroGoogleMaps()];
     public List<SubscriptionPlanVersionFeature> VersionFeatures { get; } =
@@ -45,6 +46,8 @@ public abstract class TestSubscriptionRepository : ISubscriptionRepository
                 });
         return Periods.Where(p => p.UserId == userId).ToArray();
     }
+    public Task<IReadOnlyList<PlanGrant>> GetGrantsAsync(Guid userId, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<PlanGrant>>(Grants.Where(g => g.UserId == userId).ToArray());
     public Task AddPeriodAsync(SubscriptionPeriod period, CancellationToken cancellationToken = default)
     {
         Periods.Add(period);

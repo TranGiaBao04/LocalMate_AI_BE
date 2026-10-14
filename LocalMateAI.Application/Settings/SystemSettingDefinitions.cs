@@ -41,6 +41,8 @@ public static class SystemSettingKeys
     public const string AiEnabled = "Ai.Enabled";
     public const string AiDailyCallsPerUser = "Ai.DailyCallsPerUser";
     public const string AiExplainCallsPerTrip = "Ai.ExplainCallsPerTrip";
+    public const string AiUncountedFailedCallsPerDay = "Ai.UncountedFailedCallsPerDay";
+    public const string AiFailureCooldownSeconds = "Ai.FailureCooldownSeconds";
 }
 
 /// <summary>
@@ -109,13 +111,23 @@ public static class SystemSettingDefinitions
             SystemSettingValueType.Integer, null, DefaultValue: 1, MinValue: 0, MaxValue: 1),
         new(SystemSettingKeys.AiDailyCallsPerUser, "Ai", "Số lần dùng AI tối đa mỗi người mỗi ngày",
             "Dự phòng cho PlanVersion thiếu AiDailyCallLimit; không giới hạn quyền AI đã có trên phiên bản gói. "
-            + "Tính chung mọi tính năng AI viết nội dung, kể cả lần gọi bị lỗi. Đặt lại lúc 00:00 giờ Việt Nam.",
+            + "Tính chung mọi tính năng AI viết nội dung. Lần lỗi do nhà cung cấp được miễn theo "
+            + "Ai.UncountedFailedCallsPerDay. Đặt lại lúc 00:00 giờ Việt Nam.",
             SystemSettingValueType.Integer, "lần", DefaultValue: 10, MinValue: 1, MaxValue: 1_000),
         new(SystemSettingKeys.AiExplainCallsPerTrip, "Ai", "Số lần AI viết lại lý do cho một chuyến đi",
             "Dự phòng cho PlanVersion thiếu AiExplainCallsPerTripLimit; không giới hạn quyền AI đã có trên phiên bản gói. "
             + "Mỗi chuyến đi được nhờ AI viết lý do tối đa từng này lần. Chỉ tính lần thành công; "
-            + "lần bị lỗi không làm mất lượt của chuyến đi nhưng vẫn tính vào trần mỗi ngày.",
-            SystemSettingValueType.Integer, "lần", DefaultValue: 3, MinValue: 1, MaxValue: 20)
+            + "lần bị lỗi không làm mất lượt của chuyến đi; lần lỗi do nhà cung cấp được miễn khỏi trần mỗi ngày "
+            + "theo Ai.UncountedFailedCallsPerDay.",
+            SystemSettingValueType.Integer, "lần", DefaultValue: 3, MinValue: 1, MaxValue: 20),
+        new(SystemSettingKeys.AiUncountedFailedCallsPerDay, "Ai", "Số lần AI lỗi không tính lượt mỗi ngày",
+            "Lần gọi AI bị lỗi do nhà cung cấp (lỗi kết nối, quá tải, quá thời gian chờ) không tính vào trần mỗi ngày, "
+            + "tối đa từng này lần cho mỗi người; từ lần lỗi kế tiếp vẫn tính lượt. 0 = lần lỗi nào cũng tính lượt.",
+            SystemSettingValueType.Integer, "lần", DefaultValue: 3, MinValue: 0, MaxValue: 50),
+        new(SystemSettingKeys.AiFailureCooldownSeconds, "Ai", "Thời gian chờ sau một lần AI lỗi",
+            "Sau một lần gọi AI bị lỗi do nhà cung cấp, người dùng phải chờ từng này giây mới gọi AI lại được. "
+            + "0 = không phải chờ.",
+            SystemSettingValueType.Integer, "giây", DefaultValue: 30, MinValue: 0, MaxValue: 600)
     ];
 
     private static SystemSettingDefinition VisitMinutes(string key, string categoryLabel, int defaultMinutes) =>

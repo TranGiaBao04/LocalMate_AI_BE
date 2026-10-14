@@ -50,6 +50,10 @@ public sealed class TripExplanationService(
                 return new ExplainTripResult(ExplainTripResultStatus.TripLimitReached);
             case AiUsageStatus.DailyLimitReached:
                 return new ExplainTripResult(ExplainTripResultStatus.DailyLimitReached, ResetAtUtc: usage.ResetAtUtc);
+            case AiUsageStatus.CoolingDown:
+                return new ExplainTripResult(
+                    ExplainTripResultStatus.CoolingDown,
+                    RetryAfterSeconds: usage.RetryAfterSeconds(timeProvider.GetUtcNow().UtcDateTime));
         }
 
         await using var call = admission.Call ?? throw new InvalidOperationException("Missing AI admission scope.");
@@ -63,10 +67,11 @@ public sealed class TripExplanationService(
 
         if (describable.Count > 0)
         {
-            var generated = await GenerateAsync(call, trip, describable, cancellationToken);
+            var (generated, charged, retryAfterSeconds) = await GenerateAsync(call, trip, describable, cancellationToken);
             if (generated is null)
             {
-                return new ExplainTripResult(ExplainTripResultStatus.AiUnavailable);
+                return new ExplainTripResult(
+                    ExplainTripResultStatus.AiUnavailable, Charged: charged, RetryAfterSeconds: retryAfterSeconds);
             }
 
             foreach (var (placeId, reason) in generated)
@@ -102,8 +107,9 @@ public sealed class TripExplanationService(
                 explainedAt));
     }
 
-    // Trả null khi AI không dùng được hoặc trả lời không có lý do hợp lệ nào; lần gọi nào cũng được ghi log.
-    private async Task<IReadOnlyDictionary<Guid, string>?> GenerateAsync(
+    // Reasons là null khi AI không dùng được hoặc trả lời không có lý do hợp lệ nào; lần gọi nào cũng được ghi log.
+    // Charged cho biết lần gọi này có tính vào trần ngày không; RetryAfterSeconds > 0 khi nó bắt đầu thời gian chờ.
+    private async Task<(IReadOnlyDictionary<Guid, string>? Reasons, bool Charged, int RetryAfterSeconds)> GenerateAsync(
         AiUsageCall call,
         TripExplanationReadModel trip,
         IReadOnlyList<TripExplanationStopReadModel> stops,
@@ -130,7 +136,7 @@ public sealed class TripExplanationService(
             exception is LlmUnavailableException
             || (exception is OperationCanceledException && !cancellationToken.IsCancellationRequested))
         {
-            // Lỗi hoặc quá giờ: vẫn ghi log vì yêu cầu đã được gửi đi (tính vào trần ngày).
+            // Lỗi hoặc quá giờ: vẫn ghi log vì yêu cầu đã được gửi đi (được miễn khỏi trần ngày vài lần đầu).
         }
 
         var elapsed = (int)timeProvider.GetElapsedTime(startedAt).TotalMilliseconds;
@@ -141,8 +147,9 @@ public sealed class TripExplanationService(
                 ? LlmCallOutcome.Succeeded
                 : LlmCallOutcome.InvalidOutput;
 
-        await call.CompleteAsync(outcome, response, elapsed);
+        var completion = await call.CompleteAsync(outcome, response, elapsed);
 
-        return outcome == LlmCallOutcome.Succeeded ? reasons : null;
+        return (outcome == LlmCallOutcome.Succeeded ? reasons : null,
+            completion.CountsTowardDailyLimit, completion.RetryAfterSeconds);
     }
 }

@@ -75,4 +75,33 @@ public sealed class NotificationBuilderTests
         Assert.Equal("Đã nâng cấp lên gói Membership, có hiệu lực đến 03/11/2026.", entry.Body);
         Assert.Equal($"payment:{orderId}", entry.DeduplicationKey);
     }
+
+    [Theory]
+    [InlineData(0, "Gói Trip Pass có hiệu lực đến 21/10/2026.")]
+    [InlineData(3, "Gói Trip Pass có hiệu lực từ 17/10/2026 đến 24/10/2026.")]
+    public void PlanGranted_PointsToSubscription_AndSaysWhenItStarts(int startsInDays, string body)
+    {
+        var grantId = Guid.NewGuid();
+        var now = new DateTime(2026, 10, 14, 3, 0, 0, DateTimeKind.Utc);
+        var startsAt = now.AddDays(startsInDays);
+
+        var entry = NotificationBuilder.PlanGranted(UserId, grantId, "Trip Pass", startsAt, startsAt.AddDays(7), now);
+
+        Assert.Equal(new NotificationEntry(UserId, NotificationTypes.PlanGranted, "Bạn được tặng gói Trip Pass", body,
+            NotificationTargetType.Subscription, null, $"plan-grant:{grantId}"), entry);
+    }
+
+    [Fact]
+    public void SignupTrialGranted_SharesTypeAndKeyWithAdminGrants_ButSaysTrial()
+    {
+        var grantId = Guid.NewGuid();
+        // 17:30 UTC ngày 26/10 là 00:30 ngày 27/10 theo giờ Việt Nam.
+        var endsAt = new DateTime(2026, 10, 26, 17, 30, 0, DateTimeKind.Utc);
+
+        var entry = NotificationBuilder.SignupTrialGranted(UserId, grantId, "Trip Pass", endsAt);
+
+        Assert.Equal(new NotificationEntry(UserId, NotificationTypes.PlanGranted, "Bạn được dùng thử gói Trip Pass",
+            "Gói Trip Pass có hiệu lực đến 27/10/2026.", NotificationTargetType.Subscription, null,
+            $"plan-grant:{grantId}"), entry);
+    }
 }

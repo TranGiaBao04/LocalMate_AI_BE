@@ -273,15 +273,17 @@ public sealed class AiUsageRecoveryPostgresTests
         var start = VietnamTime.StartOfDayUtc(Now);
         foreach (var kind in Enum.GetValues<LlmCallKind>())
             foreach (var outcome in Enum.GetValues<LlmCallOutcome>()) await Legacy(c, user.Id, start, kind, outcome);
-        await Legacy(c, other.Id, start);
-        await Legacy(c, user.Id, start.AddTicks(-1));
-        await Legacy(c, user.Id, start.AddDays(1));
+        // Charged outcomes here: a free provider failure could not expose a wrong owner or day boundary.
+        await Legacy(c, other.Id, start, outcome: LlmCallOutcome.Succeeded);
+        await Legacy(c, user.Id, start.AddTicks(-1), outcome: LlmCallOutcome.Succeeded);
+        await Legacy(c, user.Id, start.AddDays(1), outcome: LlmCallOutcome.Succeeded);
         foreach (var state in new[] { AiUsageAdmissionState.Completed, AiUsageAdmissionState.Reserved,
                      AiUsageAdmissionState.DispatchAuthorized, AiUsageAdmissionState.Released, AiUsageAdmissionState.Abandoned })
             await Attempt(c, clock, user.Id, state);
         await c.LlmCallLogs.Where(l => c.AiUsageAdmissions.Any(a => a.LlmCallLogId == l.Id))
             .ExecuteUpdateAsync(s => s.SetProperty(l => l.CreatedAt, Now));
-        Assert.Equal(10, (await Me(c, clock).GetMySubscriptionAsync(user.Id))!.Ai.DailyUsed); // six legacy + four ledger
+        // Six legacy + four ledger, minus the two legacy provider failures inside the free allowance.
+        Assert.Equal(8, (await Me(c, clock).GetMySubscriptionAsync(user.Id))!.Ai.DailyUsed);
         Assert.Equal(1, (await Me(c, clock).GetMySubscriptionAsync(other.Id))!.Ai.DailyUsed);
         // Generic evidence count still includes future logs and linked logs; no global semantic rewrite.
         Assert.Equal(8, await new LlmCallLogRepository(c).CountForUserSinceAsync(user.Id, start));

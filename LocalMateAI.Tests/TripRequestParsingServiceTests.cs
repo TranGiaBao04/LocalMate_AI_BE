@@ -115,6 +115,38 @@ public sealed class TripRequestParsingServiceTests
     }
 
     [Fact]
+    public async Task CoolingDown_StopsBeforeCallingTheModel_AndReportsSecondsLeft()
+    {
+        var fixture = new Fixture();
+        fixture.Guard.Decision = new AiUsageDecision(
+            AiUsageStatus.CoolingDown, RetryAtUtc: Now.UtcDateTime.AddSeconds(12.4));
+
+        var result = await fixture.Service.ParseAsync(UserId, new ParseTripRequestRequest("muốn đi chơi chiều nay"));
+
+        Assert.Equal(ParseTripRequestResultStatus.CoolingDown, result.Status);
+        Assert.Equal(13, result.RetryAfterSeconds);
+        Assert.Empty(fixture.Llm.Requests);
+        Assert.Empty(fixture.Guard.Records);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ProviderFailure_ReportsWhetherTheCallWasCharged_AndTheCooldownItStarted(bool charged)
+    {
+        var fixture = new Fixture();
+        fixture.Llm.Failure = new LlmUnavailableException("high demand");
+        fixture.Guard.CountsTowardDailyLimit = charged;
+        fixture.Guard.RetryAfterSeconds = 30;
+
+        var result = await fixture.Service.ParseAsync(UserId, new ParseTripRequestRequest("muốn đi chơi chiều nay"));
+
+        Assert.Equal(ParseTripRequestResultStatus.AiUnavailable, result.Status);
+        Assert.Equal(charged, result.Charged);
+        Assert.Equal(30, result.RetryAfterSeconds);
+    }
+
+    [Fact]
     public async Task ProviderFailureOrTimeout_ReturnsUnavailable_AndLogsTheAttempt()
     {
         var failed = new Fixture();
@@ -156,6 +188,8 @@ public sealed class TripRequestParsingServiceTests
         var result = await fixture.Service.ParseAsync(UserId, new ParseTripRequestRequest("muốn đi chơi chiều nay"));
 
         Assert.Equal(ParseTripRequestResultStatus.AiUnavailable, result.Status);
+        Assert.True(result.Charged);
+        Assert.Equal(0, result.RetryAfterSeconds);
         Assert.Equal(LlmCallOutcome.InvalidOutput, Assert.Single(fixture.Guard.Records).Outcome);
     }
 

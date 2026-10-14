@@ -116,6 +116,39 @@ public sealed class TripExplanationServiceTests
     }
 
     [Fact]
+    public async Task CoolingDown_StopsBeforeCallingTheModel_AndReportsSecondsLeft()
+    {
+        var fixture = new Fixture(Trip(Cafe));
+        fixture.Guard.Decision = new AiUsageDecision(
+            AiUsageStatus.CoolingDown, RetryAtUtc: Now.UtcDateTime.AddSeconds(12.4));
+
+        var result = await fixture.Service.ExplainAsync(UserId, TripId);
+
+        Assert.Equal(ExplainTripResultStatus.CoolingDown, result.Status);
+        Assert.Equal(13, result.RetryAfterSeconds);
+        Assert.Empty(fixture.Llm.Requests);
+        Assert.Empty(fixture.Guard.Records);
+        Assert.Empty(fixture.Repository.Applied);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ProviderFailure_ReportsWhetherTheCallWasCharged_AndTheCooldownItStarted(bool charged)
+    {
+        var fixture = new Fixture(Trip(Cafe));
+        fixture.Llm.Failure = new LlmUnavailableException("high demand");
+        fixture.Guard.CountsTowardDailyLimit = charged;
+        fixture.Guard.RetryAfterSeconds = 30;
+
+        var result = await fixture.Service.ExplainAsync(UserId, TripId);
+
+        Assert.Equal(ExplainTripResultStatus.AiUnavailable, result.Status);
+        Assert.Equal(charged, result.Charged);
+        Assert.Equal(30, result.RetryAfterSeconds);
+    }
+
+    [Fact]
     public async Task ProviderFailure_ReturnsUnavailable_LogsTheAttempt_AndWritesNothing()
     {
         var fixture = new Fixture(Trip(Cafe));
@@ -169,6 +202,8 @@ public sealed class TripExplanationServiceTests
         var result = await fixture.Service.ExplainAsync(UserId, TripId);
 
         Assert.Equal(ExplainTripResultStatus.AiUnavailable, result.Status);
+        Assert.True(result.Charged);
+        Assert.Equal(0, result.RetryAfterSeconds);
         Assert.Equal(LlmCallOutcome.InvalidOutput, Assert.Single(fixture.Guard.Records).Outcome);
         Assert.Empty(fixture.Repository.Applied);
     }

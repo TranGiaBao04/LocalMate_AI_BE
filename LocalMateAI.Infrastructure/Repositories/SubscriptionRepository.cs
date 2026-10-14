@@ -25,6 +25,9 @@ public sealed class SubscriptionRepository(AppDbContext dbContext) : ISubscripti
     public async Task<IReadOnlyList<SubscriptionPeriod>> GetPeriodsAsync(Guid userId, CancellationToken cancellationToken = default) =>
         await dbContext.SubscriptionPeriods.AsNoTracking().Where(p => p.UserId == userId).ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<PlanGrant>> GetGrantsAsync(Guid userId, CancellationToken cancellationToken = default) =>
+        await dbContext.PlanGrants.AsNoTracking().Where(g => g.UserId == userId).ToListAsync(cancellationToken);
+
     public async Task<IReadOnlyList<SubscriptionQuoteSource>> GetQuoteSourcesAsync(
         Guid userId, CancellationToken cancellationToken = default) =>
         await (from period in dbContext.SubscriptionPeriods.AsNoTracking()
