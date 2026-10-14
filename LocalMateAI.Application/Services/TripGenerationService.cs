@@ -99,7 +99,7 @@ public sealed class TripGenerationService(
                         usageEventRepository, userId, effective, nowUtc, transactionCancellationToken);
                     if (used >= limit)
                     {
-                        return GeneratePersistenceResult.QuotaExceeded(used, limit, effective.EffectiveUntil ?? month.NextStartUtc);
+                        return GeneratePersistenceResult.QuotaExceeded(used, limit, effective.GenerateResetAt ?? month.NextStartUtc);
                     }
                 }
 

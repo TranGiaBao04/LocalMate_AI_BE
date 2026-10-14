@@ -57,4 +57,18 @@ public sealed class SubscriptionCheckoutPolicyTests
         Assert.Equal(SubscriptionCheckoutClassification.Purchase,
             SubscriptionCheckoutPolicy.Classify(new(free, version, new(), null), target, Now, []));
     }
+
+    [Theory]
+    [InlineData(false)] // mua đúng gói đang dùng thử
+    [InlineData(true)]  // mua gói cao hơn
+    public void TrialUser_IsAlwaysAPurchase(bool higherTarget)
+    {
+        var trialPlan = new SubscriptionPlan { Code = "TRIAL", Name = "Trial", EntitlementPriority = 250 };
+        var version = new SubscriptionPlanVersion { PlanId = trialPlan.Id, VersionNumber = 1, Price = 19000, DurationDays = 7 };
+        var target = higherTarget
+            ? new SubscriptionPlan { Code = "HIGH", Name = "High", EntitlementPriority = 300 } : trialPlan;
+        var effective = new EffectiveSubscription(trialPlan, version, null, null) { TrialUntil = Now.AddDays(7) };
+        Assert.Equal(SubscriptionCheckoutClassification.Purchase,
+            SubscriptionCheckoutPolicy.Classify(effective, target, Now, []));
+    }
 }

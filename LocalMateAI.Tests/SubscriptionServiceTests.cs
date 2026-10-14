@@ -121,6 +121,33 @@ public sealed class SubscriptionServiceTests
     }
 
     [Fact]
+    public async Task Me_GrantedTripPass_ReportsTrialWithoutPaidEnd()
+    {
+        var subscriptions = new FakeSubscriptionRepository([]);
+        subscriptions.Grants.Add(new PlanGrant
+        {
+            UserId = UserId,
+            PlanId = SubscriptionBaseline.PlanId(PlanCode.TripPass),
+            PlanVersionId = SubscriptionBaseline.VersionId(PlanCode.TripPass),
+            StartsAt = Now.AddDays(-1),
+            EndsAt = Now.AddDays(6),
+            Days = 7,
+            Source = PlanGrantSource.Admin
+        });
+
+        var response = await CreateService(subscriptions: subscriptions).GetMySubscriptionAsync(UserId);
+
+        Assert.Equal("TripPass", response!.Plan);
+        Assert.True(response.IsTrial);
+        Assert.Null(response.EndsAt);
+        Assert.Equal(Now.AddDays(6), response.EffectiveUntil);
+        Assert.Null(response.Usage.GenerateLimit);
+        Assert.Equal(new DateTime(2026, 10, 31, 17, 0, 0, DateTimeKind.Utc), response.Usage.ResetAt);
+        Assert.Equal(3, response.SavedTrips.Limit);
+        Assert.Equal(15, response.Ai.DailyLimit);
+    }
+
+    [Fact]
     public async Task Me_MembershipWinsAndHasUnlimitedLimits()
     {
         var subscriptions = new FakeSubscriptionRepository(

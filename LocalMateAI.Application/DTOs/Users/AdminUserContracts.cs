@@ -24,8 +24,8 @@ public sealed record AdminUserRoleResponse(Guid Id, string Name);
 public sealed record AdminUserPlanResponse(string Code, string Name);
 
 /// <summary>
-/// BE-132: một dòng danh sách user. <c>PlanEffectiveUntil</c> = hết kỳ đang hiệu lực (giống <c>effectiveUntil</c>
-/// của /subscription/me, chưa cộng các kỳ gia hạn nối tiếp); gói Free ⇒ null.
+/// BE-132: một dòng danh sách user. <c>PlanEffectiveUntil</c> giống <c>effectiveUntil</c> của /subscription/me:
+/// hết kỳ đã mua đang hiệu lực (chưa cộng các kỳ gia hạn nối tiếp), hoặc hết chuỗi gói tặng liền nhau; gói Free ⇒ null.
 /// </summary>
 public sealed record AdminUserListItemResponse(
     Guid Id,
@@ -39,6 +39,9 @@ public sealed record AdminUserListItemResponse(
     DateTime CreatedAt,
     bool ManagesRoles)
 {
+    /// <summary>Gói hiện tại đến từ gói tặng (admin tặng hoặc dùng thử khi đăng ký), không phải đã mua.</summary>
+    public bool PlanIsTrial { get; init; }
+
     /// <summary>Người đang xem có được khoá user này không (theo <c>AdminUserLockRules</c>).</summary>
     public bool CanLock { get; init; }
 

@@ -361,6 +361,54 @@ public sealed class AuthServiceRegistrationTests
         Assert.Empty(linked.Notifications.Entries);
     }
 
+    [Fact]
+    public async Task VerifyRegistration_CorrectCode_OffersTheSignupTrialToTheNewUser()
+    {
+        var fixture = new Fixture();
+        fixture.Pending.Existing = Pending();
+
+        var result = await fixture.Service.VerifyRegistrationAsync(VerifyRequest("123456"));
+
+        Assert.Equal([result.Response!.Id], fixture.Trials.UserIds);
+    }
+
+    [Fact]
+    public async Task VerifyRegistration_SignupTrialFails_RegistrationStillSucceeds()
+    {
+        var fixture = new Fixture(trials: new RecordingSignupTrialService { Throw = true });
+        fixture.Pending.Existing = Pending();
+
+        var result = await fixture.Service.VerifyRegistrationAsync(VerifyRequest("123456"));
+
+        Assert.Equal(VerifyRegistrationResultStatus.Success, result.Status);
+        Assert.Single(fixture.Notifications.Entries); // lời chào vẫn được ghi
+    }
+
+    [Fact]
+    public async Task SignupTrial_IsOfferedOnlyWhenAnAccountIsCreated()
+    {
+        var emailTaken = new Fixture();
+        emailTaken.Pending.Existing = Pending();
+        emailTaken.Pending.CompleteSucceeds = false;
+        await emailTaken.Service.VerifyRegistrationAsync(VerifyRequest("123456"));
+
+        var newGoogleUser = new Fixture();
+        await newGoogleUser.Service.GoogleSignInAsync(new GoogleSignInRequest("google-id-token"));
+
+        var linked = new Fixture();
+        linked.ExternalLogins.LinkedUser = new User
+        {
+            FullName = "Nguyen Van A",
+            Email = Email,
+            Role = new Role { Name = SystemRoles.UserName }
+        };
+        await linked.Service.GoogleSignInAsync(new GoogleSignInRequest("google-id-token"));
+
+        Assert.Empty(emailTaken.Trials.UserIds);
+        Assert.Single(newGoogleUser.Trials.UserIds);
+        Assert.Empty(linked.Trials.UserIds);
+    }
+
     private static RegisterRequest ValidRegisterRequest() => new()
     {
         FullName = "Nguyen Van A",
@@ -384,9 +432,10 @@ public sealed class AuthServiceRegistrationTests
 
     private sealed class Fixture
     {
-        public Fixture(RecordingNotificationRepository? notifications = null)
+        public Fixture(RecordingNotificationRepository? notifications = null, RecordingSignupTrialService? trials = null)
         {
             Notifications = notifications ?? new RecordingNotificationRepository();
+            Trials = trials ?? new RecordingSignupTrialService();
             Service = new AuthService(
                 Users,
                 ExternalLogins,
@@ -398,10 +447,12 @@ public sealed class AuthServiceRegistrationTests
                 new FakeSystemRoleProvider(),
                 new FixedTimeProvider(new DateTimeOffset(Now)),
                 Notifications,
+                Trials,
                 NullLogger<AuthService>.Instance);
         }
 
         public RecordingNotificationRepository Notifications { get; }
+        public RecordingSignupTrialService Trials { get; }
         public FakeUserRepository Users { get; } = new();
         public FakeExternalLoginRepository ExternalLogins { get; } = new();
         public FakePendingRegistrationRepository Pending { get; } = new();

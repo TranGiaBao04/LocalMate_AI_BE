@@ -2,6 +2,7 @@ using LocalMateAI.Application.DTOs.Common;
 using LocalMateAI.Application.DTOs.Payments;
 using LocalMateAI.Application.DTOs.Users;
 using LocalMateAI.Application.Security;
+using LocalMateAI.Application.Services;
 using LocalMateAI.Domain.Entities;
 using LocalMateAI.Domain.Enums;
 using LocalMateAI.Infrastructure.Persistence;
@@ -51,6 +52,60 @@ public sealed class AdminUserRepositoryPostgresTests
         Assert.Equal(free.Id, byEmail["free@test.dev"].Id);
         Assert.Equal("User", byEmail["free@test.dev"].Role.Name);
         Assert.Equal(roleId, byEmail["free@test.dev"].Role.Id);
+    }
+
+    [Fact]
+    public async Task GrantedPlans_AreResolvedLikeEffectiveSubscriptionResolver()
+    {
+        await using var db = await IsolatedPlanDatabase.CreateAsync();
+        await using var c = db.Context();
+        var roleId = await TestRoles.GetUserRoleIdAsync(c);
+
+        var trial = await AddUserAsync(c, roleId, "trial@test.dev");
+        var paidSame = await AddUserAsync(c, roleId, "paidsame@test.dev");
+        var grantedHigher = await AddUserAsync(c, roleId, "grantedhigher@test.dev");
+        var grantedLower = await AddUserAsync(c, roleId, "grantedlower@test.dev");
+        var expired = await AddUserAsync(c, roleId, "expired@test.dev");
+        var future = await AddUserAsync(c, roleId, "future@test.dev");
+
+        // Hai gói tặng liền nhau: hết hạn hiển thị là cuối chuỗi.
+        await AddGrantAsync(c, trial, PlanCode.TripPass, Now.AddDays(-1), Now.AddDays(6));
+        await AddGrantAsync(c, trial, PlanCode.TripPass, Now.AddDays(6), Now.AddDays(9));
+        await AddPeriodAsync(c, paidSame, PlanCode.TripPass, Now.AddDays(-1), Now.AddDays(3));
+        await AddGrantAsync(c, paidSame, PlanCode.TripPass, Now.AddDays(-1), Now.AddDays(6));
+        await AddPeriodAsync(c, grantedHigher, PlanCode.TripPass, Now.AddDays(-1), Now.AddDays(6));
+        await AddGrantAsync(c, grantedHigher, PlanCode.Membership, Now.AddDays(-1), Now.AddDays(2));
+        await AddPeriodAsync(c, grantedLower, PlanCode.Membership, Now.AddDays(-1), Now.AddDays(29));
+        await AddGrantAsync(c, grantedLower, PlanCode.TripPass, Now.AddDays(-1), Now.AddDays(6));
+        await AddGrantAsync(c, expired, PlanCode.TripPass, Now.AddDays(-7), Now);
+        await AddGrantAsync(c, future, PlanCode.TripPass, Now.AddSeconds(1), Now.AddDays(7));
+        var repository = new AdminUserRepository(c);
+
+        var page = await repository.GetPagedAsync(
+            new AdminUserQuery { PageSize = 100, SortBy = "email", SortDirection = "asc" }, Now);
+
+        var byEmail = page.Items.ToDictionary(item => item.Email);
+        AssertPlan(byEmail["trial@test.dev"], "TripPass", "Trip Pass", Now.AddDays(9), isTrial: true);
+        AssertPlan(byEmail["paidsame@test.dev"], "TripPass", "Trip Pass", Now.AddDays(3));
+        AssertPlan(byEmail["grantedhigher@test.dev"], "Membership", "Membership", Now.AddDays(2), isTrial: true);
+        AssertPlan(byEmail["grantedlower@test.dev"], "Membership", "Membership", Now.AddDays(29));
+        AssertPlan(byEmail["expired@test.dev"], "Free", "Free", null);
+        AssertPlan(byEmail["future@test.dev"], "Free", "Free", null);
+
+        // Từng dòng phải trùng với luật gốc mà /subscription/me dùng.
+        var subscriptions = new SubscriptionRepository(c);
+        foreach (var item in page.Items)
+        {
+            var effective = await EffectiveSubscriptionResolver.ResolveAsync(subscriptions, item.Id, Now);
+            Assert.Equal(PlanIdentity.PublicCode(effective.Plan.Code), item.Plan.Code);
+            Assert.Equal(effective.IsTrial, item.PlanIsTrial);
+            Assert.Equal(effective.EffectiveUntil, item.PlanEffectiveUntil);
+        }
+
+        var tripPass = await repository.GetPagedAsync(new AdminUserQuery { Plan = "trippass" }, Now);
+        Assert.Equal(["paidsame@test.dev", "trial@test.dev"], tripPass.Items.Select(i => i.Email).Order());
+        var free = await repository.GetPagedAsync(new AdminUserQuery { Plan = "free" }, Now);
+        Assert.Equal(["expired@test.dev", "future@test.dev"], free.Items.Select(i => i.Email).Order());
     }
 
     [Fact]
@@ -336,11 +391,29 @@ public sealed class AdminUserRepositoryPostgresTests
         PaidAt = status == PaymentOrderStatus.Paid ? Now : null
     };
 
-    private static void AssertPlan(AdminUserListItemResponse item, string code, string name, DateTime? until)
+    private static void AssertPlan(AdminUserListItemResponse item, string code, string name, DateTime? until,
+        bool isTrial = false)
     {
         Assert.Equal(code, item.Plan.Code);
         Assert.Equal(name, item.Plan.Name);
         Assert.Equal(until, item.PlanEffectiveUntil);
+        Assert.Equal(isTrial, item.PlanIsTrial);
+    }
+
+    private static async Task AddGrantAsync(AppDbContext c, User user, PlanCode plan, DateTime startsAt, DateTime endsAt)
+    {
+        c.PlanGrants.Add(new PlanGrant
+        {
+            UserId = user.Id,
+            PlanId = SubscriptionBaseline.PlanId(plan),
+            PlanVersionId = SubscriptionBaseline.VersionId(plan),
+            StartsAt = startsAt,
+            EndsAt = endsAt,
+            Days = Math.Max(1, (endsAt - startsAt).Days),
+            Source = PlanGrantSource.Admin,
+            Reason = "test"
+        });
+        await c.SaveChangesAsync();
     }
 
     private static async Task<User> AddUserAsync(AppDbContext c, Guid roleId, string email, string? fullName = null,

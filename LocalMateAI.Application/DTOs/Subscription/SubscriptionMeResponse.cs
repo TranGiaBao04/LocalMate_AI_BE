@@ -14,4 +14,5 @@ public sealed record SubscriptionMeResponse(
     SubscriptionAiResponse Ai)
 {
     public DateTime? EffectiveUntil { get; init; }
+    public bool IsTrial { get; init; }
 }

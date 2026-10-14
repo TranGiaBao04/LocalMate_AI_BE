@@ -50,6 +50,13 @@ public sealed class TripRequestParsingService(
                 ParseTripRequestResultStatus.DailyLimitReached, ResetAtUtc: usage.ResetAtUtc);
         }
 
+        if (usage.Status == AiUsageStatus.CoolingDown)
+        {
+            return new ParseTripRequestResult(
+                ParseTripRequestResultStatus.CoolingDown,
+                RetryAfterSeconds: usage.RetryAfterSeconds(timeProvider.GetUtcNow().UtcDateTime));
+        }
+
         if (usage.Status != AiUsageStatus.Allowed)
         {
             return new ParseTripRequestResult(ParseTripRequestResultStatus.AiUnavailable);
@@ -98,7 +105,7 @@ public sealed class TripRequestParsingService(
             exception is LlmUnavailableException
             || (exception is OperationCanceledException && !cancellationToken.IsCancellationRequested))
         {
-            // Lỗi hoặc quá giờ: vẫn ghi log vì yêu cầu đã được gửi đi (tính vào trần ngày).
+            // Lỗi hoặc quá giờ: vẫn ghi log vì yêu cầu đã được gửi đi (được miễn khỏi trần ngày vài lần đầu).
         }
 
         var answer = response is null
@@ -111,14 +118,17 @@ public sealed class TripRequestParsingService(
                 ? LlmCallOutcome.InvalidOutput
                 : LlmCallOutcome.Succeeded;
 
-        await call.CompleteAsync(
+        var completion = await call.CompleteAsync(
             outcome,
             response,
             (int)timeProvider.GetElapsedTime(startedAt).TotalMilliseconds);
 
         if (answer is null)
         {
-            return new ParseTripRequestResult(ParseTripRequestResultStatus.AiUnavailable);
+            return new ParseTripRequestResult(
+                ParseTripRequestResultStatus.AiUnavailable,
+                Charged: completion.CountsTowardDailyLimit,
+                RetryAfterSeconds: completion.RetryAfterSeconds);
         }
 
         // Tin AI khi nó xác định người dùng muốn đi chơi, kể cả khi chưa có tiêu chí nào về chuyến đi

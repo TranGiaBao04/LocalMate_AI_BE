@@ -20,6 +20,7 @@ public sealed class AuthService(
     ISystemRoleProvider systemRoleProvider,
     TimeProvider timeProvider,
     INotificationRepository notificationRepository,
+    ISignupTrialService signupTrialService,
     ILogger<AuthService> logger) : IAuthService
 {
     private const string GoogleProvider = "Google";
@@ -137,6 +138,7 @@ public sealed class AuthService(
         }
 
         await EnqueueWelcomeAsync(user.Id);
+        await GrantSignupTrialAsync(user.Id);
 
         var response = new RegisterResponse(
             user.Id,
@@ -401,6 +403,7 @@ public sealed class AuthService(
             // Email đã được Google xác nhận: bản đăng ký bằng mật khẩu đang chờ OTP (nếu có) không còn cần nữa.
             await pendingRegistrationRepository.DeleteByEmailAsync(email, cancellationToken);
             await EnqueueWelcomeAsync(user.Id);
+            await GrantSignupTrialAsync(user.Id);
             return GoogleSignInResult.Succeeded(CreateLoginResponse(user, userRole.Name));
         }
 
@@ -591,6 +594,19 @@ public sealed class AuthService(
         catch (Exception exception)
         {
             logger.LogError(exception, "Welcome notification could not be created for user {UserId}", userId);
+        }
+    }
+
+    // Dùng thử là phụ như lời chào: tài khoản đã tạo xong nên lỗi chỉ được ghi log, người dùng vẫn là Free.
+    private async Task GrantSignupTrialAsync(Guid userId)
+    {
+        try
+        {
+            await signupTrialService.GrantAsync(userId, CancellationToken.None);
+        }
+        catch (Exception exception)
+        {
+            logger.LogError(exception, "Signup trial could not be granted for user {UserId}", userId);
         }
     }
 }

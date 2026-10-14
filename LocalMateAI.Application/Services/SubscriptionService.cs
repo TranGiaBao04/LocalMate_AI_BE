@@ -58,9 +58,9 @@ public sealed class SubscriptionService(
         return new SubscriptionMeResponse(
             PlanIdentity.PublicCode(effective.Plan.Code),
             effective.PaidThrough,
-            new SubscriptionUsageResponse(generateUsed, plan.GenerateLimit, effective.EffectiveUntil ?? month.NextStartUtc),
+            new SubscriptionUsageResponse(generateUsed, plan.GenerateLimit, effective.GenerateResetAt ?? month.NextStartUtc),
             new SubscriptionSavedTripsResponse(savedTripsUsed, plan.SavedTripLimit),
             new SubscriptionAiResponse(dailyUsed, dailyLimit, dayStartUtc.AddDays(1)))
-        { EffectiveUntil = effective.EffectiveUntil };
+        { EffectiveUntil = effective.EffectiveUntil, IsTrial = effective.IsTrial };
     }
 }

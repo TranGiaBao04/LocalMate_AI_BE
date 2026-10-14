@@ -98,6 +98,102 @@ public sealed class EffectiveSubscriptionTests
         Add(repo, "HIGH", 300, Now, Now.AddDays(2), 1, 9);
         Assert.Equal("FREE", (await EffectiveSubscriptionResolver.ResolveAsync(repo, UserId, Now.AddDays(2))).Plan.Code);
     }
+    [Theory]
+    [InlineData(-1, "FREE", false)]
+    [InlineData(0, "GIFT", true)]
+    [InlineData(6, "GIFT", true)]
+    [InlineData(7, "FREE", false)]
+    public async Task Grant_IsEffectiveOnHalfOpenRange_WithoutPeriod(int day, string expected, bool trial)
+    {
+        var repo = new MemoryRepository();
+        var grant = AddGrant(repo, AddPlan(repo, "GIFT", 250, null, 3), Now, Now.AddDays(7));
+        var result = await EffectiveSubscriptionResolver.ResolveAsync(repo, UserId, Now.AddDays(day));
+        Assert.Equal(expected, result.Plan.Code);
+        Assert.Equal(trial, result.IsTrial);
+        Assert.Null(result.Period);
+        Assert.Null(result.PaidThrough);
+        Assert.Equal(trial ? grant.EndsAt : null, result.EffectiveUntil);
+        Assert.Null(result.GenerateResetAt);
+    }
+    [Fact]
+    public async Task PurchasedPeriod_WinsOverGrantOfSamePlan_ThenGrantTakesOver()
+    {
+        var repo = new MemoryRepository();
+        var paid = Add(repo, "SAME", 250, Now, Now.AddDays(3), null, 3);
+        AddGrant(repo, (paid.Plan, paid.Version), Now, Now.AddDays(7));
+        var during = await EffectiveSubscriptionResolver.ResolveAsync(repo, UserId, Now.AddDays(1));
+        Assert.False(during.IsTrial);
+        Assert.Equal(paid.Period.Id, during.Period!.Id);
+        Assert.Equal(paid.Period.EndsAt, during.GenerateResetAt);
+        var after = await EffectiveSubscriptionResolver.ResolveAsync(repo, UserId, Now.AddDays(3));
+        Assert.True(after.IsTrial);
+        Assert.Equal(Now.AddDays(7), after.EffectiveUntil);
+    }
+    [Fact]
+    public async Task HigherPriorityWins_WhicheverSideIsTheGrant()
+    {
+        var grantedHigh = new MemoryRepository();
+        Add(grantedHigh, "LOW", 250, Now, Now.AddDays(7), 9, 1);
+        AddGrant(grantedHigh, AddPlan(grantedHigh, "HIGH", 300, null, 9), Now, Now.AddDays(2));
+        var trial = await EffectiveSubscriptionResolver.ResolveAsync(grantedHigh, UserId, Now);
+        Assert.Equal("HIGH", trial.Plan.Code);
+        Assert.True(trial.IsTrial);
+        var back = await EffectiveSubscriptionResolver.ResolveAsync(grantedHigh, UserId, Now.AddDays(2));
+        Assert.Equal("LOW", back.Plan.Code);
+        Assert.False(back.IsTrial);
+
+        var grantedLow = new MemoryRepository();
+        Add(grantedLow, "HIGH", 300, Now, Now.AddDays(2), null, 9);
+        AddGrant(grantedLow, AddPlan(grantedLow, "LOW", 250, null, 1), Now, Now.AddDays(7));
+        var paid = await EffectiveSubscriptionResolver.ResolveAsync(grantedLow, UserId, Now);
+        Assert.Equal("HIGH", paid.Plan.Code);
+        Assert.False(paid.IsTrial);
+    }
+    [Fact]
+    public async Task ChainedGrantsOfOnePlan_ReportTheEndOfTheChain()
+    {
+        var repo = new MemoryRepository();
+        var gift = AddPlan(repo, "GIFT", 250, null, 3);
+        AddGrant(repo, gift, Now, Now.AddDays(7));
+        AddGrant(repo, gift, Now.AddDays(7), Now.AddDays(10));
+        AddGrant(repo, gift, Now.AddDays(12), Now.AddDays(15)); // có khoảng hở nên không nối
+        var result = await EffectiveSubscriptionResolver.ResolveAsync(repo, UserId, Now);
+        Assert.Equal(Now.AddDays(10), result.EffectiveUntil);
+    }
+    private static (SubscriptionPlan Plan, SubscriptionPlanVersion Version) AddPlan(
+        MemoryRepository repo, string code, int priority, int? generate, int? saved)
+    {
+        var plan = new SubscriptionPlan { Code = code, Name = code, EntitlementPriority = priority };
+        var version = new SubscriptionPlanVersion
+        {
+            PlanId = plan.Id,
+            VersionNumber = 1,
+            Price = 19000,
+            DurationDays = 7,
+            GenerateLimit = generate,
+            SavedTripLimit = saved
+        };
+        plan.CurrentVersionId = version.Id;
+        repo.Plans.Add(plan); repo.Versions.Add(version);
+        return (plan, version);
+    }
+    private static PlanGrant AddGrant(MemoryRepository repo,
+        (SubscriptionPlan Plan, SubscriptionPlanVersion Version) target, DateTime start, DateTime end)
+    {
+        var grant = new PlanGrant
+        {
+            UserId = UserId,
+            PlanId = target.Plan.Id,
+            PlanVersionId = target.Version.Id,
+            StartsAt = start,
+            EndsAt = end,
+            Days = (end - start).Days,
+            Source = PlanGrantSource.Admin,
+            Reason = "test"
+        };
+        repo.Grants.Add(grant);
+        return grant;
+    }
     private static (SubscriptionPlan Plan, SubscriptionPlanVersion Version, SubscriptionPeriod Period) Add(
         MemoryRepository repo, string code, int priority, DateTime start, DateTime end, int? generate, int? saved)
     {

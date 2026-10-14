@@ -62,7 +62,8 @@ public sealed class AiUsageAdmissionPostgresTests
         var user = await PlanVersionFoundationPostgresTests.UserAsync(c);
         var trip = await PostgresTestDatabase.InsertTripAsync(c, user.Id);
         await Log(c, user.Id, LlmCallKind.Explain, LlmCallOutcome.Succeeded, trip.Id);
-        await Log(c, user.Id, LlmCallKind.ParseRequest, LlmCallOutcome.ProviderFailed);
+        // Provider failures are free up to the daily allowance, so only charged outcomes fill the cap here.
+        await Log(c, user.Id, LlmCallKind.ParseRequest, LlmCallOutcome.InvalidOutput);
         await Log(c, user.Id, LlmCallKind.ParseRequest, LlmCallOutcome.InvalidOutput);
         Assert.Equal(AiUsageStatus.TripLimitReached,
             (await Repository(c).AdmitAsync(Guid.NewGuid(), user.Id, LlmCallKind.Explain, trip.Id)).Decision.Status);
@@ -223,9 +224,10 @@ public sealed class AiUsageAdmissionPostgresTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => repo.AdmitAsync(a.Id, user.Id, LlmCallKind.ParseRequest));
         Assert.Equal("23505", (await Assert.ThrowsAsync<PostgresException>(() => c.Database.ExecuteSqlInterpolatedAsync(
             $"INSERT INTO \"AiUsageAdmissions\" SELECT * FROM \"AiUsageAdmissions\" WHERE \"Id\"={a.Id}"))).SqlState);
-        var log = await Log(c, user.Id, LlmCallKind.ParseRequest, LlmCallOutcome.ProviderFailed);
+        // InvalidOutput: a charged outcome without the provider-failure cooldown.
+        var log = await Log(c, user.Id, LlmCallKind.ParseRequest, LlmCallOutcome.InvalidOutput);
         await CompleteFixture(c, a, log);
-        var b = (await repo.AdmitAsync(Guid.NewGuid(), user.Id, LlmCallKind.ParseRequest)).Admission!;
+        var b =(await repo.AdmitAsync(Guid.NewGuid(), user.Id, LlmCallKind.ParseRequest)).Admission!;
         Assert.Equal("23505", (await Assert.ThrowsAsync<PostgresException>(() => CompleteFixture(c, b, log))).SqlState);
         Assert.NotNull((await repo.AdmitAsync(Guid.NewGuid(), user.Id, LlmCallKind.ParseRequest)).Admission);
         Assert.Equal(AiUsageStatus.DailyLimitReached,
@@ -245,7 +247,90 @@ public sealed class AiUsageAdmissionPostgresTests
         var trip = await PostgresTestDatabase.InsertTripAsync(c, user.Id);
         var a = (await Repository(c).AdmitAsync(Guid.NewGuid(), user.Id, LlmCallKind.Explain, trip.Id)).Admission!;
         await CompleteFixture(c, a, await Log(c, user.Id, LlmCallKind.Explain, outcome, trip.Id));
-        Assert.Equal(expected, (await Repository(c).AdmitAsync(Guid.NewGuid(), user.Id, LlmCallKind.Explain, trip.Id)).Decision.Status);
+        // Past the provider-failure cooldown, so only the Trip accounting decides.
+        var later = Repository(c, new Clock(Now.AddSeconds(31)));
+        Assert.Equal(expected, (await later.AdmitAsync(Guid.NewGuid(), user.Id, LlmCallKind.Explain, trip.Id)).Decision.Status);
+    }
+
+    [Fact]
+    public async Task ProviderFailures_AreFreeUpToDailyAllowance_ThenCharged()
+    {
+        await using var db = await IsolatedPlanDatabase.CreateAsync();
+        await using var c = db.Context();
+        var user = await PlanVersionFoundationPostgresTests.UserAsync(c);
+        var clock = new Clock(Now);
+        var repo = Repository(c, clock);
+        var day = DateOnly.FromDateTime(Now.AddHours(7));
+        for (var failure = 1; failure <= 4; failure++)
+        {
+            var completed = await CompleteCall(repo, user.Id, LlmCallOutcome.ProviderFailed);
+            Assert.Equal(failure > 3, completed.CountsTowardDailyLimit);
+            Assert.Equal(failure > 3 ? 1 : 0, await repo.CountDailyAsync(user.Id, day));
+            clock.Now = clock.Now.AddSeconds(31);
+        }
+        Assert.True((await CompleteCall(repo, user.Id, LlmCallOutcome.InvalidOutput)).CountsTowardDailyLimit);
+        Assert.Equal(2, await repo.CountDailyAsync(user.Id, day));
+    }
+
+    [Fact]
+    public async Task ProviderFailure_StartsCooldown_UntilItElapses()
+    {
+        await using var db = await IsolatedPlanDatabase.CreateAsync();
+        await using var c = db.Context();
+        var user = await PlanVersionFoundationPostgresTests.UserAsync(c);
+        var clock = new Clock(Now);
+        var repo = Repository(c, clock);
+        Assert.Equal(30, (await CompleteCall(repo, user.Id, LlmCallOutcome.ProviderFailed)).RetryAfterSeconds);
+        clock.Now = Now.AddSeconds(29);
+        var blocked = await repo.AdmitAsync(Guid.NewGuid(), user.Id, LlmCallKind.ParseRequest);
+        Assert.Equal(AiUsageStatus.CoolingDown, blocked.Decision.Status);
+        Assert.Equal(Now.AddSeconds(30), blocked.Decision.RetryAtUtc);
+        Assert.Null(blocked.Admission);
+        Assert.Equal(1, await c.AiUsageAdmissions.CountAsync());
+        clock.Now = Now.AddSeconds(30);
+        Assert.Equal(AiUsageStatus.Allowed, (await repo.AdmitAsync(Guid.NewGuid(), user.Id, LlmCallKind.ParseRequest)).Decision.Status);
+    }
+
+    [Theory]
+    [InlineData(LlmCallOutcome.Succeeded)]
+    [InlineData(LlmCallOutcome.InvalidOutput)]
+    public async Task OtherOutcomes_DoNotStartCooldown(LlmCallOutcome outcome)
+    {
+        await using var db = await IsolatedPlanDatabase.CreateAsync();
+        await using var c = db.Context();
+        var user = await PlanVersionFoundationPostgresTests.UserAsync(c);
+        var repo = Repository(c);
+        Assert.Equal(0, (await CompleteCall(repo, user.Id, outcome)).RetryAfterSeconds);
+        Assert.Equal(AiUsageStatus.Allowed, (await repo.AdmitAsync(Guid.NewGuid(), user.Id, LlmCallKind.ParseRequest)).Decision.Status);
+    }
+
+    [Fact]
+    public async Task DailyLimit_IsReportedBeforeCooldown()
+    {
+        await using var db = await IsolatedPlanDatabase.CreateAsync();
+        await using var c = db.Context();
+        var user = await PlanVersionFoundationPostgresTests.UserAsync(c);
+        var repo = Repository(c);
+        await CompleteCall(repo, user.Id, LlmCallOutcome.ProviderFailed);
+        for (var i = 0; i < 3; i++) await Log(c, user.Id, LlmCallKind.ParseRequest, LlmCallOutcome.Succeeded);
+        Assert.Equal(AiUsageStatus.DailyLimitReached, (await repo.AdmitAsync(Guid.NewGuid(), user.Id, LlmCallKind.ParseRequest)).Decision.Status);
+    }
+
+    [Fact]
+    public async Task ZeroAllowanceAndZeroCooldown_RestoreTheOldRule()
+    {
+        await using var db = await IsolatedPlanDatabase.CreateAsync();
+        await using var c = db.Context();
+        var user = await PlanVersionFoundationPostgresTests.UserAsync(c);
+        var settings = new FakeSystemSettingProvider();
+        settings.Set(SystemSettingKeys.AiUncountedFailedCallsPerDay, 0);
+        settings.Set(SystemSettingKeys.AiFailureCooldownSeconds, 0);
+        var repo = new AiUsageAdmissionRepository(c, settings, new Clock(Now));
+        var completed = await CompleteCall(repo, user.Id, LlmCallOutcome.ProviderFailed);
+        Assert.True(completed.CountsTowardDailyLimit);
+        Assert.Equal(0, completed.RetryAfterSeconds);
+        Assert.Equal(1, await repo.CountDailyAsync(user.Id, DateOnly.FromDateTime(Now.AddHours(7))));
+        Assert.Equal(AiUsageStatus.Allowed, (await repo.AdmitAsync(Guid.NewGuid(), user.Id, LlmCallKind.ParseRequest)).Decision.Status);
     }
 
     [Fact]
@@ -458,6 +543,14 @@ public sealed class AiUsageAdmissionPostgresTests
         await c.SaveChangesAsync();
         await c.LlmCallLogs.Where(l => l.Id == log.Id).ExecuteUpdateAsync(s => s.SetProperty(l => l.CreatedAt, at ?? Now));
         return log;
+    }
+
+    private static async Task<AiUsageCompletionResult> CompleteCall(AiUsageAdmissionRepository repo, Guid userId, LlmCallOutcome outcome)
+    {
+        var a = (await repo.AdmitAsync(Guid.NewGuid(), userId, LlmCallKind.ParseRequest)).Admission!;
+        Assert.True(await repo.AuthorizeDispatchAsync(userId, a.Id, a.FencingToken, a.FencingGeneration));
+        return await repo.CompleteAsync(new(a.Id, a.UserId, a.Kind, a.TripIdSnapshot, a.FencingToken, a.FencingGeneration),
+            new(outcome, "test", 0, 0, 1));
     }
 
     // S5B tests seed completion evidence directly; no production completion/provider integration is implied.

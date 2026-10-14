@@ -7,11 +7,17 @@ public enum AiUsageStatus
     Allowed,
     Disabled,
     DailyLimitReached,
-    TripLimitReached
+    TripLimitReached,
+    CoolingDown
 }
 
 /// <param name="ResetAtUtc">Thời điểm trần ngày được đặt lại; chỉ có khi DailyLimitReached.</param>
-public sealed record AiUsageDecision(AiUsageStatus Status, DateTime? ResetAtUtc = null);
+/// <param name="RetryAtUtc">Thời điểm được gọi AI lại; chỉ có khi CoolingDown.</param>
+public sealed record AiUsageDecision(AiUsageStatus Status, DateTime? ResetAtUtc = null, DateTime? RetryAtUtc = null)
+{
+    public int RetryAfterSeconds(DateTime nowUtc) =>
+        RetryAtUtc is { } at ? Math.Max(1, (int)Math.Ceiling((at - nowUtc).TotalSeconds)) : 0;
+}
 
 public interface IAiUsageGuard
 {
