@@ -44,6 +44,21 @@ public sealed class PlanGrantRulesTests
         Assert.Equal(Now, PlanGrantRules.StartsAt(Now, 250, periods, grants, Priorities));
     }
 
+    [Fact]
+    public void ChainEnd_FollowsBackToBackGrants_AndStopsAtTheFirstGap()
+    {
+        var others = new[]
+        {
+            (Now.AddDays(10), Now.AddDays(13)), // nối sau gói thứ hai
+            (Now.AddDays(7), Now.AddDays(10)),  // nối sau gói đang chạy
+            (Now.AddDays(15), Now.AddDays(20)), // cách một khoảng nên không nối
+            (Now.AddDays(-7), Now)              // đã hết từ trước
+        };
+
+        Assert.Equal(Now.AddDays(13), PlanGrantRules.ChainEnd(Now.AddDays(7), others));
+        Assert.Equal(Now.AddDays(7), PlanGrantRules.ChainEnd(Now.AddDays(7), []));
+    }
+
     private static SubscriptionPeriod Period(Guid planId, DateTime start, DateTime end) =>
         new() { UserId = Guid.NewGuid(), PlanId = planId, StartsAt = start, EndsAt = end };
 

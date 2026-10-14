@@ -58,8 +58,8 @@ public sealed class AdminUserRepository(AppDbContext dbContext) : IAdminUserRepo
         {
             var planCode = PlanIdentity.Canonical(query.Plan)!.ToUpperInvariant();
             rows = planCode == PlanIdentity.Free
-                ? rows.Where(row => row.PaidPlanCode == null)
-                : rows.Where(row => row.PaidPlanCode != null && row.PaidPlanCode.ToUpper() == planCode);
+                ? rows.Where(row => row.ActivePlanCode == null)
+                : rows.Where(row => row.ActivePlanCode != null && row.ActivePlanCode.ToUpper() == planCode);
         }
 
         var page = await rows.ApplySort(query, UserSortMap).ToPagedResultAsync(query, cancellationToken);
@@ -74,6 +74,8 @@ public sealed class AdminUserRepository(AppDbContext dbContext) : IAdminUserRepo
             .Select(plan => plan.Name)
             .SingleAsync(cancellationToken);
 
+        var trialChainEnds = await TrialChainEndsAsync(page.Items, nowUtc, cancellationToken);
+
         var items = page.Items
             .Select(row => new AdminUserListItemResponse(
                 row.Id,
@@ -82,12 +84,15 @@ public sealed class AdminUserRepository(AppDbContext dbContext) : IAdminUserRepo
                 new AdminUserRoleResponse(row.RoleId, row.RoleName),
                 row.Status.ToString(),
                 row.LockedAt,
-                row.PaidPlanCode is null
+                row.ActivePlanCode is null
                     ? new AdminUserPlanResponse(PlanIdentity.PublicCode(PlanIdentity.Free), freePlanName)
-                    : new AdminUserPlanResponse(PlanIdentity.PublicCode(row.PaidPlanCode), row.PaidPlanName!),
-                row.PaidPlanEffectiveUntil,
+                    : new AdminUserPlanResponse(PlanIdentity.PublicCode(row.ActivePlanCode), row.ActivePlanName!),
+                trialChainEnds.TryGetValue(row.Id, out var trialUntil) ? trialUntil : row.ActivePlanEffectiveUntil,
                 row.CreatedAt,
-                row.ManagesRoles))
+                row.ManagesRoles)
+            {
+                PlanIsTrial = row.IsTrial
+            })
             .ToList();
 
         return PagedResult<AdminUserListItemResponse>.Create(items, page.Page, page.PageSize, page.TotalCount);
@@ -264,12 +269,43 @@ public sealed class AdminUserRepository(AppDbContext dbContext) : IAdminUserRepo
                     .SetProperty(user => user.UpdatedAt, DateTime.UtcNow),
                 cancellationToken);
 
-    // Gói hiện tại = luật của EffectiveSubscriptionResolver: trong các kỳ đang hiệu lực
-    // (StartsAt ≤ now < min(EndsAt, TerminatedAt)), lấy gói có EntitlementPriority cao nhất (unique nên không hoà).
-    // Không có kỳ nào ⇒ PaidPlanCode = null = gói Free.
+    // planEffectiveUntil của người dùng thử phải khớp effectiveUntil của /subscription/me:
+    // hết chuỗi gói tặng liền nhau, không phải hết riêng gói tặng đang chạy.
+    private async Task<IReadOnlyDictionary<Guid, DateTime>> TrialChainEndsAsync(
+        IReadOnlyList<UserRow> rows,
+        DateTime nowUtc,
+        CancellationToken cancellationToken)
+    {
+        var trials = rows.Where(row => row.IsTrial).ToList();
+        if (trials.Count == 0)
+        {
+            return new Dictionary<Guid, DateTime>();
+        }
+
+        var userIds = trials.Select(row => row.Id).ToList();
+        var grants = await (
+                from grant in dbContext.PlanGrants.AsNoTracking()
+                join plan in dbContext.SubscriptionPlans.AsNoTracking() on grant.PlanId equals plan.Id
+                where userIds.Contains(grant.UserId) && grant.EndsAt > nowUtc
+                select new { grant.UserId, plan.Code, grant.StartsAt, grant.EndsAt })
+            .ToListAsync(cancellationToken);
+
+        return trials.ToDictionary(
+            row => row.Id,
+            row => PlanGrantRules.ChainEnd(
+                row.ActivePlanEffectiveUntil!.Value,
+                grants.Where(grant => grant.UserId == row.Id && grant.Code == row.ActivePlanCode)
+                    .Select(grant => (grant.StartsAt, grant.EndsAt))));
+    }
+
+    // Gói hiện tại = luật của EffectiveSubscriptionResolver. Ứng viên là kỳ đã mua đang hiệu lực
+    // (StartsAt ≤ now < min(EndsAt, TerminatedAt)) và gói tặng đang hiệu lực (StartsAt ≤ now < EndsAt);
+    // lấy EntitlementPriority cao nhất, cùng gói thì kỳ đã mua thắng, rồi tới cái kết thúc muộn hơn.
+    // Rank = priority × 2, cộng 1 nếu là kỳ đã mua: một cột gói cả hai luật đầu, Rank chẵn = gói tặng.
+    // Không có ứng viên ⇒ ActivePlanCode = null = gói Free.
     private IQueryable<UserRow> Rows(DateTime nowUtc)
     {
-        var activePaidPlans =
+        var purchased =
             from period in dbContext.SubscriptionPeriods
             join plan in dbContext.SubscriptionPlans on period.PlanId equals plan.Id
             where period.StartsAt <= nowUtc
@@ -281,11 +317,26 @@ public sealed class AdminUserRepository(AppDbContext dbContext) : IAdminUserRepo
                 period.UserId,
                 plan.Code,
                 plan.Name,
-                plan.EntitlementPriority,
+                Rank = plan.EntitlementPriority * 2 + 1,
                 EffectiveEnd = period.TerminatedAt != null && period.TerminatedAt < period.EndsAt
                     ? period.TerminatedAt.Value
                     : period.EndsAt
             };
+
+        var granted =
+            from grant in dbContext.PlanGrants
+            join plan in dbContext.SubscriptionPlans on grant.PlanId equals plan.Id
+            where grant.StartsAt <= nowUtc && nowUtc < grant.EndsAt
+            select new
+            {
+                grant.UserId,
+                plan.Code,
+                plan.Name,
+                Rank = plan.EntitlementPriority * 2,
+                EffectiveEnd = grant.EndsAt
+            };
+
+        var activePlans = purchased.Concat(granted);
 
         return dbContext.Users
             .AsNoTracking()
@@ -302,17 +353,21 @@ public sealed class AdminUserRepository(AppDbContext dbContext) : IAdminUserRepo
                 Status = user.Status,
                 LockedAt = user.LockedAt,
                 CreatedAt = user.CreatedAt,
-                PaidPlanCode = activePaidPlans.Where(plan => plan.UserId == user.Id)
-                    .OrderByDescending(plan => plan.EntitlementPriority)
+                ActivePlanCode = activePlans.Where(plan => plan.UserId == user.Id)
+                    .OrderByDescending(plan => plan.Rank).ThenByDescending(plan => plan.EffectiveEnd)
                     .Select(plan => plan.Code)
                     .FirstOrDefault(),
-                PaidPlanName = activePaidPlans.Where(plan => plan.UserId == user.Id)
-                    .OrderByDescending(plan => plan.EntitlementPriority)
+                ActivePlanName = activePlans.Where(plan => plan.UserId == user.Id)
+                    .OrderByDescending(plan => plan.Rank).ThenByDescending(plan => plan.EffectiveEnd)
                     .Select(plan => plan.Name)
                     .FirstOrDefault(),
-                PaidPlanEffectiveUntil = activePaidPlans.Where(plan => plan.UserId == user.Id)
-                    .OrderByDescending(plan => plan.EntitlementPriority)
+                ActivePlanEffectiveUntil = activePlans.Where(plan => plan.UserId == user.Id)
+                    .OrderByDescending(plan => plan.Rank).ThenByDescending(plan => plan.EffectiveEnd)
                     .Select(plan => (DateTime?)plan.EffectiveEnd)
+                    .FirstOrDefault(),
+                ActivePlanRank = activePlans.Where(plan => plan.UserId == user.Id)
+                    .OrderByDescending(plan => plan.Rank).ThenByDescending(plan => plan.EffectiveEnd)
+                    .Select(plan => (int?)plan.Rank)
                     .FirstOrDefault()
             });
     }
@@ -332,9 +387,13 @@ public sealed class AdminUserRepository(AppDbContext dbContext) : IAdminUserRepo
         public UserStatus Status { get; init; }
         public DateTime? LockedAt { get; init; }
         public DateTime CreatedAt { get; init; }
-        public string? PaidPlanCode { get; init; }
-        public string? PaidPlanName { get; init; }
-        public DateTime? PaidPlanEffectiveUntil { get; init; }
+        public string? ActivePlanCode { get; init; }
+        public string? ActivePlanName { get; init; }
+        public DateTime? ActivePlanEffectiveUntil { get; init; }
+        public int? ActivePlanRank { get; init; }
+
+        // Chỉ đọc sau khi đã tải dòng về; không dùng trong biểu thức EF.
+        public bool IsTrial => ActivePlanRank is { } rank && (rank & 1) == 0;
     }
 
     private sealed class TripRow

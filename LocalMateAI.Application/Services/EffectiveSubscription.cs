@@ -49,13 +49,8 @@ public static class EffectiveSubscriptionResolver
                 ?? throw new InvalidOperationException("Missing granted version.");
             if (version.PlanId != plan.Id || plan.Code == PlanIdentity.Free)
                 throw new InvalidOperationException("Invalid grant binding.");
-            var trialUntil = grant.EndsAt;
-            foreach (var next in grants.Where(g => g.PlanId == plan.Id && g.Id != grant.Id && g.StartsAt >= trialUntil)
-                         .OrderBy(g => g.StartsAt))
-            {
-                if (next.StartsAt != trialUntil) break;
-                trialUntil = next.EndsAt;
-            }
+            var trialUntil = PlanGrantRules.ChainEnd(grant.EndsAt,
+                grants.Where(g => g.PlanId == plan.Id && g.Id != grant.Id).Select(g => (g.StartsAt, g.EndsAt)));
             candidates.Add(new(plan, version, null, null) { TrialUntil = trialUntil });
         }
         // Cùng một gói thì kỳ đã mua thắng gói tặng.

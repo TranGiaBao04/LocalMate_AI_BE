@@ -30,4 +30,23 @@ public static class PlanGrantRules
             .Select(covered => covered.End)
             .Append(nowUtc)
             .Max();
+
+    // Hết chuỗi gói tặng liền nhau: gói kế tiếp phải bắt đầu đúng lúc gói trước kết thúc.
+    public static DateTime ChainEnd(
+        DateTime endsAt,
+        IEnumerable<(DateTime StartsAt, DateTime EndsAt)> otherGrantsOfSamePlan)
+    {
+        foreach (var next in otherGrantsOfSamePlan.Where(grant => grant.StartsAt >= endsAt)
+                     .OrderBy(grant => grant.StartsAt).ToArray())
+        {
+            if (next.StartsAt != endsAt)
+            {
+                break;
+            }
+
+            endsAt = next.EndsAt;
+        }
+
+        return endsAt;
+    }
 }
