@@ -173,6 +173,7 @@ builder.Services.AddScoped<IPlanGrantRepository, PlanGrantRepository>();
 builder.Services.AddScoped<IPlanGrantService, PlanGrantService>();
 builder.Services.AddScoped<ITrialProgramRepository, TrialProgramRepository>();
 builder.Services.AddScoped<ITrialProgramService, TrialProgramService>();
+builder.Services.AddScoped<ISignupTrialService, SignupTrialService>();
 builder.Services.AddScoped<ISystemSettingRepository, SystemSettingRepository>();
 builder.Services.AddScoped<ISystemSettingProvider, SystemSettingProvider>();
 builder.Services.AddScoped<IAdminSystemSettingService, AdminSystemSettingService>();

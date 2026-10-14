@@ -274,6 +274,7 @@ public sealed class AuthServicePasswordResetTests
                 new FakeSystemRoleProvider(),
                 new FixedTimeProvider(new DateTimeOffset(Now)),
                 new RecordingNotificationRepository(),
+                new RecordingSignupTrialService(),
                 NullLogger<AuthService>.Instance);
         }
 

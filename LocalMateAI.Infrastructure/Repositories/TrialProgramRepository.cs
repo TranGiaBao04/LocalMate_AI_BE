@@ -19,6 +19,14 @@ public sealed class TrialProgramRepository(AppDbContext dbContext) : ITrialProgr
         ToReadModels(dbContext.TrialPrograms.AsNoTracking().Where(program => program.Id == id))
             .SingleOrDefaultAsync(cancellationToken);
 
+    public Task<TrialProgramReadModel?> GetEnabledForDateAsync(DateOnly date, CancellationToken cancellationToken = default) =>
+        ToReadModels(dbContext.TrialPrograms
+                .AsNoTracking()
+                .Where(program => program.IsEnabled && program.StartsOn <= date && date <= program.EndsOn)
+                .OrderBy(program => program.StartsOn)
+                .ThenBy(program => program.Id))
+            .FirstOrDefaultAsync(cancellationToken);
+
     public Task<bool> HasEnabledOverlapAsync(DateOnly startsOn, DateOnly endsOn, Guid? exceptId,
         CancellationToken cancellationToken = default) =>
         dbContext.TrialPrograms.AnyAsync(

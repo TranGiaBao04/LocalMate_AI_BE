@@ -24,6 +24,30 @@ public sealed class PlanGrantRepository(AppDbContext dbContext) : IPlanGrantRepo
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task<bool> TryAddOnceAsync(PlanGrant grant, DateTime nowUtc, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(grant);
+        ArgumentException.ThrowIfNullOrWhiteSpace(grant.DeduplicationKey);
+
+        var source = grant.Source.ToString();
+
+        // ON CONFLICT thay cho bắt lỗi unique: lỗi unique trong Postgres làm hỏng cả transaction đang mở.
+        var inserted = await dbContext.Database.ExecuteSqlAsync(
+            $"""
+            INSERT INTO "PlanGrants"
+                ("Id", "UserId", "PlanId", "PlanVersionId", "StartsAt", "EndsAt", "Days", "Source", "Reason",
+                 "GrantedByUserId", "TrialProgramId", "DeduplicationKey", "CreatedAt", "UpdatedAt")
+            VALUES
+                ({grant.Id}, {grant.UserId}, {grant.PlanId}, {grant.PlanVersionId}, {grant.StartsAt}, {grant.EndsAt},
+                 {grant.Days}, {source}, {grant.Reason}, CAST({grant.GrantedByUserId} AS uuid),
+                 CAST({grant.TrialProgramId} AS uuid), {grant.DeduplicationKey}, {nowUtc}, {nowUtc})
+            ON CONFLICT ("DeduplicationKey") DO NOTHING
+            """,
+            cancellationToken);
+
+        return inserted == 1;
+    }
+
     public async Task<PlanGrantResponse?> GetAsync(Guid grantId, CancellationToken cancellationToken = default) =>
         (await QueryAsync(grant => grant.Id == grantId, cancellationToken)).SingleOrDefault();
 

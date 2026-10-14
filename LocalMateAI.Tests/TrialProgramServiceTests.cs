@@ -195,6 +195,9 @@ public sealed class TrialProgramServiceTests
         public Task<TrialProgramReadModel?> GetAsync(Guid id, CancellationToken ct = default) =>
             Task.FromResult(Programs.Where(p => p.Id == id).Select(ToReadModel).SingleOrDefault());
 
+        public Task<TrialProgramReadModel?> GetEnabledForDateAsync(DateOnly date, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
         public Task<bool> HasEnabledOverlapAsync(DateOnly startsOn, DateOnly endsOn, Guid? exceptId,
             CancellationToken ct = default)
         {

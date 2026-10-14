@@ -10,6 +10,9 @@ public interface ITrialProgramRepository
 
     Task<TrialProgramReadModel?> GetAsync(Guid id, CancellationToken cancellationToken = default);
 
+    // Chương trình đang bật có khoảng ngày chứa ngày này (tối đa một, vì chương trình đang bật không trùng ngày).
+    Task<TrialProgramReadModel?> GetEnabledForDateAsync(DateOnly date, CancellationToken cancellationToken = default);
+
     // Có chương trình ĐANG BẬT nào khác trùng khoảng ngày này không (tính cả hai đầu).
     Task<bool> HasEnabledOverlapAsync(DateOnly startsOn, DateOnly endsOn, Guid? exceptId,
         CancellationToken cancellationToken = default);

@@ -49,6 +49,16 @@ public static class NotificationBuilder
         null,
         $"plan-grant:{grantId}");
 
+    // Cùng loại và cùng khoá với gói admin tặng; chỉ khác tiêu đề.
+    public static NotificationEntry SignupTrialGranted(Guid userId, Guid grantId, string planName, DateTime endsAtUtc) => new(
+        userId,
+        NotificationTypes.PlanGranted,
+        $"Bạn được dùng thử gói {planName}",
+        $"Gói {planName} có hiệu lực đến {EmailDisplayFormat.VietnamDate(endsAtUtc)}.",
+        NotificationTargetType.Subscription,
+        null,
+        $"plan-grant:{grantId}");
+
     private static NotificationEntry SubscriptionPayment(Guid userId, Guid orderId, string body) => new(
         userId,
         NotificationTypes.SubscriptionPaymentSucceeded,

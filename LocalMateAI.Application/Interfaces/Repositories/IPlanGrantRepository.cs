@@ -11,6 +11,9 @@ public interface IPlanGrantRepository
 
     Task AddAsync(PlanGrant grant, CancellationToken cancellationToken = default);
 
+    // Ghi gói tặng của nguồn tự động theo DeduplicationKey. false = khoá này đã có gói tặng, không ghi thêm.
+    Task<bool> TryAddOnceAsync(PlanGrant grant, DateTime nowUtc, CancellationToken cancellationToken = default);
+
     Task<PlanGrantResponse?> GetAsync(Guid grantId, CancellationToken cancellationToken = default);
 
     // Mới nhất trước.

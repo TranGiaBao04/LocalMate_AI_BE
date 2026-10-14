@@ -212,6 +212,9 @@ public sealed class PlanGrantServiceTests
             return Task.CompletedTask;
         }
 
+        public Task<bool> TryAddOnceAsync(PlanGrant grant, DateTime nowUtc, CancellationToken ct = default) =>
+            throw new NotSupportedException();
+
         public Task<PlanGrantResponse?> GetAsync(Guid grantId, CancellationToken ct = default) =>
             Task.FromResult(fixture.Subscriptions.Grants.Where(g => g.Id == grantId).Select(ToResponse).SingleOrDefault());
 
