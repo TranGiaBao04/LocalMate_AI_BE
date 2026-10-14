@@ -7,7 +7,12 @@ namespace LocalMateAI.Application.Services;
 public sealed record EffectiveSubscription(SubscriptionPlan Plan, SubscriptionPlanVersion Version,
     SubscriptionPeriod? Period, DateTime? PaidThrough)
 {
-    public DateTime? EffectiveUntil => Period is { } period ? SubscriptionPeriodLifecycle.EffectiveEnd(period) : null;
+    // Chỉ có khi quyền lợi đến từ gói tặng: hết chuỗi gói tặng liền nhau của gói này.
+    public DateTime? TrialUntil { get; init; }
+    public bool IsTrial => TrialUntil is not null;
+    public DateTime? EffectiveUntil => Period is { } period ? SubscriptionPeriodLifecycle.EffectiveEnd(period) : TrialUntil;
+    // Lượt tạo lịch chỉ đếm theo kỳ với kỳ đã mua; gói tặng và Free đếm theo tháng (null).
+    public DateTime? GenerateResetAt => Period is { } period ? SubscriptionPeriodLifecycle.EffectiveEnd(period) : null;
 }
 public static class EffectiveSubscriptionResolver
 {
@@ -35,8 +40,28 @@ public static class EffectiveSubscriptionResolver
             }
             candidates.Add(new(plan, version, period, paidThrough));
         }
+        var grants = await repository.GetGrantsAsync(userId, ct);
+        foreach (var grant in grants.Where(g => g.StartsAt <= nowUtc && nowUtc < g.EndsAt))
+        {
+            var plan = await repository.GetPlanAsync(grant.PlanId, ct)
+                ?? throw new InvalidOperationException("Missing grant plan.");
+            var version = await repository.GetVersionAsync(grant.PlanVersionId, ct)
+                ?? throw new InvalidOperationException("Missing granted version.");
+            if (version.PlanId != plan.Id || plan.Code == PlanIdentity.Free)
+                throw new InvalidOperationException("Invalid grant binding.");
+            var trialUntil = grant.EndsAt;
+            foreach (var next in grants.Where(g => g.PlanId == plan.Id && g.Id != grant.Id && g.StartsAt >= trialUntil)
+                         .OrderBy(g => g.StartsAt))
+            {
+                if (next.StartsAt != trialUntil) break;
+                trialUntil = next.EndsAt;
+            }
+            candidates.Add(new(plan, version, null, null) { TrialUntil = trialUntil });
+        }
+        // Cùng một gói thì kỳ đã mua thắng gói tặng.
         if (candidates.Count > 0)
-            return candidates.OrderByDescending(c => c.Plan.EntitlementPriority).First();
+            return candidates.OrderByDescending(c => c.Plan.EntitlementPriority)
+                .ThenBy(c => c.IsTrial).ThenByDescending(c => c.TrialUntil).First();
         var free = await repository.GetPlanByCodeAsync(PlanIdentity.Free, ct)
             ?? throw new InvalidOperationException("Free plan is not configured.");
         var current = free.CurrentVersionId is { } id
