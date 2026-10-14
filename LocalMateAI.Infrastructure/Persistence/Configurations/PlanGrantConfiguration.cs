@@ -49,6 +49,12 @@ public sealed class PlanGrantConfiguration : IEntityTypeConfiguration<PlanGrant>
             .HasForeignKey(grant => grant.GrantedByUserId)
             .OnDelete(DeleteBehavior.SetNull);
 
+        // Index của khoá ngoại này cũng dùng để đếm số người đã nhận của một chương trình.
+        builder.HasOne<TrialProgram>()
+            .WithMany()
+            .HasForeignKey(grant => grant.TrialProgramId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         builder.HasIndex(grant => new { grant.UserId, grant.EndsAt })
             .HasDatabaseName("IX_PlanGrants_UserId_EndsAt");
 

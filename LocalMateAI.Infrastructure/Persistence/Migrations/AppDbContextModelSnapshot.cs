@@ -1286,6 +1286,8 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("GrantedByUserId");
 
+                    b.HasIndex("TrialProgramId");
+
                     b.HasIndex("PlanId", "PlanVersionId");
 
                     b.HasIndex("UserId", "EndsAt")
@@ -1718,6 +1720,55 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
                     b.ToTable("Tags", null, t =>
                         {
                             t.HasCheckConstraint("CK_Tags_Type", "\"Type\" IN ('Interest', 'TravelStyle')");
+                        });
+                });
+
+            modelBuilder.Entity("LocalMateAI.Domain.Entities.TrialProgram", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("EndsOn")
+                        .HasColumnType("date");
+
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<int?>("MaxRecipients")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateOnly>("StartsOn")
+                        .HasColumnType("date");
+
+                    b.Property<int>("TrialDays")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.ToTable("TrialPrograms", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_TrialPrograms_MaxRecipients", "\"MaxRecipients\" IS NULL OR \"MaxRecipients\" > 0");
+
+                            t.HasCheckConstraint("CK_TrialPrograms_Range", "\"StartsOn\" <= \"EndsOn\"");
+
+                            t.HasCheckConstraint("CK_TrialPrograms_TrialDays", "\"TrialDays\" > 0");
                         });
                 });
 
@@ -2283,6 +2334,11 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("LocalMateAI.Domain.Entities.TrialProgram", null)
+                        .WithMany()
+                        .HasForeignKey("TrialProgramId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("LocalMateAI.Domain.Entities.User", null)
                         .WithMany()
                         .HasForeignKey("UserId")
@@ -2410,6 +2466,14 @@ namespace LocalMateAI.Infrastructure.Persistence.Migrations
                     b.HasOne("LocalMateAI.Domain.Entities.User", null)
                         .WithMany()
                         .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+                });
+
+            modelBuilder.Entity("LocalMateAI.Domain.Entities.TrialProgram", b =>
+                {
+                    b.HasOne("LocalMateAI.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
                         .OnDelete(DeleteBehavior.SetNull);
                 });
 
