@@ -1,3 +1,4 @@
+using LocalMateAI.Application.DTOs.Subscription;
 using LocalMateAI.Application.Services;
 using LocalMateAI.Domain.Entities;
 using LocalMateAI.Domain.Enums;
@@ -61,6 +62,47 @@ public sealed class PlanGrantPostgresTests
 
         await Assert.ThrowsAsync<DbUpdateException>(() => c.SaveChangesAsync());
     }
+
+    [Fact]
+    public async Task TwoConcurrentGrants_ForOneUser_ChainInsteadOfOverlapping()
+    {
+        await using var db = await IsolatedPlanDatabase.CreateAsync();
+        Guid userId, adminId, planId;
+        await using (var seed = db.Context())
+        {
+            userId = (await AddUserAsync(seed, "trial@test.local")).Id;
+            adminId = (await AddUserAsync(seed, "admin@test.local")).Id;
+            planId = (await seed.SubscriptionPlans.AsNoTracking().SingleAsync(p => p.Code == "TRIP_PASS")).Id;
+        }
+
+        async Task<PlanGrantResult> GrantAsync(int days)
+        {
+            await using var c = db.Context();
+            return await Service(c).GrantAsync(userId, new GrantPlanRequest(planId, days, "test"), adminId);
+        }
+
+        var results = await Task.WhenAll(GrantAsync(7), GrantAsync(3));
+
+        Assert.All(results, result => Assert.Equal(PlanGrantResultStatus.Success, result.Status));
+        await using var check = db.Context();
+        var grants = await check.PlanGrants.AsNoTracking().OrderBy(g => g.StartsAt).ToListAsync();
+        Assert.Equal(2, grants.Count);
+        Assert.Equal(grants[0].EndsAt, grants[1].StartsAt);
+        Assert.Equal(2, await check.Notifications.CountAsync(n => n.UserId == userId));
+
+        var listed = await Service(check).GetByUserAsync(userId);
+        Assert.Equal(2, listed!.Count);
+        Assert.All(listed, grant =>
+        {
+            Assert.Equal(new PlanGrantPlanResponse("TripPass", "Trip Pass"), grant.Plan);
+            Assert.Equal("Admin", grant.Source);
+            Assert.Equal(new PlanGrantActorResponse(adminId, "admin@test.local"), grant.GrantedBy);
+        });
+        Assert.Null(await Service(check).GetByUserAsync(Guid.NewGuid()));
+    }
+
+    private static PlanGrantService Service(AppDbContext c) => new(new PlanGrantRepository(c),
+        new SubscriptionRepository(c), new TripGenerationQuotaExecutor(c), new NotificationRepository(c), TimeProvider.System);
 
     private static PlanGrant Grant(Guid userId, Guid planId, Guid versionId,
         DateTime? endsAt = null, int days = 7, string? key = null) => new()

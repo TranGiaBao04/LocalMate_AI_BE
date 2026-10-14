@@ -8,6 +8,7 @@ public static class NotificationTypes
     public const string Welcome = "welcome";
     public const string TripFinalized = "trip_finalized";
     public const string SubscriptionPaymentSucceeded = "subscription_payment_succeeded";
+    public const string PlanGranted = "plan_granted";
 }
 
 // Một thông báo cần tạo. DeduplicationKey trùng thì lần tạo sau bị bỏ qua.

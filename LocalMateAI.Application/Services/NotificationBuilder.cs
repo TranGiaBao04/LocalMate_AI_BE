@@ -36,6 +36,19 @@ public static class NotificationBuilder
         SubscriptionPayment(userId, orderId,
             $"Đã nâng cấp lên gói {planName}, có hiệu lực đến {EmailDisplayFormat.VietnamDate(endsAtUtc)}.");
 
+    // startsAtUtc muộn hơn lúc tặng khi gói tặng được xếp nối sau gói đang có.
+    public static NotificationEntry PlanGranted(Guid userId, Guid grantId, string planName,
+        DateTime startsAtUtc, DateTime endsAtUtc, DateTime nowUtc) => new(
+        userId,
+        NotificationTypes.PlanGranted,
+        $"Bạn được tặng gói {planName}",
+        startsAtUtc > nowUtc
+            ? $"Gói {planName} có hiệu lực từ {EmailDisplayFormat.VietnamDate(startsAtUtc)} đến {EmailDisplayFormat.VietnamDate(endsAtUtc)}."
+            : $"Gói {planName} có hiệu lực đến {EmailDisplayFormat.VietnamDate(endsAtUtc)}.",
+        NotificationTargetType.Subscription,
+        null,
+        $"plan-grant:{grantId}");
+
     private static NotificationEntry SubscriptionPayment(Guid userId, Guid orderId, string body) => new(
         userId,
         NotificationTypes.SubscriptionPaymentSucceeded,
