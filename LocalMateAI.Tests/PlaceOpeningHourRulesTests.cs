@@ -99,6 +99,66 @@ public sealed class PlaceOpeningHourRulesTests
         Assert.Equal(["Days[0]"], errors.Keys);
     }
 
+    [Fact]
+    public void Validate_MidnightToMidnight_IsAcceptedAsOpenAllDay()
+    {
+        var (days, errors) = PlaceOpeningHourRules.Validate(new SavePlaceOpeningHoursRequest(
+        [
+            new SavePlaceOpeningHourItem(DayOfWeek.Tuesday, false, TimeOnly.MinValue, TimeOnly.MinValue)
+        ]));
+
+        Assert.Empty(errors);
+        Assert.Equal(
+            new PlaceOpeningHourDto(DayOfWeek.Tuesday, false, TimeOnly.MinValue, TimeOnly.MinValue),
+            Assert.Single(days!));
+    }
+
+    [Theory]
+    [InlineData("24h")]
+    [InlineData("24H")]
+    [InlineData("24/24")]
+    [InlineData("00:00-00:00")]
+    [InlineData("0:00 – 24:00")]
+    [InlineData("Mon-Sun 24h")]
+    public void ParseImportText_OpenAllDay_IsMidnightToMidnightEveryDay(string raw)
+    {
+        var (days, warning) = PlaceOpeningHourRules.ParseImportText(raw);
+
+        Assert.Null(warning);
+        Assert.Equal(7, days.Count);
+        Assert.All(days, day =>
+        {
+            Assert.False(day.IsClosed);
+            Assert.Equal(TimeOnly.MinValue, day.OpenTime);
+            Assert.Equal(TimeOnly.MinValue, day.CloseTime);
+        });
+    }
+
+    [Fact]
+    public void ParseImportText_OpenAllDayOnSomeDays_ClosesTheOthers()
+    {
+        var (days, warning) = PlaceOpeningHourRules.ParseImportText("Mon-Fri 24h");
+
+        Assert.Null(warning);
+        Assert.Equal(
+            [DayOfWeek.Saturday, DayOfWeek.Sunday],
+            days.Where(day => day.IsClosed).Select(day => day.DayOfWeek));
+        Assert.All(days.Where(day => !day.IsClosed), day => Assert.Equal(TimeOnly.MinValue, day.OpenTime));
+    }
+
+    [Fact]
+    public void ParseImportText_CloseAt2400_IsMidnight()
+    {
+        var (days, warning) = PlaceOpeningHourRules.ParseImportText("18:00-24:00");
+
+        Assert.Null(warning);
+        Assert.All(days, day =>
+        {
+            Assert.Equal(new TimeOnly(18, 0), day.OpenTime);
+            Assert.Equal(TimeOnly.MinValue, day.CloseTime);
+        });
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]
@@ -164,6 +224,7 @@ public sealed class PlaceOpeningHourRulesTests
     [InlineData("8h-22h")]
     [InlineData("abc")]
     [InlineData("08:00-08:00")]
+    [InlineData("24:00-08:00")]
     [InlineData("08:00")]
     [InlineData("Thu2-CN 08:00-17:00")]
     [InlineData("Mon-Tue-Wed 08:00-17:00")]

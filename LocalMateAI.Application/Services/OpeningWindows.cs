@@ -48,7 +48,9 @@ public static class OpeningWindows
             var end = dayStart + TripClock.MinuteOfDay(close);
             if (end <= start)
             {
-                end += TripClock.MinutesPerDay; // mở qua nửa đêm
+                // Mở qua nửa đêm; 00:00–00:00 (mở cả ngày) cũng vào đây thành khung đủ 1440 phút
+                // và được Merge nối liền với khung 00:00 của ngày kế tiếp.
+                end += TripClock.MinutesPerDay;
             }
 
             ranges.Add(new MinuteRange(start, end));

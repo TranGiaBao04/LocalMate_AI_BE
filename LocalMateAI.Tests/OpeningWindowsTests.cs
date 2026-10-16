@@ -77,6 +77,45 @@ public sealed class OpeningWindowsTests
     }
 
     [Fact]
+    public void Build_OpenAllDayEveryDay_HasNoGapAtMidnight()
+    {
+        var windows = OpeningWindows.Build(TestOpeningHours.EveryDay(0, 0), Sunday);
+
+        Assert.Equal([new MinuteRange(-1440, 2880)], windows);
+        Assert.True(OpeningWindows.Covers(windows, 1410, 1470)); // 23:30 Chủ nhật → 00:30 thứ Hai
+    }
+
+    [Fact]
+    public void StatusFor_OpenAllDayEveryDay_IsOpenAcrossMidnight()
+    {
+        Assert.Equal(
+            PlaceOpeningStatus.Open,
+            OpeningWindows.StatusFor(TestOpeningHours.EveryDay(0, 0), Sunday, 1410, 1470));
+    }
+
+    [Fact]
+    public void StatusFor_OpenAllDayThenClosedNextDay_IsClosedAcrossMidnight()
+    {
+        // Chủ nhật mở cả ngày, thứ Hai nghỉ: quán đóng lúc 00:00.
+        IReadOnlyList<PlaceOpeningHourDto> week =
+        [
+            new(DayOfWeek.Sunday, false, TimeOnly.MinValue, TimeOnly.MinValue),
+            new(DayOfWeek.Monday, true, null, null)
+        ];
+
+        Assert.Equal(PlaceOpeningStatus.Open, OpeningWindows.StatusFor(week, Sunday, 1380, 1440));
+        Assert.Equal(PlaceOpeningStatus.Closed, OpeningWindows.StatusFor(week, Sunday, 1410, 1470));
+    }
+
+    [Fact]
+    public void StatusFor_OpenAllDayThenNoDataNextDay_IsUnknownAcrossMidnight()
+    {
+        IReadOnlyList<PlaceOpeningHourDto> week = [new(DayOfWeek.Sunday, false, TimeOnly.MinValue, TimeOnly.MinValue)];
+
+        Assert.Equal(PlaceOpeningStatus.Unknown, OpeningWindows.StatusFor(week, Sunday, 1410, 1470));
+    }
+
+    [Fact]
     public void StatusFor_NoData_IsUnknown()
     {
         Assert.Equal(PlaceOpeningStatus.Unknown, OpeningWindows.StatusFor([], Sunday, 600, 660));

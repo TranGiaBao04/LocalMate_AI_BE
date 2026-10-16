@@ -35,9 +35,10 @@ public sealed class PlaceOpeningHour : BaseEntity
             return false;
         }
 
-        if (OpenTime == CloseTime)
+        // 00:00–00:00 = mở cả ngày (24 giờ). Giờ trùng khác dễ là gõ nhầm nên vẫn từ chối.
+        if (OpenTime == CloseTime && OpenTime != TimeOnly.MinValue)
         {
-            error = "Giờ mở và giờ đóng không được bằng nhau.";
+            error = "Giờ mở và giờ đóng không được bằng nhau (mở cả ngày thì nhập 00:00–00:00).";
             return false;
         }
 

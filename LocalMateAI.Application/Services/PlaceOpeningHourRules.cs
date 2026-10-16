@@ -21,6 +21,9 @@ public static class PlaceOpeningHourRules
     private static readonly string[] TimeFormats = ["H:mm", "HH:mm"];
     private static readonly char[] RangeSeparators = ['-', '–', '—'];
 
+    // Cách ghi "mở cả ngày" trong file import, đổi thành 00:00–00:00.
+    private static readonly string[] AllDayTexts = ["24h", "24/24"];
+
     private static readonly Dictionary<string, DayOfWeek> DayNames = new(StringComparer.OrdinalIgnoreCase)
     {
         ["Mon"] = DayOfWeek.Monday,
@@ -100,7 +103,8 @@ public static class PlaceOpeningHourRules
     /// <summary>
     /// Đọc ô "giờ mở cửa" của file import. Trống ⇒ không có giờ, không cảnh báo.
     /// Hiểu "HH:mm-HH:mm" (cả tuần), "Mon-Sun HH:mm-HH:mm" (khoảng thứ, được vòng qua CN, thứ ngoài khoảng = nghỉ),
-    /// "Sat HH:mm-HH:mm" (một thứ). Không đọc được ⇒ không có giờ + Warning, KHÔNG tự điền giờ.
+    /// "Sat HH:mm-HH:mm" (một thứ). Mở cả ngày ghi "24h", "24/24", "00:00-00:00" hoặc "00:00-24:00" (⇒ 00:00–00:00),
+    /// dùng được cả với phần thứ ("Mon-Fri 24h"). Không đọc được ⇒ không có giờ + Warning, KHÔNG tự điền giờ.
     /// </summary>
     public static (IReadOnlyList<PlaceOpeningHourDto> Days, string? Warning) ParseImportText(string? raw)
     {
@@ -163,11 +167,28 @@ public static class PlaceOpeningHourRules
 
     private static bool TryParseTimeRange(string text, out TimeOnly open, out TimeOnly close)
     {
-        open = close = default;
+        open = close = TimeOnly.MinValue;
+        if (AllDayTexts.Contains(text, StringComparer.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
         var range = text.Split(RangeSeparators, StringSplitOptions.TrimEntries);
-        return range.Length == 2
-               && TimeOnly.TryParseExact(range[0], TimeFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out open)
-               && TimeOnly.TryParseExact(range[1], TimeFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out close)
-               && open != close;
+        if (range.Length != 2 || !TryParseTime(range[0], out open))
+        {
+            return false;
+        }
+
+        // "24:00" ở giờ đóng nghĩa là nửa đêm: "18:00-24:00" = 18:00–00:00, "00:00-24:00" = mở cả ngày.
+        if (range[1] != "24:00" && !TryParseTime(range[1], out close))
+        {
+            return false;
+        }
+
+        // Giờ trùng chỉ hợp lệ khi là 00:00–00:00 (mở cả ngày).
+        return open != close || open == TimeOnly.MinValue;
     }
+
+    private static bool TryParseTime(string text, out TimeOnly time) =>
+        TimeOnly.TryParseExact(text, TimeFormats, CultureInfo.InvariantCulture, DateTimeStyles.None, out time);
 }
