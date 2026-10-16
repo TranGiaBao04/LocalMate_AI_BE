@@ -56,13 +56,15 @@ public sealed class TripFeasibilityService(
         // Chưa chấm điểm theo tag nên xếp theo khoảng cách tới ga cột mốc: đúng thứ tự của generate khi user
         // không chọn tag (mọi điểm 0,5, hoà thì gần ga cột mốc trước). Có chọn tag thì số chặng chỉ gần đúng.
         var planning = await TripPlanningSettings.LoadAsync(settings, cancellationToken);
+        var inputs = filtered.Passed
+            .OrderBy(candidate => CandidateRanking.DistanceToAnchorKm(candidate, origin.AnchorStation))
+            .ThenBy(candidate => candidate.PlaceId)
+            .Select(candidate => ItineraryScheduler.ToScheduleInput(candidate, planning, origin.PlannedDate))
+            .ToList();
+        var startTime = request.StartTime ?? ItineraryScheduler.DefaultStartTime;
         var planned = ItineraryScheduler.Schedule(
-            filtered.Passed
-                .OrderBy(candidate => CandidateRanking.DistanceToAnchorKm(candidate, origin.AnchorStation))
-                .ThenBy(candidate => candidate.PlaceId)
-                .Select(candidate => ItineraryScheduler.ToScheduleInput(candidate, planning))
-                .ToList(),
-            request.StartTime ?? ItineraryScheduler.DefaultStartTime,
+            inputs,
+            startTime,
             request.DurationHours,
             request.TravelMode,
             request.BudgetMax,
@@ -71,12 +73,15 @@ public sealed class TripFeasibilityService(
 
         var isFeasible = planned.Count >= 1;
 
-        // Không có ứng viên nào trong ngân sách = thiếu địa điểm; có ứng viên mà không chặng nào vừa = thiếu giờ.
+        // Không có ứng viên nào trong ngân sách = thiếu địa điểm; có ứng viên mà không xếp được chặng nào thì
+        // phân biệt vướng giờ mở cửa với thiếu thời gian.
         var reason = isFeasible
             ? null
             : filtered.Passed.Count == 0
                 ? TripInsufficiencyReasons.InsufficientCandidates
-                : TripInsufficiencyReasons.DurationTooShort;
+                : ItineraryScheduler.ExplainEmptySchedule(
+                    inputs, startTime, request.DurationHours, request.TravelMode, request.BudgetMax,
+                    origin.ToScheduleOrigin(), planning);
 
         // Chỉ gợi ý ga khác khi vấn đề là thiếu địa điểm; thiếu giờ thì đổi ga không giúp gì.
         var suggestedStations = reason == TripInsufficiencyReasons.InsufficientCandidates

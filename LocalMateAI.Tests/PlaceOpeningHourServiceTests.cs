@@ -76,6 +76,10 @@ public sealed class PlaceOpeningHourServiceTests
         public List<PlaceOpeningHourDto> Stored { get; } = [];
         public int ReplaceCalls { get; private set; }
 
+        public Task<IReadOnlyDictionary<Guid, IReadOnlyList<PlaceOpeningHourDto>>> GetForPlacesAsync(
+            IReadOnlyCollection<Guid> placeIds, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         public Task<IReadOnlyList<PlaceOpeningHourDto>?> GetByPlaceAsync(
             Guid placeId, CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<PlaceOpeningHourDto>?>(placeExists ? Stored : null);

@@ -13,6 +13,7 @@ namespace LocalMateAI.Application.DTOs.Trips;
 /// <param name="DestinationStationId">Chỉ có khi người dùng chọn ga muốn chơi.</param>
 /// <param name="ServiceAreaFailure">Null = trong vùng phục vụ. Khác null: TripInsufficiencyReasons.OutOfServiceArea
 /// (toạ độ ngoài TP.HCM) hoặc TooFarFromStationForMetro (đi Metro mà cách ga lên quá xa).</param>
+/// <param name="PlannedDate">Ngày đi thực dùng (bỏ trống = hôm nay giờ Việt Nam): chọn lịch tàu và giờ mở cửa theo thứ.</param>
 /// <param name="MetroBoarding">Thông tin lên tàu và lịch tàu của ngày đi; chỉ có khi phương tiện là Metro.</param>
 public sealed record TripOriginResolution(
     double StartLatitude,
@@ -22,6 +23,7 @@ public sealed record TripOriginResolution(
     Guid? StartStationId,
     Guid? DestinationStationId,
     string? ServiceAreaFailure,
+    DateOnly PlannedDate,
     MetroBoarding? MetroBoarding = null)
 {
     public bool IsWithinServiceArea => ServiceAreaFailure is null;

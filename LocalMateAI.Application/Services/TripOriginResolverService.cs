@@ -95,11 +95,13 @@ public sealed class TripOriginResolverService(
             return null;
         }
 
+        // Ngày đi dùng cho lịch tàu và giờ mở cửa theo thứ; bỏ trống ngày = hôm nay giờ Việt Nam.
+        var plannedDate = request.PlannedDate ?? DateOnly.FromDateTime(VietnamTime.Now(timeProvider));
+
         MetroBoarding? metroBoarding = null;
         if (travelsByMetro)
         {
-            // Lịch tàu theo ngày đi (thứ trong tuần quyết định giờ chuyến cuối); bỏ trống ngày = hôm nay giờ Việt Nam.
-            var plannedDate = request.PlannedDate ?? DateOnly.FromDateTime(VietnamTime.Now(timeProvider));
+            // Lịch tàu theo ngày đi (thứ trong tuần quyết định giờ chuyến cuối).
             metroBoarding = new MetroBoarding(
                 boardingStationSummary.Order,
                 boardingStation.DistanceMeters,
@@ -115,6 +117,7 @@ public sealed class TripOriginResolverService(
             startStation?.Id,
             destinationStation?.Id,
             serviceAreaFailure,
+            plannedDate,
             metroBoarding);
     }
 }

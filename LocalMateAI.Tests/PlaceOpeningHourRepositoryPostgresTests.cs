@@ -45,6 +45,29 @@ public sealed class PlaceOpeningHourRepositoryPostgresTests
     }
 
     [Fact]
+    public async Task GetForPlaces_GroupsRowsByPlace_AndSkipsPlacesWithoutRows()
+    {
+        await using var db = await IsolatedPlanDatabase.CreateAsync();
+        await using var c = db.Context();
+        var withHours = NewPlace("Quán có giờ");
+        var withoutHours = NewPlace("Quán chưa có giờ");
+        var notAsked = NewPlace("Quán không hỏi");
+        c.Places.AddRange(withHours, withoutHours, notAsked);
+        await c.SaveChangesAsync();
+        c.ChangeTracker.Clear();
+
+        var repository = new PlaceOpeningHourRepository(c);
+        await repository.ReplaceAsync(withHours.Id, TestOpeningHours.EveryDay(8, 17));
+        await repository.ReplaceAsync(notAsked.Id, TestOpeningHours.ClosedEveryDay());
+
+        var hours = await repository.GetForPlacesAsync([withHours.Id, withoutHours.Id]);
+
+        Assert.Equal([withHours.Id], hours.Keys);
+        Assert.Equal(7, hours[withHours.Id].Count);
+        Assert.Empty(await repository.GetForPlacesAsync([]));
+    }
+
+    [Fact]
     public async Task MissingOrSoftDeletedPlace_IsNotFound_AndNothingIsWritten()
     {
         await using var db = await IsolatedPlanDatabase.CreateAsync();

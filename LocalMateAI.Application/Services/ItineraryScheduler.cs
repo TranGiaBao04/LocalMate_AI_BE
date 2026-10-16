@@ -6,13 +6,15 @@ namespace LocalMateAI.Application.Services;
 
 /// <param name="StationOrder">Ga mà địa điểm thuộc về; chỉ cần cho chế độ Metro (null = không đi tàu tới đây được).</param>
 /// <param name="DistanceFromStationMeters">Đường chim bay từ địa điểm tới ga đó, để tính đoạn đi bộ ga ↔ địa điểm.</param>
+/// <param name="OpenWindows">Khung mở cửa quanh ngày đi; null = không ràng buộc (lịch mẫu, tính lại giờ, test cũ).</param>
 public sealed record ScheduleInput(
     double Latitude,
     double Longitude,
     int DurationMinutes,
     decimal Cost = 0,
     int? StationOrder = null,
-    double DistanceFromStationMeters = 0);
+    double DistanceFromStationMeters = 0,
+    IReadOnlyList<MinuteRange>? OpenWindows = null);
 
 /// <param name="SourceIndex">Vị trí của chặng này trong danh sách đầu vào (vì Schedule có thể đổi thứ tự).</param>
 public sealed record ScheduledSlot(int SourceIndex, TimeOnly ScheduledTime, int DurationMinutes);
@@ -55,9 +57,12 @@ public static class ItineraryScheduler
         };
     }
 
-    public static ScheduleInput ToScheduleInput(PlaceCandidateDto candidate, TripPlanningSettings? settings = null) =>
+    // Chỉ dựng khung mở cửa khi ứng viên đã nạp giờ mở cửa và biết ngày đi.
+    public static ScheduleInput ToScheduleInput(
+        PlaceCandidateDto candidate, TripPlanningSettings? settings = null, DateOnly? plannedDate = null) =>
         new(candidate.Latitude, candidate.Longitude, VisitMinutesFor(candidate.Category, settings),
-            candidate.EstimatedCostMax, candidate.StationOrder, candidate.DistanceFromStationMeters);
+            candidate.EstimatedCostMax, candidate.StationOrder, candidate.DistanceFromStationMeters,
+            candidate.OpeningHours is { } hours && plannedDate is { } date ? OpeningWindows.Build(hours, date) : null);
 
     /// <summary>
     /// Chọn và xếp giờ: duyệt theo thứ hạng, thêm địa điểm nếu tổng thời lượng (gồm đoạn đi từ điểm xuất phát tới
@@ -90,7 +95,8 @@ public static class ItineraryScheduler
 
             var trial = selected.Append(candidate).Select(index => rankedStops[index]).ToList();
             var (trialOrder, trialOffsets) = Arrange(trial, startTime, mode, origin, resolved);
-            if (trialOffsets[^1] + trial[trialOrder[^1]].DurationMinutes > limitMinutes)
+            if (trialOffsets[^1] + trial[trialOrder[^1]].DurationMinutes > limitMinutes
+                || !EveryStopIsOpen(trial, trialOrder, trialOffsets, TripClock.MinuteOfDay(startTime)))
             {
                 continue;
             }
@@ -114,6 +120,23 @@ public static class ItineraryScheduler
                 chosen[chosenIndex].DurationMinutes))
             .ToList();
     }
+
+    /// <summary>
+    /// Không xếp được chặng nào (dù có ứng viên trong ngân sách): xếp lại khi bỏ qua giờ mở cửa.
+    /// Xếp được ⇒ vướng giờ mở cửa (NoPlacesOpen); vẫn không ⇒ thiếu thời gian (DurationTooShort).
+    /// </summary>
+    public static string ExplainEmptySchedule(
+        IReadOnlyList<ScheduleInput> inputs,
+        TimeOnly startTime,
+        int durationHours,
+        TravelMode mode,
+        decimal budgetMax,
+        ScheduleOrigin? origin,
+        TripPlanningSettings? settings = null) =>
+        Schedule(inputs.Select(input => input with { OpenWindows = null }).ToList(),
+                startTime, durationHours, mode, budgetMax, origin, settings).Count > 0
+            ? TripInsufficiencyReasons.NoPlacesOpen
+            : TripInsufficiencyReasons.DurationTooShort;
 
     /// <summary>Dùng khi sửa lịch (xoá chặng...): giữ nguyên thứ tự và thời lượng, chỉ tính lại giờ.</summary>
     /// <param name="metroTimetable">Lịch tàu cho trip Metro khi không có origin (tính lại giờ từ chặng đầu còn lại).
@@ -194,6 +217,14 @@ public static class ItineraryScheduler
 
         return offsets;
     }
+
+    // Thêm một chặng có thể đổi thứ tự đi của cả lịch, nên kiểm tra lại mọi chặng.
+    private static bool EveryStopIsOpen(
+        IReadOnlyList<ScheduleInput> stops, IReadOnlyList<int> order, IReadOnlyList<int> offsets, int startMinuteOfDay) =>
+        order
+            .Select((stopIndex, position) => (Stop: stops[stopIndex], Start: startMinuteOfDay + offsets[position]))
+            .All(visit => visit.Stop.OpenWindows is not { } windows
+                          || OpeningWindows.Covers(windows, visit.Start, visit.Start + visit.Stop.DurationMinutes));
 
     // Chế độ Metro: đi hết các chặng của một ga rồi mới sang ga khác, để không lên xuống tàu qua lại.
     // Ga cách ga lên ít ga hơn đi trước (bằng nhau thì ga có thứ tự nhỏ hơn); chặng không rõ ga xếp cuối.

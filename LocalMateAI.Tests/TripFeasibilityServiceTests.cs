@@ -64,6 +64,19 @@ public sealed class TripFeasibilityServiceTests
     }
 
     [Fact]
+    public async Task Check_OnlyCandidateClosedAtThatTime_ReportsNoPlacesOpen()
+    {
+        var fixture = new Fixture(
+            [Place("A", AnchorStationId, 100) with { OpeningHours = TestOpeningHours.EveryDay(18, 23) }]);
+
+        var response = (await fixture.Service.CheckFeasibilityAsync(Request())).Response!;
+
+        Assert.False(response.IsFeasible);
+        Assert.Equal(TripInsufficiencyReasons.NoPlacesOpen, response.Reason);
+        Assert.Empty(response.SuggestedStations);
+    }
+
+    [Fact]
     public async Task Check_OnlyCandidateLongerThanDuration_IsNotFeasible()
     {
         // Một địa điểm Culture (90 phút) mà chỉ rảnh 1 giờ.

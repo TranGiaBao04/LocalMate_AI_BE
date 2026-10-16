@@ -16,4 +16,7 @@ public static class TripInsufficiencyReasons
 
     /// <summary>Có địa điểm nhưng không chặng nào vừa số giờ rảnh (tính cả đoạn đi tới chặng đầu).</summary>
     public const string DurationTooShort = "DurationTooShort";
+
+    /// <summary>Có địa điểm vừa thời gian và ngân sách nhưng không nơi nào mở cửa vào giờ đó.</summary>
+    public const string NoPlacesOpen = "NoPlacesOpen";
 }

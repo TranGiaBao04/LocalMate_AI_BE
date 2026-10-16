@@ -54,7 +54,7 @@ public sealed class HeuristicFallbackEngine(
         var planning = await TripPlanningSettings.LoadAsync(settings, cancellationToken);
         var stops = FallbackItineraryBuilder.BuildStops(
             matched.Candidates, request.DurationHours, request.BudgetMax, request.TravelMode,
-            request.StartTime, origin.ToScheduleOrigin(), planning);
+            request.StartTime, origin.ToScheduleOrigin(), planning, origin.PlannedDate);
 
         return new FallbackItineraryResult(
             FallbackItineraryStatus.Success,

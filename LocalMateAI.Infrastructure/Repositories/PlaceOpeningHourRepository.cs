@@ -27,6 +27,32 @@ public sealed class PlaceOpeningHourRepository(AppDbContext dbContext) : IPlaceO
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyDictionary<Guid, IReadOnlyList<PlaceOpeningHourDto>>> GetForPlacesAsync(
+        IReadOnlyCollection<Guid> placeIds,
+        CancellationToken cancellationToken = default)
+    {
+        if (placeIds.Count == 0)
+        {
+            return new Dictionary<Guid, IReadOnlyList<PlaceOpeningHourDto>>();
+        }
+
+        var rows = await dbContext.PlaceOpeningHours
+            .AsNoTracking()
+            .Where(hour => placeIds.Contains(hour.PlaceId))
+            .Select(hour => new
+            {
+                hour.PlaceId,
+                Day = new PlaceOpeningHourDto(hour.DayOfWeek, hour.IsClosed, hour.OpenTime, hour.CloseTime)
+            })
+            .ToListAsync(cancellationToken);
+
+        return rows
+            .GroupBy(row => row.PlaceId)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<PlaceOpeningHourDto>)group.Select(row => row.Day).ToList());
+    }
+
     public async Task<bool> ReplaceAsync(
         Guid placeId,
         IReadOnlyList<PlaceOpeningHourDto> days,

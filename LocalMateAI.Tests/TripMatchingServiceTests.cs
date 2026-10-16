@@ -114,6 +114,37 @@ public sealed class TripMatchingServiceTests
     }
 
     [Fact]
+    public async Task Match_EveryPlaceClosedAtThatTime_ReportsNoPlacesOpen()
+    {
+        // Lịch 08:00 (mặc định) mà quán chỉ mở 18:00–23:00, quán còn lại nghỉ cả tuần.
+        var fixture = new Fixture(TestTripOrigins.At(NhaHat),
+        [
+            Place("Quán tối", NhaHat, 100) with { OpeningHours = TestOpeningHours.EveryDay(18, 23) },
+            Place("Quán nghỉ", NhaHat, 200) with { OpeningHours = TestOpeningHours.ClosedEveryDay() }
+        ]);
+
+        var response = (await fixture.Service.MatchAsync(Request())).Response!;
+
+        Assert.False(response.IsSufficient);
+        Assert.Equal(TripInsufficiencyReasons.NoPlacesOpen, response.InsufficiencyReason);
+    }
+
+    [Fact]
+    public async Task Match_OpenAndClosedPlaces_KeepsOnlyTheOpenOne()
+    {
+        var open = Place("Quán sáng", NhaHat, 200) with { OpeningHours = TestOpeningHours.EveryDay(7, 12) };
+        var fixture = new Fixture(TestTripOrigins.At(NhaHat),
+        [
+            Place("Quán tối", NhaHat, 100) with { OpeningHours = TestOpeningHours.EveryDay(18, 23) },
+            open
+        ]);
+
+        var response = (await fixture.Service.MatchAsync(Request())).Response!;
+
+        Assert.Equal(open.PlaceId, Assert.Single(response.Candidates).Candidate.PlaceId);
+    }
+
+    [Fact]
     public async Task Match_StartTooFarForFreeTime_ReportsDurationTooShort_UsingResolvedStartCoordinates()
     {
         // Xuất phát từ ga Đại học Quốc gia (request không có toạ độ), đi bộ xuống khu Nhà hát trong 2 giờ: không kịp.

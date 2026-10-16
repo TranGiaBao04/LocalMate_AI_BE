@@ -143,6 +143,11 @@ public sealed class TripsController(
                     StatusCodes.Status409Conflict,
                     "The available time is too short to reach and visit any place.",
                     "duration_too_short")),
+            GenerateTripResultStatus.NoPlaces when result.Reason == TripInsufficiencyReasons.NoPlacesOpen =>
+                Conflict(CreateProblem(
+                    StatusCodes.Status409Conflict,
+                    "No place is open at the planned time.",
+                    "no_places_open")),
             GenerateTripResultStatus.NoPlaces =>
                 Conflict(CreateInsufficientCandidatesProblem(result)),
             _ => throw new InvalidOperationException("Unsupported generate trip result status.")
