@@ -143,6 +143,13 @@ public sealed class TripsController(
                     StatusCodes.Status409Conflict,
                     "The available time is too short to reach and visit any place.",
                     "duration_too_short")),
+            GenerateTripResultStatus.NoPlaces when result.Reason == TripInsufficiencyReasons.NoPlacesOpen =>
+                Conflict(CreateProblem(
+                    StatusCodes.Status409Conflict,
+                    "No place is open at the planned time.",
+                    "no_places_open")),
+            GenerateTripResultStatus.NoPlaces when result.Reason == TripInsufficiencyReasons.MetroNotRunning =>
+                Conflict(CreateMetroNotRunningProblem(result)),
             GenerateTripResultStatus.NoPlaces =>
                 Conflict(CreateInsufficientCandidatesProblem(result)),
             _ => throw new InvalidOperationException("Unsupported generate trip result status.")
@@ -421,11 +428,11 @@ public sealed class TripsController(
                     StatusCodes.Status404NotFound,
                     "New place was not found or is not active.",
                     "place_not_found")),
-            ReplaceItineraryItemResultStatus.CrossesMidnight =>
+            ReplaceItineraryItemResultStatus.TooLong =>
                 Conflict(CreateProblem(
                     StatusCodes.Status409Conflict,
-                    "Replacing this place would push the itinerary past midnight.",
-                    "replacement_crosses_midnight")),
+                    "Replacing this place would make the itinerary longer than 24 hours.",
+                    "replacement_too_long")),
             _ => throw new InvalidOperationException("Unsupported replace itinerary item result status.")
         };
     }
@@ -658,6 +665,18 @@ public sealed class TripsController(
         };
 
         problem.Extensions["code"] = code;
+        return problem;
+    }
+
+    private ProblemDetails CreateMetroNotRunningProblem(GenerateTripResult result)
+    {
+        var problem = CreateProblem(
+            StatusCodes.Status409Conflict,
+            "The Metro is not running at the start time; choose walking, motorbike or auto.",
+            "metro_not_running");
+
+        // Giờ chuyến đầu/cuối ở ga lên để FE ghi câu cụ thể (null khi ngày đó không có chuyến nào).
+        problem.Extensions["metroServiceHours"] = result.MetroServiceHours;
         return problem;
     }
 

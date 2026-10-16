@@ -58,6 +58,60 @@ public sealed class TripOriginResolverServiceTests
         Assert.Equal(expectedFailure, origin!.ServiceAreaFailure);
     }
 
+    [Theory]
+    [InlineData(TravelMode.Metro, 23, 30, TripInsufficiencyReasons.MetroNotRunning)] // thứ Bảy, chuyến cuối 23:00
+    [InlineData(TravelMode.Metro, 22, 30, null)]
+    [InlineData(TravelMode.Metro, 3, 0, TripInsufficiencyReasons.MetroNotRunning)]   // chuyến đầu 05:00
+    [InlineData(TravelMode.Motorbike, 23, 30, null)]
+    public async Task Metro_StartTimeMustHaveATrainRunning(TravelMode mode, int hour, int minute, string? expected)
+    {
+        var geo = new FakeGeoService(Nearest(BenThanh, 300));
+
+        var origin = await Resolver(geo).ResolveAsync(Request(
+            10.7721, 106.6980, travelMode: mode, plannedDate: new DateOnly(2026, 9, 26), startTime: new TimeOnly(hour, minute)));
+
+        Assert.Equal(expected, origin!.ServiceAreaFailure);
+    }
+
+    [Fact]
+    public async Task Metro_NotRunning_ReturnsTheServiceHoursOfTheBoardingStation()
+    {
+        var geo = new FakeGeoService(Nearest(BenThanh, 300));
+
+        var notRunning = await Resolver(geo).ResolveAsync(Request(
+            10.7721, 106.6980, travelMode: TravelMode.Metro, plannedDate: new DateOnly(2026, 9, 26),
+            startTime: new TimeOnly(23, 30))); // thứ Bảy
+        var running = await Resolver(geo).ResolveAsync(Request(
+            10.7721, 106.6980, travelMode: TravelMode.Metro, plannedDate: new DateOnly(2026, 9, 26),
+            startTime: new TimeOnly(9, 0)));
+
+        Assert.Equal(
+            new MetroServiceHoursDto(1, "Bến Thành", new TimeOnly(5, 0), new TimeOnly(23, 0)),
+            notRunning!.MetroServiceHours);
+        Assert.Null(running!.MetroServiceHours);
+    }
+
+    [Fact]
+    public async Task Metro_FromStationAtNight_IsNotRunning()
+    {
+        var origin = await Resolver(new FakeGeoService(null)).ResolveAsync(Request(
+            startStationOrder: 2, travelMode: TravelMode.Metro, plannedDate: new DateOnly(2026, 9, 28),
+            startTime: new TimeOnly(23, 30))); // thứ Hai, chuyến cuối 22:00
+
+        Assert.Equal(TripInsufficiencyReasons.MetroNotRunning, origin!.ServiceAreaFailure);
+    }
+
+    [Fact]
+    public async Task Metro_TooFarFromStation_KeepsThatReasonEvenAtNight()
+    {
+        var geo = new FakeGeoService(Nearest(BenThanh, 12_001));
+
+        var origin = await Resolver(geo).ResolveAsync(Request(
+            10.6879, 106.5938, travelMode: TravelMode.Metro, startTime: new TimeOnly(23, 30)));
+
+        Assert.Equal(TripInsufficiencyReasons.TooFarFromStationForMetro, origin!.ServiceAreaFailure);
+    }
+
     [Fact]
     public async Task Metro_DistanceLimitFollowsAdminSetting()
     {
@@ -208,8 +262,9 @@ public sealed class TripOriginResolverServiceTests
         int? startStationOrder = null,
         int? destinationStationOrder = null,
         TravelMode travelMode = TravelMode.Auto,
-        DateOnly? plannedDate = null) =>
-        new(latitude, longitude, 4, 0m, 500_000m, [], travelMode, plannedDate,
+        DateOnly? plannedDate = null,
+        TimeOnly? startTime = null) =>
+        new(latitude, longitude, 4, 0m, 500_000m, [], travelMode, plannedDate, StartTime: startTime,
             StartStationOrder: startStationOrder, DestinationStationOrder: destinationStationOrder);
 
     private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider

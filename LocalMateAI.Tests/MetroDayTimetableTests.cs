@@ -47,6 +47,72 @@ public sealed class MetroDayTimetableTests
         Assert.NotNull(Saturday.NextRide(13, 2, Minute(22, 3)));
     }
 
+    [Fact]
+    public void NextRide_AfterMidnight_UsesTheNextDayTimetable()
+    {
+        // Thứ 4 + 1440 phút = 05:30 thứ 5: chuyến 05:30 rời Suối Tiên qua ga 13 lúc 05:32.
+        Assert.Equal(
+            new MetroRide(WaitMinutes: 2, RideMinutes: 22, StopCount: 11),
+            Wednesday.NextRide(13, 2, 1440 + Minute(5, 30)));
+    }
+
+    [Fact]
+    public void NextRide_NoTrainWithinTheMaxWait_ReturnsNull()
+    {
+        // 00:30 (sau nửa đêm thứ 4): chuyến đầu thứ 5 qua ga 13 lúc 05:02, phải chờ quá 60 phút.
+        Assert.Null(Wednesday.NextRide(13, 2, 1440 + Minute(0, 30)));
+
+        // Chuyến đầu qua ga 13 lúc 05:02: có mặt 04:02 chờ đúng 60 phút thì được, 04:01 thì không.
+        Assert.Equal(60, Wednesday.NextRide(13, 2, Minute(4, 2))!.WaitMinutes);
+        Assert.Null(Wednesday.NextRide(13, 2, Minute(4, 1)));
+    }
+
+    [Theory]
+    [InlineData(4, 0, true)]   // chuyến đầu 05:00 rời Bến Thành trong vòng 60 phút
+    [InlineData(3, 59, false)] // còn 61 phút
+    [InlineData(12, 0, true)]
+    [InlineData(22, 0, true)]  // chuyến cuối thứ 4 rời Bến Thành 22:00
+    [InlineData(22, 1, false)]
+    public void IsRunningAt_WednesdayAtBenThanh(int hour, int minute, bool expected)
+    {
+        Assert.Equal(expected, Wednesday.IsRunningAt(1, Minute(hour, minute)));
+    }
+
+    [Fact]
+    public void IsRunningAt_IgnoresTrainsThatEndAtThisStation()
+    {
+        // 22:20 thứ 4: chuyến cuối từ Suối Tiên (22:00) tới Bến Thành lúc 22:26 nhưng không chạy tiếp từ Bến Thành.
+        Assert.False(Wednesday.IsRunningAt(1, Minute(22, 20)));
+
+        // Ga 2 vẫn còn chuyến về Bến Thành (22:24).
+        Assert.True(Wednesday.IsRunningAt(2, Minute(22, 20)));
+    }
+
+    [Fact]
+    public void ServiceHoursAt_TerminusOnlyCountsTheDirectionThatLeavesIt()
+    {
+        // Ga 1: chỉ chiều đi Suối Tiên rời ga, 05:00–22:00 (thứ 4).
+        Assert.Equal((Minute(5, 0), Minute(22, 0)), Wednesday.ServiceHoursAt(1));
+        Assert.Equal((Minute(5, 0), Minute(23, 0)), Saturday.ServiceHoursAt(1));
+    }
+
+    [Fact]
+    public void ServiceHoursAt_MiddleStationCombinesBothDirections()
+    {
+        // Ga 2: chuyến đầu 05:02 (đi Suối Tiên), chuyến cuối 22:24 (về Bến Thành, rời Suối Tiên 22:00 + 24 phút).
+        Assert.Equal((Minute(5, 2), Minute(22, 24)), Wednesday.ServiceHoursAt(2));
+    }
+
+    [Fact]
+    public void ServiceHoursAt_UnknownStation_IsNull() => Assert.Null(Wednesday.ServiceHoursAt(99));
+
+    [Fact]
+    public void IsRunningAt_FollowsTheWeekday()
+    {
+        Assert.False(Wednesday.IsRunningAt(1, Minute(22, 30)));
+        Assert.True(Saturday.IsRunningAt(1, Minute(22, 30)));
+    }
+
     [Theory]
     [InlineData(5, 5)]
     [InlineData(0, 3)]

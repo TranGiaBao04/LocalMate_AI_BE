@@ -66,11 +66,30 @@ public sealed class MetroClusterMatchingServiceTests
         Assert.Null(places.LastRadius);
     }
 
+    [Fact]
+    public async Task AttachesOpeningHours_EmptyWhenThePlaceHasNone()
+    {
+        var places = new FakePlaceRepository();
+        var hours = new FakePlaceOpeningHourRepository();
+        var withoutHours = await CreateService(places, new FakeSystemSettingProvider(), hours)
+            .GetCandidatesAsync(StationId(3));
+        Assert.All(withoutHours, candidate => Assert.Empty(candidate.OpeningHours!));
+
+        // Mỗi lần gọi repository giả sinh PlaceId mới nên gắn giờ theo đúng PlaceId của lần gọi thứ hai.
+        places.FixedPlaceIds = withoutHours.Select(candidate => candidate.PlaceId).ToList();
+        hours.Hours[withoutHours[0].PlaceId] = TestOpeningHours.EveryDay(8, 17);
+        var candidates = await CreateService(places, new FakeSystemSettingProvider(), hours)
+            .GetCandidatesAsync(StationId(3));
+
+        Assert.Equal(7, candidates.Single(c => c.PlaceId == withoutHours[0].PlaceId).OpeningHours!.Count);
+        Assert.All(candidates.Where(c => c.PlaceId != withoutHours[0].PlaceId), c => Assert.Empty(c.OpeningHours!));
+    }
+
     private static Guid StationId(int order) => Stations.Single(station => station.Order == order).Id;
 
     private static MetroClusterMatchingService CreateService(FakePlaceRepository places,
-        FakeSystemSettingProvider settings) =>
-        new(places, new FakeStationRepository(), settings);
+        FakeSystemSettingProvider settings, FakePlaceOpeningHourRepository? hours = null) =>
+        new(places, new FakeStationRepository(), settings, hours ?? new FakePlaceOpeningHourRepository());
 
     private sealed class FakeStationRepository : IMetroStationRepository
     {
@@ -94,17 +113,25 @@ public sealed class MetroClusterMatchingServiceTests
 
         public double? LastRadius { get; private set; }
 
+        // Đặt sẵn PlaceId theo thứ tự ga (ga 2, 3, 4 khi gọi ga 3 với cửa sổ ±1); null = sinh mới mỗi lần.
+        public IReadOnlyList<Guid>? FixedPlaceIds { get; set; }
+
         public Task<IReadOnlyList<MetroClusterPlaceReadModel>> GetMetroClusterPlacesAsync(double radiusMeters,
             CancellationToken cancellationToken = default)
         {
             LastRadius = radiusMeters;
             IReadOnlyList<MetroClusterPlaceReadModel> rows = Stations
                 .Select(station => new MetroClusterPlaceReadModel(station.Id, station.Name, station.Order, 10.77,
-                    106.70, Guid.NewGuid(), $"Địa điểm {station.Order}", "Địa chỉ", 10.77, 106.70, "Cafe", 0, 50_000,
-                    null, 100))
+                    106.70, PlaceIdFor(station.Order), $"Địa điểm {station.Order}", "Địa chỉ", 10.77, 106.70, "Cafe", 0,
+                    50_000, null, 100))
                 .ToList();
             return Task.FromResult(rows);
         }
+
+        private Guid PlaceIdFor(int stationOrder) =>
+            FixedPlaceIds is { } ids && stationOrder >= 2 && stationOrder - 2 < ids.Count
+                ? ids[stationOrder - 2]
+                : Guid.NewGuid();
 
         public Task<Point?> GetLocationAsync(Guid placeId, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();

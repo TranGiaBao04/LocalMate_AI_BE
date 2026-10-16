@@ -1,5 +1,6 @@
 using LocalMateAI.Application.DTOs.Trips;
 using LocalMateAI.Application.Interfaces.Repositories;
+using LocalMateAI.Application.Services;
 using LocalMateAI.Domain.Enums;
 using LocalMateAI.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -36,20 +37,39 @@ public sealed class ItineraryItemRepository(AppDbContext dbContext) : IItinerary
             return null;
         }
 
-        var tripPlaceIds = await dbContext.ItineraryItems
+        var stops = await dbContext.ItineraryItems
             .AsNoTracking()
             .Where(candidate => candidate.TripId == tripId)
-            .Select(candidate => candidate.PlaceId)
+            .OrderBy(candidate => candidate.OrderIndex)
+            .Select(candidate => new
+            {
+                candidate.Id,
+                candidate.PlaceId,
+                candidate.ScheduledTime,
+                candidate.EstimatedDurationMinutes,
+                candidate.EstimatedBudget
+            })
             .ToListAsync(cancellationToken);
+
+        // Phút bắt đầu của từng chặng tính từ 00:00 ngày đi (chặng sau nửa đêm ≥ 1440).
+        var startMinutes = TripClock.StartMinutes(
+            item.PlannedStartAt is { } leave ? TimeOnly.FromDateTime(leave) : null,
+            stops
+                .Select(stop => new TripStopSnapshot(
+                    stop.ScheduledTime, stop.EstimatedDurationMinutes, stop.EstimatedBudget))
+                .ToList());
+        var position = stops.FindIndex(stop => stop.Id == item.Id);
 
         return new OwnedItemAlternativesReadModel(
             item.Id,
             item.TripId,
             item.Status,
             item.PlaceId,
-            tripPlaceIds,
+            stops.Select(stop => stop.PlaceId).ToList(),
             item.PlannedStartAt,
-            item.DurationHours);
+            item.DurationHours,
+            startMinutes[position],
+            stops[position].EstimatedDurationMinutes);
     }
 
     public async Task<ReplaceItemPersistenceResult> ReplaceItemPlaceAndRecalculateTimelineAsync(
@@ -103,11 +123,13 @@ public sealed class ItineraryItemRepository(AppDbContext dbContext) : IItinerary
             items,
             items[0].ScheduledTime,
             trip.TravelMode,
-            trip.PlannedStartAt is { } plannedStartAt ? DateOnly.FromDateTime(plannedStartAt) : null));
+            trip.PlannedStartAt is { } plannedStartAt
+                ? TripClock.DateOfFirstStop(plannedStartAt, items[0].ScheduledTime)
+                : null));
         if (updates is null)
         {
             await transaction.RollbackAsync(cancellationToken);
-            return new ReplaceItemPersistenceResult(ReplaceItemPersistenceStatus.CrossesMidnight);
+            return new ReplaceItemPersistenceResult(ReplaceItemPersistenceStatus.TooLong);
         }
 
         await ApplyTimelineUpdatesAsync(updates, now, cancellationToken);
@@ -180,7 +202,9 @@ public sealed class ItineraryItemRepository(AppDbContext dbContext) : IItinerary
             items.Where(item => item.ItemId != itemId).ToList(),
             items[0].ScheduledTime,
             trip.TravelMode,
-            trip.PlannedStartAt is { } plannedStartAt ? DateOnly.FromDateTime(plannedStartAt) : null));
+            trip.PlannedStartAt is { } plannedStartAt
+                ? TripClock.DateOfFirstStop(plannedStartAt, items[0].ScheduledTime)
+                : null));
 
         await ApplyTimelineUpdatesAsync(updates, DateTime.UtcNow, cancellationToken);
         var remaining = await LoadTimelineAsync(tripId, cancellationToken);

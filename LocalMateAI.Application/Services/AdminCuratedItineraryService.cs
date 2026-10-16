@@ -16,7 +16,7 @@ public sealed class AdminCuratedItineraryService(
     public const int MaxCoverImageUrlLength = 500;
     public const int MinPlaces = 2;
     public const int MaxPlaces = 10;
-    // Từ giờ bắt đầu mặc định 08:00 tới 24:00: lịch dài hơn thì không áp dụng được với giờ mặc định.
+    // Giới hạn nội dung lịch mẫu: tối đa 16 giờ (đặt từ thời chưa hỗ trợ qua nửa đêm, giữ nguyên).
     public const int MaxDurationMinutes = 960;
 
     public Task<PagedResult<AdminCuratedItineraryResponse>> GetPagedAsync(

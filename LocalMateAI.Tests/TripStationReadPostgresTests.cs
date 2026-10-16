@@ -203,7 +203,7 @@ public sealed class TripStationReadPostgresTests
         var result = await new ItineraryItemRepository(c).ReplaceItemPlaceAndRecalculateTimelineAsync(
             seed.TripId, seed.ItemIds[0], seed.UserId, seed.SparePlaceId, 70_000, _ => null);
 
-        Assert.Equal(ReplaceItemPersistenceStatus.CrossesMidnight, result.Status);
+        Assert.Equal(ReplaceItemPersistenceStatus.TooLong, result.Status);
 
         await using var verify = db.Context();
         var first = await verify.ItineraryItems.AsNoTracking().SingleAsync(item => item.Id == seed.ItemIds[0]);
@@ -232,6 +232,34 @@ public sealed class TripStationReadPostgresTests
 
         Assert.Equal(ReplaceItemPersistenceStatus.NotEligible, result.Status);
         Assert.False(recalculated);
+    }
+
+    [Fact]
+    public async Task AlternativesContext_GivesTheVisitWindowOfTheStop_EvenAfterMidnight()
+    {
+        await using var db = await IsolatedPlanDatabase.CreateAsync();
+        await using var c = db.Context();
+        var seed = await SeedAsync(c, TravelMode.Auto);
+
+        // Rời 22:00; chặng 22:10, 23:30, 00:40 (hôm sau), mỗi chặng 60'.
+        await c.Trips.Where(trip => trip.Id == seed.TripId).ExecuteUpdateAsync(setters => setters
+            .SetProperty(trip => trip.PlannedStartAt, new DateTime(2026, 10, 10, 22, 0, 0, DateTimeKind.Unspecified)));
+        var times = new[] { new TimeOnly(22, 10), new TimeOnly(23, 30), new TimeOnly(0, 40) };
+        for (var index = 0; index < times.Length; index++)
+        {
+            var time = times[index];
+            await c.ItineraryItems.Where(item => item.Id == seed.ItemIds[index])
+                .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.ScheduledTime, time));
+        }
+
+        var repository = new ItineraryItemRepository(c);
+        var last = await repository.GetOwnedItemForAlternativesAsync(seed.TripId, seed.ItemIds[2], seed.UserId);
+        var first = await repository.GetOwnedItemForAlternativesAsync(seed.TripId, seed.ItemIds[0], seed.UserId);
+
+        Assert.Equal(1440 + 40, last!.VisitStartMinute);
+        Assert.Equal(60, last.VisitDurationMinutes);
+        Assert.Equal(3, last.TripPlaceIds.Count);
+        Assert.Equal(22 * 60 + 10, first!.VisitStartMinute);
     }
 
     private static async Task<(Guid UserId, Guid TripId, IReadOnlyList<Guid> ItemIds, Guid SparePlaceId)> SeedAsync(

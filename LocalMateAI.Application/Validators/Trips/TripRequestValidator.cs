@@ -50,16 +50,8 @@ public sealed class TripRequestValidator : AbstractValidator<TripRequestDto>
                 context.AddFailure(nameof(TripRequestDto.StartLongitude), "Thiếu kinh độ điểm xuất phát.");
             }
         });
-        RuleFor(x => x.DurationHours)
-            .InclusiveBetween(MinDurationHours, MaxDurationHours)
-            .DependentRules(() => RuleFor(x => x.DurationHours).Custom((hours, context) =>
-            {
-                var error = TripTimingRules.ValidateWindow(context.InstanceToValidate.StartTime, hours * 60);
-                if (error is not null)
-                {
-                    context.AddFailure(error);
-                }
-            }));
+        // Lịch được đi qua nửa đêm: chỉ giới hạn số giờ, không giới hạn giờ kết thúc.
+        RuleFor(x => x.DurationHours).InclusiveBetween(MinDurationHours, MaxDurationHours);
         RuleFor(x => x.BudgetMin).GreaterThanOrEqualTo(0);
         RuleFor(x => x.BudgetMax).GreaterThanOrEqualTo(x => x.BudgetMin)
             .WithMessage("BudgetMax phải lớn hơn hoặc bằng BudgetMin.");

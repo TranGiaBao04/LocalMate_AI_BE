@@ -80,15 +80,41 @@ public sealed class TripAlternativesService(
             SystemSettingKeys.AlternativeMaxCostIncreasePercent,
             cancellationToken);
 
-        var alternatives = alternativePlaceFinder
-            .Find(current, candidates, placeTagIds, item.TripPlaceIds, effectiveLimit, maxCostIncreasePercent)
-            .Select(ToResponse)
+        // Lấy đủ danh sách đã xếp hạng, rồi mới đẩy nơi đang đóng xuống cuối và cắt limit,
+        // để nơi đang mở ở hạng thấp vẫn được gợi ý.
+        var ranked = alternativePlaceFinder.Find(
+            current, candidates, placeTagIds, item.TripPlaceIds, candidates.Count, maxCostIncreasePercent);
+
+        var alternatives = ranked
+            .Select(scored => (Scored: scored, Status: OpeningStatusFor(scored.Candidate, item)))
+            .OrderBy(entry => StatusRank(entry.Status)) // OrderBy giữ thứ tự cũ trong cùng nhóm
+            .Take(effectiveLimit)
+            .Select(entry => ToResponse(entry.Scored, entry.Status))
             .ToList();
 
         return TripAlternativesResult.Succeeded(alternatives);
     }
 
-    private static AlternativePlaceResponse ToResponse(ScoredPlaceDto scored)
+    // Theo khung giờ HIỆN TẠI của chặng; sau khi thay, giờ tới có thể lệch vài phút vì đường đi khác.
+    private static PlaceOpeningStatus OpeningStatusFor(
+        PlaceCandidateDto candidate,
+        OwnedItemAlternativesReadModel item) =>
+        item.TripPlannedStartAt is not { } plannedAt
+            ? PlaceOpeningStatus.Unknown // trip cũ chưa đặt ngày
+            : OpeningWindows.StatusFor(
+                candidate.OpeningHours ?? [],
+                DateOnly.FromDateTime(plannedAt),
+                item.VisitStartMinute,
+                item.VisitStartMinute + item.VisitDurationMinutes);
+
+    private static int StatusRank(PlaceOpeningStatus status) => status switch
+    {
+        PlaceOpeningStatus.Open => 0,
+        PlaceOpeningStatus.Unknown => 1,
+        _ => 2
+    };
+
+    private static AlternativePlaceResponse ToResponse(ScoredPlaceDto scored, PlaceOpeningStatus status)
     {
         var candidate = scored.Candidate;
         return new AlternativePlaceResponse(
@@ -103,6 +129,7 @@ public sealed class TripAlternativesService(
             candidate.ImageUrl,
             candidate.StationName,
             candidate.DistanceFromStationMeters,
-            scored.MatchScore);
+            scored.MatchScore,
+            status);
     }
 }

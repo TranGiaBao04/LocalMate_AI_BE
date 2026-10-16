@@ -81,6 +81,29 @@ public sealed class TripItineraryEmailTests
         Assert.DoesNotContain("{%", html);
     }
 
+    [Fact]
+    public void Build_TripAcrossMidnight_MarksNextDayTimes()
+    {
+        // Rời 23:00; chặng 1 23:15–00:30, chặng 2 bắt đầu 00:40 hôm sau và kết thúc 01:25.
+        var trip = SampleTrip(new DateTime(2026, 10, 1, 23, 0, 0)) is var sample
+            ? sample with
+            {
+                Items =
+                [
+                    sample.Items[0] with { ScheduledTime = new TimeOnly(23, 15) },
+                    sample.Items[1] with { ScheduledTime = new TimeOnly(0, 40) }
+                ]
+            }
+            : throw new InvalidOperationException();
+
+        var model = Deserialize(TripItineraryEmailBuilder.Build(Traveller, trip, TripDetailService.ToResponse(trip)));
+
+        Assert.Equal("23:00 – 01:25 (hôm sau)", model.TimeRange);
+        Assert.Equal("23:15", model.Stops[0].Time);
+        Assert.Equal("00:40 (hôm sau)", model.Stops[1].Time);
+        Assert.Equal("10 phút di chuyển từ chặng trước", model.Stops[1].TravelNote);
+    }
+
     private static TripItineraryEmailModel Deserialize(EmailOutboxEntry entry) =>
         Assert.IsType<TripItineraryEmailModel>(
             EmailOutboxModelRegistry.Default.Deserialize(entry.TemplateName, entry.ModelJson));

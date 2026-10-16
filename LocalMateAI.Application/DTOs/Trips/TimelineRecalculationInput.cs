@@ -9,4 +9,4 @@ public sealed record TimelineRecalculationInput(
     IReadOnlyList<TimelineItemSnapshot> RemainingItems,
     TimeOnly TripStartTime,
     TravelMode TravelMode,
-    DateOnly? PlannedDate = null); // ngày đi của trip, để lấy lịch tàu khi TravelMode là Metro
+    DateOnly? PlannedDate = null); // ngày của chặng đầu (ngày đi, hoặc hôm sau nếu đã qua nửa đêm), để lấy lịch tàu khi Metro

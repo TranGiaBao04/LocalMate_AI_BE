@@ -11,8 +11,10 @@ namespace LocalMateAI.Application.DTOs.Trips;
 /// <param name="AnchorStation">Ga cột mốc để lấy và xếp hạng ứng viên: ga muốn chơi nếu có chọn, không thì là ga lên.</param>
 /// <param name="StartStationId">Chỉ có khi người dùng chọn xuất phát từ ga.</param>
 /// <param name="DestinationStationId">Chỉ có khi người dùng chọn ga muốn chơi.</param>
-/// <param name="ServiceAreaFailure">Null = trong vùng phục vụ. Khác null: TripInsufficiencyReasons.OutOfServiceArea
-/// (toạ độ ngoài TP.HCM) hoặc TooFarFromStationForMetro (đi Metro mà cách ga lên quá xa).</param>
+/// <param name="ServiceAreaFailure">Lý do không lên lịch được từ điểm xuất phát này; null = được.
+/// TripInsufficiencyReasons.OutOfServiceArea (toạ độ ngoài TP.HCM), TooFarFromStationForMetro (đi Metro mà cách
+/// ga lên quá xa) hoặc MetroNotRunning (đi Metro mà lúc bắt đầu ga lên không có tàu).</param>
+/// <param name="PlannedDate">Ngày đi thực dùng (bỏ trống = hôm nay giờ Việt Nam): chọn lịch tàu và giờ mở cửa theo thứ.</param>
 /// <param name="MetroBoarding">Thông tin lên tàu và lịch tàu của ngày đi; chỉ có khi phương tiện là Metro.</param>
 public sealed record TripOriginResolution(
     double StartLatitude,
@@ -22,7 +24,9 @@ public sealed record TripOriginResolution(
     Guid? StartStationId,
     Guid? DestinationStationId,
     string? ServiceAreaFailure,
-    MetroBoarding? MetroBoarding = null)
+    DateOnly PlannedDate,
+    MetroBoarding? MetroBoarding = null,
+    MetroServiceHoursDto? MetroServiceHours = null) // chỉ có khi ServiceAreaFailure là MetroNotRunning
 {
     public bool IsWithinServiceArea => ServiceAreaFailure is null;
 

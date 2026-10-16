@@ -89,20 +89,18 @@ public sealed class TripRequestParsingOutputParserTests
         Assert.Equal(hours, Parse(new { isTripRequest = true, durationHours = hours })!.Fields.DurationHours);
 
     [Fact]
-    public void StartTimePlusDurationPastMidnight_KeepsStartTime_AndDropsDuration()
+    public void StartTimePlusDurationPastMidnight_KeepsBoth()
     {
+        // Lịch được đi qua nửa đêm.
         var fields = Parse(new { isTripRequest = true, durationHours = 5, startTime = "22:00" })!.Fields;
 
         Assert.Equal(new TimeOnly(22, 0), fields.StartTime);
-        Assert.Null(fields.DurationHours);
+        Assert.Equal(5, fields.DurationHours);
     }
 
     [Fact]
-    public void DurationTooLongForTheDefaultStart_IsDropped()
-    {
-        // Không có giờ xuất phát thì form tính từ 08:00: 17 tiếng sẽ vượt 24:00.
-        Assert.Null(Parse(new { isTripRequest = true, durationHours = 17 })!.Fields.DurationHours);
-    }
+    public void LongDurationWithoutStartTime_IsKept()
+        => Assert.Equal(17, Parse(new { isTripRequest = true, durationHours = 17 })!.Fields.DurationHours);
 
     [Theory]
     [InlineData(-1)]

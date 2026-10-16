@@ -139,17 +139,16 @@ public sealed class CuratedTripServiceTests
     }
 
     [Fact]
-    public async Task Apply_ItineraryRunningPastMidnight_ReturnsValidationErrorOnStartTimeAndSavesNothing()
+    public async Task Apply_ItineraryRunningPastMidnight_IsCreated()
     {
-        // 3 địa điểm Culture (3 x 90') + 2 phút đi = 272 phút; 22:00 + 272' vượt 24:00.
+        // 3 địa điểm Culture (3 x 90') + 2 phút đi = 272 phút; 22:00 + 272' kết thúc 02:32 hôm sau.
         var fixture = new Fixture(source: Source([Place(0), Place(1), Place(2)]));
 
         var result = await fixture.Service.ApplyAsync(
             UserId, Guid.NewGuid(), new ApplyCuratedItineraryRequest(null, null, new TimeOnly(22, 0)));
 
-        Assert.Equal(ApplyCuratedItineraryResultStatus.ValidationFailed, result.Status);
-        Assert.Contains("StartTime", result.ValidationErrors!.Keys);
-        Assert.Empty(fixture.Trips.Added);
+        Assert.Equal(ApplyCuratedItineraryResultStatus.Success, result.Status);
+        Assert.Single(fixture.Trips.Added);
     }
 
     [Fact]

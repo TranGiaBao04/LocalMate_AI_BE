@@ -78,11 +78,12 @@ public sealed class CuratedTripService(
 
         var scheduleOrigin = latitude.HasValue ? new ScheduleOrigin(latitude.Value, longitude!.Value) : null;
         var planning = await TripPlanningSettings.LoadAsync(settings, cancellationToken);
-        var windowError = TripTimingRules.ValidateWindow(
-            request?.StartTime, CuratedTripBuilder.TotalMinutes(source, travelMode, scheduleOrigin, planning));
-        if (windowError is not null)
+        // Lịch mẫu được đi qua nửa đêm; chỉ chặn khi dài quá 24 giờ (lịch mẫu tối đa 960 phút nên hiếm khi chạm).
+        var lengthError = TripTimingRules.ValidateLength(
+            CuratedTripBuilder.TotalMinutes(source, travelMode, scheduleOrigin, planning));
+        if (lengthError is not null)
         {
-            return ApplyCuratedItineraryResult.Invalid(new Dictionary<string, string[]> { ["StartTime"] = [windowError] });
+            return ApplyCuratedItineraryResult.Invalid(new Dictionary<string, string[]> { ["StartTime"] = [lengthError] });
         }
 
         var plannedStartAt = TripTimingRules.ResolveStart(request?.PlannedDate, request?.StartTime, vietnamNow);

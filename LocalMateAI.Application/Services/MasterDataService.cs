@@ -79,7 +79,7 @@ public sealed class MasterDataService(
         return result;
     }
 
-    // MaxDurationHours = số giờ tối đa còn lại tới 24:00, để FE giới hạn lựa chọn thời lượng (chưa hỗ trợ qua nửa đêm).
+    // Lịch được đi qua nửa đêm nên khung giờ nào cũng chọn được tới số giờ tối đa của TripRequestValidator.
     private static TimeSlotResponse Slot(string code, string label, int startHour) =>
-        new(code, label, new TimeOnly(startHour, 0), 24 - startHour);
+        new(code, label, new TimeOnly(startHour, 0), TripRequestValidator.MaxDurationHours);
 }

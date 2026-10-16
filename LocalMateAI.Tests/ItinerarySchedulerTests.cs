@@ -1,3 +1,4 @@
+using LocalMateAI.Application.DTOs.Matching;
 using LocalMateAI.Application.Services;
 using LocalMateAI.Domain.Enums;
 
@@ -25,6 +26,54 @@ public sealed class ItinerarySchedulerTests
     public void Schedule_NoStops_ReturnsEmpty()
     {
         Assert.Empty(ItineraryScheduler.Schedule([], Start, 8, TravelMode.Auto, 1_000_000m));
+    }
+
+    [Fact]
+    public void Schedule_SkipsPlaceClosedDuringTheVisit_AndTakesTheNextOne()
+    {
+        // Ứng viên hạng 1 chỉ mở từ 18:00; lịch 08:00 bỏ nó và xếp ứng viên hạng 2.
+        var stops = new[]
+        {
+            At(10.770) with { OpenWindows = [new MinuteRange(18 * 60, 22 * 60)] },
+            At(10.771) with { OpenWindows = [new MinuteRange(6 * 60, 22 * 60)] }
+        };
+
+        var slots = ItineraryScheduler.Schedule(stops, Start, 4, TravelMode.Auto, 1_000_000m);
+
+        Assert.Equal([1], slots.Select(slot => slot.SourceIndex));
+    }
+
+    [Fact]
+    public void Schedule_WithoutOpenWindows_IgnoresOpeningHours()
+    {
+        var slots = ItineraryScheduler.Schedule([At(10.770)], new TimeOnly(23, 0), 1, TravelMode.Auto, 1_000_000m);
+
+        Assert.Single(slots);
+    }
+
+    [Fact]
+    public void Schedule_StopEndingAfterClosing_IsSkipped()
+    {
+        // Mở tới 09:00 mà tham quan 60 phút từ 08:30: quán đóng khi khách chưa xong.
+        var stop = At(10.770) with { OpenWindows = [new MinuteRange(6 * 60, 9 * 60)] };
+
+        Assert.Empty(ItineraryScheduler.Schedule([stop], new TimeOnly(8, 30), 2, TravelMode.Auto, 1_000_000m));
+        Assert.Single(ItineraryScheduler.Schedule([stop], new TimeOnly(8, 0), 2, TravelMode.Auto, 1_000_000m));
+    }
+
+    [Fact]
+    public void ExplainEmptySchedule_SeparatesClosedPlacesFromLackOfTime()
+    {
+        var closedAtNight = At(10.770) with { OpenWindows = [new MinuteRange(6 * 60, 22 * 60)] };
+
+        Assert.Equal(
+            TripInsufficiencyReasons.NoPlacesOpen,
+            ItineraryScheduler.ExplainEmptySchedule(
+                [closedAtNight], new TimeOnly(22, 30), 1, TravelMode.Auto, 1_000_000m, null));
+        Assert.Equal(
+            TripInsufficiencyReasons.DurationTooShort,
+            ItineraryScheduler.ExplainEmptySchedule(
+                [At(10.770, durationMinutes: 90)], Start, 1, TravelMode.Auto, 1_000_000m, null));
     }
 
     [Fact]
