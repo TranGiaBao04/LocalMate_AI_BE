@@ -36,7 +36,7 @@ public sealed class MasterDataServiceTests
     }
 
     [Fact]
-    public async Task GetMasterDataAsync_ReturnsTimeSlotsWithRemainingHoursUntilMidnight()
+    public async Task GetMasterDataAsync_ReturnsTimeSlotsThatAllowTheFullDuration()
     {
         var service = new MasterDataService(new FakeStationRepository(), new MemoryCache(new MemoryCacheOptions()));
 
@@ -46,7 +46,8 @@ public sealed class MasterDataServiceTests
         Assert.Equal(
             [new TimeOnly(8, 0), new TimeOnly(13, 0), new TimeOnly(18, 0)],
             result.TimeSlots.Select(slot => slot.StartTime));
-        Assert.Equal([16, 11, 6], result.TimeSlots.Select(slot => slot.MaxDurationHours));
+        // Lịch được đi qua nửa đêm: khung nào cũng chọn được tới số giờ tối đa.
+        Assert.Equal([24, 24, 24], result.TimeSlots.Select(slot => slot.MaxDurationHours));
         Assert.All(result.TimeSlots, slot => Assert.False(string.IsNullOrWhiteSpace(slot.Label)));
     }
 

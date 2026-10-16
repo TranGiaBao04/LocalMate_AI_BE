@@ -57,19 +57,11 @@ public sealed class TripTimingRulesTests
     }
 
     [Theory]
-    [InlineData(20, 0, 240, true)]   // đúng 24:00
-    [InlineData(23, 0, 240, false)]  // qua nửa đêm
-    [InlineData(0, 0, 1440, true)]
-    public void ValidateWindow_RejectsOnlyWhenPastMidnight(int hour, int minute, int totalMinutes, bool valid)
-    {
-        var error = TripTimingRules.ValidateWindow(new TimeOnly(hour, minute), totalMinutes);
-
-        Assert.Equal(valid, error is null);
-    }
-
-    [Fact]
-    public void ValidateWindow_UsesDefaultStartTimeWhenMissing()
-        => Assert.NotNull(TripTimingRules.ValidateWindow(null, 17 * 60)); // 08:00 + 17 giờ > 24:00
+    [InlineData(240, true)]
+    [InlineData(1440, true)]  // đúng 24 giờ
+    [InlineData(1441, false)]
+    public void ValidateLength_RejectsOnlyTripsLongerThan24Hours(int totalMinutes, bool valid)
+        => Assert.Equal(valid, TripTimingRules.ValidateLength(totalMinutes) is null);
 
     [Fact]
     public void ResolveStart_DefaultsToTodayAtEight()
@@ -96,7 +88,7 @@ public sealed class TripTimingRulesTests
         var errors = validator.Validate(request).Errors.Select(error => error.PropertyName).ToList();
 
         Assert.Contains("PlannedDate", errors);
-        Assert.Contains("DurationHours", errors); // 23:00 + 4 giờ vượt 24:00
+        Assert.DoesNotContain("DurationHours", errors); // 23:00 + 4 giờ: lịch được đi qua nửa đêm
     }
 
     [Fact]

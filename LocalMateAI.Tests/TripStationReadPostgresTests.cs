@@ -203,7 +203,7 @@ public sealed class TripStationReadPostgresTests
         var result = await new ItineraryItemRepository(c).ReplaceItemPlaceAndRecalculateTimelineAsync(
             seed.TripId, seed.ItemIds[0], seed.UserId, seed.SparePlaceId, 70_000, _ => null);
 
-        Assert.Equal(ReplaceItemPersistenceStatus.CrossesMidnight, result.Status);
+        Assert.Equal(ReplaceItemPersistenceStatus.TooLong, result.Status);
 
         await using var verify = db.Context();
         var first = await verify.ItineraryItems.AsNoTracking().SingleAsync(item => item.Id == seed.ItemIds[0]);

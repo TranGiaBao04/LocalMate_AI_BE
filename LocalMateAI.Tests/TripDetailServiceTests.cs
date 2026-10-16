@@ -400,6 +400,43 @@ public sealed class TripDetailServiceTests
     }
 
     [Fact]
+    public async Task Get_TripAcrossMidnight_MarksNextDayStopsAndEnd()
+    {
+        var tripId = Guid.NewGuid();
+        var model = Model(tripId, new DateTime(2026, 10, 17, 22, 40, 0), new TimeOnly(23, 0)) with
+        {
+            Items =
+            [
+                Item(0, new TimeOnly(23, 0), 60, 0m, isVisited: false),  // 23:00–00:00
+                Item(1, new TimeOnly(0, 15), 75, 0m, isVisited: false)   // 00:15–01:30 hôm sau
+            ]
+        };
+
+        var response = (await Service(model).GetAsync(UserId, tripId)).Response!;
+
+        Assert.Equal([false, true], response.Items.Select(item => item.IsNextDay));
+        Assert.True(response.EndsNextDay);
+        Assert.Equal(new TimeOnly(1, 30), response.EndTime);
+    }
+
+    [Theory]
+    [InlineData(23, 0, true)]   // kết thúc đúng 24:00 ⇒ EndTime 00:00 của hôm sau
+    [InlineData(22, 59, false)] // kết thúc 23:59
+    public async Task Get_EndsNextDay_FromMidnightOnwards(int hour, int minute, bool expected)
+    {
+        var tripId = Guid.NewGuid();
+        var model = Model(tripId, new DateTime(2026, 10, 17, 22, 0, 0), new TimeOnly(hour, minute)) with
+        {
+            Items = [Item(0, new TimeOnly(hour, minute), 60, 0m, isVisited: false)]
+        };
+
+        var response = (await Service(model).GetAsync(UserId, tripId)).Response!;
+
+        Assert.Equal(expected, response.EndsNextDay);
+        Assert.False(response.Items[0].IsNextDay);
+    }
+
+    [Fact]
     public async Task Get_ReportsWhetherEachStopIsOpenDuringTheVisit()
     {
         // Thứ Bảy 17/10/2026, rời 08:40.

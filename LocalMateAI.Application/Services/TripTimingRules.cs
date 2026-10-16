@@ -5,7 +5,12 @@ public static class TripTimingRules
 {
     public const int MaxDaysAhead = 90;
     public static readonly TimeSpan PastGrace = TimeSpan.FromMinutes(5);
-    private const int MinutesPerDay = 24 * 60;
+
+    /// <summary>
+    /// Một chuyến đi dài tối đa 24 giờ tính từ giờ bắt đầu (bằng durationHours tối đa), nên vắt qua nửa đêm tối đa
+    /// một lần — điều kiện để TripClock suy đúng chặng nào thuộc ngày hôm sau.
+    /// </summary>
+    public const int MaxTripMinutes = 24 * 60;
 
     /// <summary>plannedDate không ở quá khứ và không quá 90 ngày. Null = hôm nay, luôn hợp lệ.</summary>
     public static string? ValidatePlannedDate(DateOnly? plannedDate, DateTime vietnamNow)
@@ -50,14 +55,9 @@ public static class TripTimingRules
             : null;
     }
 
-    /// <summary>startTime (hoặc 08:00) + tổng số phút không được vượt 24:00; chưa hỗ trợ lịch qua nửa đêm.</summary>
-    public static string? ValidateWindow(TimeOnly? startTime, int totalMinutes)
-    {
-        var start = startTime ?? ItineraryScheduler.DefaultStartTime;
-        return start.ToTimeSpan().TotalMinutes + totalMinutes > MinutesPerDay
-            ? "Giờ bắt đầu cộng thời lượng không được vượt 24:00 (chưa hỗ trợ lịch qua nửa đêm)."
-            : null;
-    }
+    /// <summary>Lịch được đi qua nửa đêm nhưng không dài quá MaxTripMinutes tính từ giờ bắt đầu.</summary>
+    public static string? ValidateLength(int totalMinutes) =>
+        totalMinutes > MaxTripMinutes ? "Lịch trình không được dài quá 24 giờ." : null;
 
     /// <summary>Giá trị thực sự dùng để xếp lịch: ngày mặc định hôm nay, giờ mặc định 08:00.</summary>
     public static DateTime ResolveStart(DateOnly? plannedDate, TimeOnly? startTime, DateTime vietnamNow) =>

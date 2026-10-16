@@ -255,16 +255,48 @@ public sealed class TripItemReplacementServiceTests
     }
 
     [Fact]
-    public async Task ReplaceAsync_TimelineWouldCrossMidnight_IsRejectedWithoutReplacing()
+    public async Task ReplaceAsync_TimelineCrossingMidnight_IsAllowed()
     {
-        // 22:00 + 90' + 8' đi + 90' = 01:08 hôm sau: giờ lưu kiểu TimeOnly sẽ quay vòng nên không cho thay.
+        // 22:00 + 90' + 8' đi = 23:38, chặng kế kết thúc 01:08 hôm sau: lịch được đi qua nửa đêm.
         var next = new TimelineItemSnapshot(Guid.NewGuid(), 1, new TimeOnly(23, 31), 90, 10.79, 106.69);
         var (sut, items) = Create(snapshots: [FirstStop(new TimeOnly(22, 0)), next]);
 
         var result = await sut.ReplaceAsync(UserId, TripId, ItemId, NewPlaceId);
 
-        Assert.Equal(ReplaceItineraryItemResultStatus.CrossesMidnight, result.Status);
+        Assert.Equal(ReplaceItineraryItemResultStatus.Success, result.Status);
+        Assert.Equal([new TimelineItemUpdate(next.ItemId, 1, new TimeOnly(23, 38))], items.RecalculatedUpdates);
+    }
+
+    [Fact]
+    public async Task ReplaceAsync_TimelineLongerThan24Hours_IsRejectedWithoutReplacing()
+    {
+        // 08:00 + 90' + 8' đi + 1.400' = dài hơn 24 giờ tính từ chặng đầu.
+        var next = new TimelineItemSnapshot(Guid.NewGuid(), 1, new TimeOnly(9, 31), 1_400, 10.79, 106.69);
+        var (sut, items) = Create(snapshots: [FirstStop(new TimeOnly(8, 0)), next]);
+
+        var result = await sut.ReplaceAsync(UserId, TripId, ItemId, NewPlaceId);
+
+        Assert.Equal(ReplaceItineraryItemResultStatus.TooLong, result.Status);
         Assert.Null(items.ReplacedPlaceId);
+    }
+
+    [Theory]
+    [InlineData(3, true)]  // rời 23:50, chặng đầu 00:10 hôm sau, lịch xong 03:18 hôm sau > 02:50
+    [InlineData(4, false)] // rảnh tới 03:50 hôm sau
+    public async Task ReplaceAsync_FirstStopAfterMidnight_ComparesWithTheLeaveDay(int durationHours, bool warns)
+    {
+        var next = new TimelineItemSnapshot(Guid.NewGuid(), 1, new TimeOnly(1, 41), 90, 10.79, 106.69);
+        var context = MakeContext(TripStatus.Draft) with
+        {
+            TripPlannedStartAt = new DateTime(2026, 10, 10, 23, 50, 0),
+            TripDurationHours = durationHours
+        };
+        var (sut, _) = Create(contexts: [context], snapshots: [FirstStop(new TimeOnly(0, 10)), next]);
+
+        var result = await sut.ReplaceAsync(UserId, TripId, ItemId, NewPlaceId);
+
+        Assert.Equal(ReplaceItineraryItemResultStatus.Success, result.Status);
+        Assert.Equal(warns, result.Response!.Warnings.Contains(TripItemReplacementService.ExceedsDurationWarning));
     }
 
     private static TimelineItemSnapshot FirstStop(TimeOnly time) => new(ItemId, 0, time, 90, 10.77, 106.69);
@@ -370,7 +402,7 @@ public sealed class TripItemReplacementServiceTests
                 snapshots, snapshots[0].ScheduledTime, TravelMode.Auto));
             if (RecalculatedUpdates is null)
             {
-                return Task.FromResult(new ReplaceItemPersistenceResult(ReplaceItemPersistenceStatus.CrossesMidnight));
+                return Task.FromResult(new ReplaceItemPersistenceResult(ReplaceItemPersistenceStatus.TooLong));
             }
 
             ReplacedPlaceId = newPlaceId;

@@ -13,8 +13,8 @@ public interface IItineraryTimelineRecalculator
         TripPlanningSettings settings,
         MetroDayTimetable? metroTimetable = null);
 
-    // Giờ kết thúc chặng cuối sau khi tính lại, bằng số phút từ 00:00. Lớn hơn 1440 nghĩa là lịch tràn qua nửa đêm
-    // (giờ lưu kiểu TimeOnly sẽ quay vòng về 00:00), nên nơi gọi phải từ chối thay đổi đó.
+    // Giờ kết thúc chặng cuối sau khi tính lại, bằng số phút từ 00:00 của ngày của chặng đầu (lớn hơn 1440 nghĩa là
+    // kết thúc sau nửa đêm). Nơi gọi dùng để chặn lịch dài quá 24 giờ và cảnh báo vượt số giờ rảnh.
     int EndMinuteOfDay(
         TimelineRecalculationInput input,
         TripPlanningSettings settings,

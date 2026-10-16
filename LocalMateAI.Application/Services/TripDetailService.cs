@@ -172,7 +172,8 @@ public sealed class TripDetailService(
                     motorbikeMinutes,
                     leg,
                     item.GooglePlaceId,
-                    openingStatus);
+                    openingStatus,
+                    startMinutes[index] >= TripClock.MinutesPerDay);
             })
             .ToList();
 
@@ -207,7 +208,9 @@ public sealed class TripDetailService(
             trip.DestinationStation,
             trip.Note,
             trip.NoteApplied,
-            trip.AiExplainedAt);
+            trip.AiExplainedAt,
+            trip.Items.Count > 0
+            && startMinutes[^1] + trip.Items[^1].EstimatedDurationMinutes >= TripClock.MinutesPerDay);
     }
 
     private static TripLegResponse ToLegResponse(

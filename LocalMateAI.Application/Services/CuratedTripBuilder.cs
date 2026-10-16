@@ -12,7 +12,7 @@ namespace LocalMateAI.Application.Services;
 /// </summary>
 public static class CuratedTripBuilder
 {
-    /// <summary>Tổng số phút của lịch mẫu, dùng để kiểm tra không qua nửa đêm trước khi dựng Trip.</summary>
+    /// <summary>Tổng số phút của lịch mẫu, dùng để kiểm tra không dài quá 24 giờ trước khi dựng Trip.</summary>
     public static int TotalMinutes(
         CuratedItineraryForApplyReadModel source, TravelMode travelMode, ScheduleOrigin? origin,
         TripPlanningSettings? settings = null) =>

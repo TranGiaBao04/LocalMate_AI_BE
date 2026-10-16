@@ -22,8 +22,6 @@ public sealed class TripItemReplacementService(
     /// <summary>Sau khi thay, lịch kết thúc muộn hơn số giờ rảnh người dùng đã nhập lúc tạo lịch.</summary>
     public const string ExceedsDurationWarning = "exceeds_duration";
 
-    private const int MinutesPerDay = 24 * 60;
-
     public async Task<ReplaceItineraryItemResult> ReplaceAsync(
         Guid userId,
         Guid tripId,
@@ -83,6 +81,7 @@ public sealed class TripItemReplacementService(
         // Đọc thông số trước khi mở transaction; lần tính lại giờ dùng chung một bộ số.
         var planning = await TripPlanningSettings.LoadAsync(settings, cancellationToken);
         int? endMinuteOfDay = null;
+        TimeOnly? firstStopTime = null;
 
         var outcome = await itineraryItemRepository.ReplaceItemPlaceAndRecalculateTimelineAsync(
             tripId,
@@ -97,14 +96,15 @@ public sealed class TripItemReplacementService(
                     ? MetroDayTimetable.For(metroTimetableSource.Timetable, plannedDate)
                     : null;
 
-                // Địa điểm mới xa hơn có thể đẩy lịch qua 24:00; giờ lưu kiểu TimeOnly sẽ quay vòng nên phải từ chối.
+                // Lịch được qua nửa đêm nhưng không dài quá 24 giờ tính từ chặng đầu (TripClock cần điều này).
                 var end = timelineRecalculator.EndMinuteOfDay(input, planning, metroTimetable);
-                if (end > MinutesPerDay)
+                if (end - TripClock.MinuteOfDay(input.TripStartTime) > TripTimingRules.MaxTripMinutes)
                 {
                     return null;
                 }
 
                 endMinuteOfDay = end;
+                firstStopTime = input.TripStartTime;
                 return timelineRecalculator.Recalculate(input, planning, metroTimetable);
             },
             cancellationToken);
@@ -114,16 +114,21 @@ public sealed class TripItemReplacementService(
             return await ExplainFailureAsync(tripId, itemId, userId, newPlaceId, cancellationToken);
         }
 
-        if (outcome.Status == ReplaceItemPersistenceStatus.CrossesMidnight)
+        if (outcome.Status == ReplaceItemPersistenceStatus.TooLong)
         {
-            return ReplaceItineraryItemResult.WouldCrossMidnight();
+            return ReplaceItineraryItemResult.TooLong();
         }
 
         // Không chặn khi lịch dài hơn số giờ rảnh ban đầu, chỉ cảnh báo để FE hiển thị.
-        if (item.TripPlannedStartAt is { } leaveAt
-            && endMinuteOfDay > leaveAt.Hour * 60 + leaveAt.Minute + item.TripDurationHours * 60)
+        // Giờ kết thúc tính theo ngày của chặng đầu: chặng đầu đã qua nửa đêm thì cộng một ngày cho cùng mốc giờ rời.
+        if (item.TripPlannedStartAt is { } leaveAt && endMinuteOfDay is { } end && firstStopTime is { } firstStop)
         {
-            warnings.Add(ExceedsDurationWarning);
+            var leave = TimeOnly.FromDateTime(leaveAt);
+            var endFromLeaveDay = end + (TripClock.StartsNextDay(leave, firstStop) ? TripClock.MinutesPerDay : 0);
+            if (endFromLeaveDay > TripClock.MinuteOfDay(leave) + item.TripDurationHours * 60)
+            {
+                warnings.Add(ExceedsDurationWarning);
+            }
         }
 
         var replaced = outcome.Item!;

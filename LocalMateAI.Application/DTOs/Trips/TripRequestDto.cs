@@ -17,7 +17,7 @@ namespace LocalMateAI.Application.DTOs.Trips;
 /// Auto (mặc định): ≤ 700 m đi bộ, xa hơn xe máy.</param>
 /// <param name="PlannedDate">Ngày đi (giờ Việt Nam). Bỏ trống = hôm nay. Không ở quá khứ, không quá 90 ngày.</param>
 /// <param name="StartTime">Giờ RỜI điểm xuất phát (HH:mm, giờ Việt Nam). Bỏ trống = 08:00.
-/// StartTime + DurationHours không được vượt 24:00 (chưa hỗ trợ lịch qua nửa đêm).</param>
+/// Lịch được đi qua nửa đêm (chặng sau 00:00 thuộc ngày hôm sau).</param>
 /// <param name="StartStationOrder">Xuất phát từ một ga Metro (thứ tự ga 1–14) thay cho toạ độ.</param>
 /// <param name="DestinationStationOrder">Ga muốn chơi quanh đó (thứ tự ga 1–14).
 /// Bỏ trống = quanh ga gần điểm xuất phát nhất.</param>

@@ -158,8 +158,8 @@ public static class TripRequestParsingOutputParser
             note is { Length: <= TripNoteRules.MaxLength } ? note : null);
     }
 
-    // Luật liên quan hai trường, kiểm SAU khi ghép: giờ xuất phát đã qua so với ngày đi thì bỏ giờ;
-    // giờ + số giờ vượt 24:00 (không có giờ thì form tính từ 08:00) thì giữ giờ, bỏ số giờ.
+    // Luật liên quan hai trường, kiểm SAU khi ghép: giờ xuất phát đã qua so với ngày đi thì bỏ giờ.
+    // (Lịch được đi qua nửa đêm nên giờ + số giờ vượt 24:00 vẫn giữ cả hai.)
     private static ParsedTripFields ApplyCrossFieldRules(ParsedTripFields fields, DateTime vietnamNow)
     {
         var startTime = fields.StartTime is { } time
@@ -167,12 +167,7 @@ public static class TripRequestParsingOutputParser
                 ? time
                 : (TimeOnly?)null;
 
-        var durationHours = fields.DurationHours is { } hours
-            && TripTimingRules.ValidateWindow(startTime, hours * 60) is null
-                ? hours
-                : (int?)null;
-
-        return fields with { StartTime = startTime, DurationHours = durationHours };
+        return fields with { StartTime = startTime };
     }
 
     private static IReadOnlyList<string> Changed(ParsedTripFields before, ParsedTripFields after)

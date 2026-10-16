@@ -35,7 +35,8 @@ public sealed record MetroBoarding(
     MetroDayTimetable Timetable);
 
 /// <summary>
-/// Xếp giờ cho các chặng (BE-42). Thuần. Giờ là TimeOnly nên chuyến qua nửa đêm sẽ quay về 00:00 (chưa hỗ trợ ngày).
+/// Xếp giờ cho các chặng (BE-42). Thuần. Tính bằng phút liên tục từ giờ bắt đầu; giờ trả ra là TimeOnly nên chặng
+/// sau nửa đêm quay về 00:00 — đọc lại ngày của từng chặng bằng TripClock.
 /// Đây là nơi duy nhất quyết định thời lượng và số chặng của một lịch trình.
 /// </summary>
 public static class ItineraryScheduler

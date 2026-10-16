@@ -1,5 +1,6 @@
 using LocalMateAI.Application.DTOs.Trips;
 using LocalMateAI.Application.Interfaces.Repositories;
+using LocalMateAI.Application.Services;
 using LocalMateAI.Domain.Enums;
 using LocalMateAI.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -103,11 +104,13 @@ public sealed class ItineraryItemRepository(AppDbContext dbContext) : IItinerary
             items,
             items[0].ScheduledTime,
             trip.TravelMode,
-            trip.PlannedStartAt is { } plannedStartAt ? DateOnly.FromDateTime(plannedStartAt) : null));
+            trip.PlannedStartAt is { } plannedStartAt
+                ? TripClock.DateOfFirstStop(plannedStartAt, items[0].ScheduledTime)
+                : null));
         if (updates is null)
         {
             await transaction.RollbackAsync(cancellationToken);
-            return new ReplaceItemPersistenceResult(ReplaceItemPersistenceStatus.CrossesMidnight);
+            return new ReplaceItemPersistenceResult(ReplaceItemPersistenceStatus.TooLong);
         }
 
         await ApplyTimelineUpdatesAsync(updates, now, cancellationToken);
@@ -180,7 +183,9 @@ public sealed class ItineraryItemRepository(AppDbContext dbContext) : IItinerary
             items.Where(item => item.ItemId != itemId).ToList(),
             items[0].ScheduledTime,
             trip.TravelMode,
-            trip.PlannedStartAt is { } plannedStartAt ? DateOnly.FromDateTime(plannedStartAt) : null));
+            trip.PlannedStartAt is { } plannedStartAt
+                ? TripClock.DateOfFirstStop(plannedStartAt, items[0].ScheduledTime)
+                : null));
 
         await ApplyTimelineUpdatesAsync(updates, DateTime.UtcNow, cancellationToken);
         var remaining = await LoadTimelineAsync(tripId, cancellationToken);

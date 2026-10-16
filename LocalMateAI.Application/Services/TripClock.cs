@@ -16,6 +16,17 @@ public static class TripClock
 
     public static int MinuteOfDay(TimeOnly time) => time.Hour * 60 + time.Minute;
 
+    /// <summary>Chặng đầu có giờ sớm hơn giờ rời điểm xuất phát quá 12 tiếng thì thuộc ngày hôm sau.</summary>
+    public static bool StartsNextDay(TimeOnly leaveAt, TimeOnly firstStop) =>
+        MinuteOfDay(leaveAt) - MinuteOfDay(firstStop) > DayRolloverThresholdMinutes;
+
+    /// <summary>Ngày của chặng đầu: ngày đi, hoặc ngày hôm sau nếu chặng đầu đã qua nửa đêm.</summary>
+    public static DateOnly DateOfFirstStop(DateTime plannedStartAt, TimeOnly firstStop)
+    {
+        var date = DateOnly.FromDateTime(plannedStartAt);
+        return StartsNextDay(TimeOnly.FromDateTime(plannedStartAt), firstStop) ? date.AddDays(1) : date;
+    }
+
     /// <summary>Số phút bắt đầu của từng chặng, tính từ 00:00 ngày đi.</summary>
     /// <param name="leaveAt">Giờ rời điểm xuất phát; null với trip cũ chưa có PlannedStartAt.</param>
     /// <param name="orderedStops">Các chặng theo OrderIndex tăng dần.</param>

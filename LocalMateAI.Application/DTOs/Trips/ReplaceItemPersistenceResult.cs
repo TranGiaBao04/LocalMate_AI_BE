@@ -7,8 +7,8 @@ public enum ReplaceItemPersistenceStatus
     /// <summary>Item không còn thuộc user, trip đã Finalized, hoặc địa điểm mới vừa xuất hiện trong trip.</summary>
     NotEligible,
 
-    /// <summary>Tính lại giờ thì lịch tràn qua 24:00; không có gì được ghi.</summary>
-    CrossesMidnight
+    /// <summary>Tính lại giờ thì lịch dài quá 24 giờ; không có gì được ghi.</summary>
+    TooLong
 }
 
 /// <param name="Item">Chặng vừa được thay, với giờ sau khi tính lại.</param>

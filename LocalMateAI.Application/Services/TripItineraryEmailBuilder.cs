@@ -19,7 +19,7 @@ public static class TripItineraryEmailBuilder
                 var travelMinutes = index == 0 ? detail.TravelMinutesFromOrigin : item.TravelMinutesFromPrevious;
                 return new TripItineraryStopEmailModel(
                     (index + 1).ToString(CultureInfo.InvariantCulture),
-                    FormatTime(item.ScheduledTime),
+                    FormatTime(item.ScheduledTime, item.IsNextDay),
                     item.PlaceName,
                     CategoryLabel(source.Category),
                     source.Address ?? string.Empty,
@@ -62,7 +62,7 @@ public static class TripItineraryEmailBuilder
         }
 
         return detail.EndTime is { } end
-            ? $"{FormatTime(start.Value)} – {FormatTime(end)}"
+            ? $"{FormatTime(start.Value)} – {FormatTime(end, detail.EndsNextDay)}"
             : FormatTime(start.Value);
     }
 
@@ -78,8 +78,9 @@ public static class TripItineraryEmailBuilder
     private static string FormatDate(DateTime plannedStart) =>
         $"{WeekdayLabel(plannedStart.DayOfWeek)}, {plannedStart.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture)}";
 
-    private static string FormatTime(TimeOnly time) =>
-        time.ToString("HH:mm", CultureInfo.InvariantCulture);
+    // Lịch qua nửa đêm: giờ thuộc ngày hôm sau ghi thêm "(hôm sau)".
+    private static string FormatTime(TimeOnly time, bool nextDay = false) =>
+        time.ToString("HH:mm", CultureInfo.InvariantCulture) + (nextDay ? " (hôm sau)" : string.Empty);
 
     private static string WeekdayLabel(DayOfWeek day) => day switch
     {

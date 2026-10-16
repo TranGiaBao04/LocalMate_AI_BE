@@ -431,11 +431,11 @@ public sealed class TripsController(
                     StatusCodes.Status404NotFound,
                     "New place was not found or is not active.",
                     "place_not_found")),
-            ReplaceItineraryItemResultStatus.CrossesMidnight =>
+            ReplaceItineraryItemResultStatus.TooLong =>
                 Conflict(CreateProblem(
                     StatusCodes.Status409Conflict,
-                    "Replacing this place would push the itinerary past midnight.",
-                    "replacement_crosses_midnight")),
+                    "Replacing this place would make the itinerary longer than 24 hours.",
+                    "replacement_too_long")),
             _ => throw new InvalidOperationException("Unsupported replace itinerary item result status.")
         };
     }
