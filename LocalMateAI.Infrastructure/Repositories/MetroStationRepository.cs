@@ -30,6 +30,7 @@ public sealed class MetroStationRepository(AppDbContext dbContext) : IMetroStati
         var nearest = await dbContext.Database.SqlQuery<NearestStationRow>(
             $"""
              SELECT ms."Id" AS "StationId", ms."Name" AS "StationName",
+                    ms."Order" AS "StationOrder",
                     ST_Y(ms."Location") AS "StationLatitude",
                     ST_X(ms."Location") AS "StationLongitude",
                     ST_Distance(
@@ -49,7 +50,8 @@ public sealed class MetroStationRepository(AppDbContext dbContext) : IMetroStati
                 nearest.StationName,
                 nearest.StationLatitude,
                 nearest.StationLongitude,
-                nearest.DistanceMeters);
+                nearest.DistanceMeters,
+                nearest.StationOrder);
     }
 
     public async Task<NearestStationResult?> GetDistanceToStationAsync(
@@ -61,6 +63,7 @@ public sealed class MetroStationRepository(AppDbContext dbContext) : IMetroStati
         var stationRow = await dbContext.Database.SqlQuery<NearestStationRow>(
             $"""
              SELECT ms."Id" AS "StationId", ms."Name" AS "StationName",
+                    ms."Order" AS "StationOrder",
                     ST_Y(ms."Location") AS "StationLatitude",
                     ST_X(ms."Location") AS "StationLongitude",
                     ST_Distance(
@@ -80,12 +83,14 @@ public sealed class MetroStationRepository(AppDbContext dbContext) : IMetroStati
                 stationRow.StationName,
                 stationRow.StationLatitude,
                 stationRow.StationLongitude,
-                stationRow.DistanceMeters);
+                stationRow.DistanceMeters,
+                stationRow.StationOrder);
     }
 
     private sealed record NearestStationRow(
         Guid StationId,
         string StationName,
+        int StationOrder,
         double StationLatitude,
         double StationLongitude,
         double DistanceMeters);
