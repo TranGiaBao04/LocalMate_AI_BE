@@ -89,6 +89,24 @@ public sealed class MetroDayTimetableTests
     }
 
     [Fact]
+    public void ServiceHoursAt_TerminusOnlyCountsTheDirectionThatLeavesIt()
+    {
+        // Ga 1: chỉ chiều đi Suối Tiên rời ga, 05:00–22:00 (thứ 4).
+        Assert.Equal((Minute(5, 0), Minute(22, 0)), Wednesday.ServiceHoursAt(1));
+        Assert.Equal((Minute(5, 0), Minute(23, 0)), Saturday.ServiceHoursAt(1));
+    }
+
+    [Fact]
+    public void ServiceHoursAt_MiddleStationCombinesBothDirections()
+    {
+        // Ga 2: chuyến đầu 05:02 (đi Suối Tiên), chuyến cuối 22:24 (về Bến Thành, rời Suối Tiên 22:00 + 24 phút).
+        Assert.Equal((Minute(5, 2), Minute(22, 24)), Wednesday.ServiceHoursAt(2));
+    }
+
+    [Fact]
+    public void ServiceHoursAt_UnknownStation_IsNull() => Assert.Null(Wednesday.ServiceHoursAt(99));
+
+    [Fact]
     public void IsRunningAt_FollowsTheWeekday()
     {
         Assert.False(Wednesday.IsRunningAt(1, Minute(22, 30)));

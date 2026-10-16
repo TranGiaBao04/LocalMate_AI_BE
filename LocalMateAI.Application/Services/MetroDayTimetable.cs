@@ -100,23 +100,34 @@ public sealed class MetroDayTimetable
 
     /// <summary>
     /// Có chuyến nào (chiều nào cũng được) rời ga này trong <see cref="MaxWaitMinutes"/> phút kể từ
-    /// <paramref name="minuteOfDay"/> không. Ga cuối của một chiều không có chuyến đi tiếp theo chiều đó.
+    /// <paramref name="minuteOfDay"/> không.
     /// </summary>
-    public bool IsRunningAt(int stationOrder, int minuteOfDay)
+    public bool IsRunningAt(int stationOrder, int minuteOfDay) =>
+        DeparturesAt(stationOrder)
+            .Any(atStation => atStation >= minuteOfDay && atStation - minuteOfDay <= MaxWaitMinutes);
+
+    /// <summary>Chuyến đầu và cuối rời ga này trong ngày (phút từ 00:00); null khi không có chuyến nào.</summary>
+    public (int First, int Last)? ServiceHoursAt(int stationOrder)
+    {
+        var departures = DeparturesAt(stationOrder).ToList();
+        return departures.Count == 0 ? null : (departures.Min(), departures.Max());
+    }
+
+    // Giờ các chuyến rời ga này (cả hai chiều); ga cuối của một chiều không có chuyến đi tiếp theo chiều đó.
+    private IEnumerable<int> DeparturesAt(int stationOrder)
     {
         if (!offsets.TryGetValue(stationOrder, out var station))
         {
-            return false;
+            return [];
         }
 
         var firstOrder = offsets.Keys.Min();
         var lastOrder = offsets.Keys.Max();
 
-        return originDepartureMinutes.Any(pair =>
-            !(pair.Key == MetroDirection.TowardSuoiTien && stationOrder == lastOrder)
-            && !(pair.Key == MetroDirection.TowardBenThanh && stationOrder == firstOrder)
-            && pair.Value
-                .Select(departure => departure + MetroTimetableValidator.MinutesFromOrigin(station, pair.Key))
-                .Any(atStation => atStation >= minuteOfDay && atStation - minuteOfDay <= MaxWaitMinutes));
+        return originDepartureMinutes
+            .Where(pair => !(pair.Key == MetroDirection.TowardSuoiTien && stationOrder == lastOrder)
+                           && !(pair.Key == MetroDirection.TowardBenThanh && stationOrder == firstOrder))
+            .SelectMany(pair => pair.Value.Select(
+                departure => departure + MetroTimetableValidator.MinutesFromOrigin(station, pair.Key)));
     }
 }

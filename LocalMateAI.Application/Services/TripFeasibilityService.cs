@@ -43,7 +43,8 @@ public sealed class TripFeasibilityService(
                 0,
                 0,
                 anchorStation,
-                []));
+                [],
+                origin.MetroServiceHours));
         }
 
         // Cùng nguồn ứng viên và cùng luật lọc ngân sách với /match và /generate.

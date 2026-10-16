@@ -72,7 +72,7 @@ public sealed class TripGenerationService(
                 ? await stationSuggestionService.SuggestAsync(fallback.Origin, cancellationToken)
                 : [];
 
-            return GenerateTripResult.NoSuitablePlaces(reason, suggestedStations);
+            return GenerateTripResult.NoSuitablePlaces(reason, suggestedStations, payload.MetroServiceHours);
         }
 
         var origin = fallback.Origin

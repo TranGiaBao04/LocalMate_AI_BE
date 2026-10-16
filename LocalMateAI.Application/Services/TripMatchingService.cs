@@ -53,7 +53,8 @@ public sealed class TripMatchingService(
                     criteria.BudgetTier.ToString(),
                     [],
                     [],
-                    anchorStation),
+                    anchorStation,
+                    MetroServiceHours: origin.MetroServiceHours),
                 Origin: origin);
         }
 

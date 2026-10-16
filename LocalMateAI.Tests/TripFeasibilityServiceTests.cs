@@ -75,7 +75,22 @@ public sealed class TripFeasibilityServiceTests
         Assert.False(response.IsFeasible);
         Assert.Equal(TripInsufficiencyReasons.MetroNotRunning, response.Reason);
         Assert.Equal(0, fixture.Matching.Calls);
+        Assert.Null(response.MetroServiceHours); // origin thử không mang giờ tàu
         Assert.Empty(response.SuggestedStations);
+    }
+
+    [Fact]
+    public async Task Check_MetroNotRunning_ReturnsTheServiceHours()
+    {
+        var hours = new MetroServiceHoursDto(1, "Bến Thành", new TimeOnly(5, 0), new TimeOnly(22, 0));
+        var fixture = new Fixture(
+            [Place("A", AnchorStationId, 100)],
+            origin: TestTripOrigins.At(AnchorStation, serviceAreaFailure: TripInsufficiencyReasons.MetroNotRunning)
+                with { MetroServiceHours = hours });
+
+        var response = (await fixture.Service.CheckFeasibilityAsync(Request())).Response!;
+
+        Assert.Equal(hours, response.MetroServiceHours);
     }
 
     [Fact]

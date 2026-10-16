@@ -25,7 +25,8 @@ public sealed record TripOriginResolution(
     Guid? DestinationStationId,
     string? ServiceAreaFailure,
     DateOnly PlannedDate,
-    MetroBoarding? MetroBoarding = null)
+    MetroBoarding? MetroBoarding = null,
+    MetroServiceHoursDto? MetroServiceHours = null) // chỉ có khi ServiceAreaFailure là MetroNotRunning
 {
     public bool IsWithinServiceArea => ServiceAreaFailure is null;
 

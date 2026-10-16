@@ -43,7 +43,8 @@ public sealed class HeuristicFallbackEngine(
                     matched.BudgetTier,
                     [],
                     matched.AnchorStation,
-                    matched.NoteApplied),
+                    matched.NoteApplied,
+                    matched.MetroServiceHours),
                 Origin: match.Origin);
         }
 

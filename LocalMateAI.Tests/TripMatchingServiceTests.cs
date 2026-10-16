@@ -205,6 +205,21 @@ public sealed class TripMatchingServiceTests
         Assert.Equal(fits ? null : TripInsufficiencyReasons.DurationTooShort, response.InsufficiencyReason);
     }
 
+    [Fact]
+    public async Task Match_MetroNotRunning_ReturnsTheServiceHours()
+    {
+        var hours = new MetroServiceHoursDto(2, "Nhà hát Thành phố", new TimeOnly(5, 2), new TimeOnly(22, 24));
+        var origin = TestTripOrigins.At(NhaHat, serviceAreaFailure: TripInsufficiencyReasons.MetroNotRunning)
+            with { MetroServiceHours = hours };
+        var fixture = new Fixture(origin, [Place("A", NhaHat, 100)]);
+
+        var response = (await fixture.Service.MatchAsync(Request())).Response!;
+
+        Assert.Equal(TripInsufficiencyReasons.MetroNotRunning, response.InsufficiencyReason);
+        Assert.Equal(hours, response.MetroServiceHours);
+        Assert.Equal(0, fixture.Cluster.Calls);
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("   ")]

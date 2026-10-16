@@ -62,6 +62,19 @@ public sealed class TripGenerationServiceTests
     }
 
     [Fact]
+    public async Task Generate_MetroNotRunning_ReturnsTheServiceHours()
+    {
+        var hours = new MetroServiceHoursDto(1, "Bến Thành", new TimeOnly(5, 0), new TimeOnly(22, 0));
+        var fixture = new Fixture(Sufficient(isSufficient: false, reason: "MetroNotRunning", metroServiceHours: hours));
+
+        var result = await fixture.Service.GenerateAsync(UserId, Request());
+
+        Assert.Equal("MetroNotRunning", result.Reason);
+        Assert.Equal(hours, result.MetroServiceHours);
+        Assert.Empty(fixture.Trips.Added);
+    }
+
+    [Fact]
     public async Task Generate_InsufficientCandidates_ReturnsSuggestedStations()
     {
         var fixture = new Fixture(Sufficient(isSufficient: false, reason: "InsufficientCandidates"));
@@ -351,7 +364,8 @@ public sealed class TripGenerationServiceTests
         new(10.77, 106.69, 6, 0m, 900_000m, tagIds ?? [], TravelMode.Motorbike, plannedDate, startTime);
 
     private static FallbackItineraryResult Sufficient(
-        bool isSufficient = true, string? reason = null, TripOriginResolution? origin = null) =>
+        bool isSufficient = true, string? reason = null, TripOriginResolution? origin = null,
+        MetroServiceHoursDto? metroServiceHours = null) =>
         new(
             FallbackItineraryStatus.Success,
             new FallbackItineraryPayload(
@@ -362,7 +376,8 @@ public sealed class TripGenerationServiceTests
                 isSufficient ? 2 : 0,
                 "Standard",
                 isSufficient ? [Stop(0, 8, 0), Stop(1, 9, 5)] : [],
-                new StationRefDto(1, "Bến Thành")),
+                new StationRefDto(1, "Bến Thành"),
+                MetroServiceHours: metroServiceHours),
             Origin: origin ?? TestTripOrigins.At(startLatitude: 10.77, startLongitude: 106.69));
 
     private static FallbackStopDto Stop(int order, int hour, int minute) =>

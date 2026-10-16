@@ -74,6 +74,24 @@ public sealed class TripOriginResolverServiceTests
     }
 
     [Fact]
+    public async Task Metro_NotRunning_ReturnsTheServiceHoursOfTheBoardingStation()
+    {
+        var geo = new FakeGeoService(Nearest(BenThanh, 300));
+
+        var notRunning = await Resolver(geo).ResolveAsync(Request(
+            10.7721, 106.6980, travelMode: TravelMode.Metro, plannedDate: new DateOnly(2026, 9, 26),
+            startTime: new TimeOnly(23, 30))); // thứ Bảy
+        var running = await Resolver(geo).ResolveAsync(Request(
+            10.7721, 106.6980, travelMode: TravelMode.Metro, plannedDate: new DateOnly(2026, 9, 26),
+            startTime: new TimeOnly(9, 0)));
+
+        Assert.Equal(
+            new MetroServiceHoursDto(1, "Bến Thành", new TimeOnly(5, 0), new TimeOnly(23, 0)),
+            notRunning!.MetroServiceHours);
+        Assert.Null(running!.MetroServiceHours);
+    }
+
+    [Fact]
     public async Task Metro_FromStationAtNight_IsNotRunning()
     {
         var origin = await Resolver(new FakeGeoService(null)).ResolveAsync(Request(

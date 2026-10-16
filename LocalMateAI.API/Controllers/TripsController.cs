@@ -149,10 +149,7 @@ public sealed class TripsController(
                     "No place is open at the planned time.",
                     "no_places_open")),
             GenerateTripResultStatus.NoPlaces when result.Reason == TripInsufficiencyReasons.MetroNotRunning =>
-                Conflict(CreateProblem(
-                    StatusCodes.Status409Conflict,
-                    "The Metro is not running at the start time; choose walking, motorbike or auto.",
-                    "metro_not_running")),
+                Conflict(CreateMetroNotRunningProblem(result)),
             GenerateTripResultStatus.NoPlaces =>
                 Conflict(CreateInsufficientCandidatesProblem(result)),
             _ => throw new InvalidOperationException("Unsupported generate trip result status.")
@@ -668,6 +665,18 @@ public sealed class TripsController(
         };
 
         problem.Extensions["code"] = code;
+        return problem;
+    }
+
+    private ProblemDetails CreateMetroNotRunningProblem(GenerateTripResult result)
+    {
+        var problem = CreateProblem(
+            StatusCodes.Status409Conflict,
+            "The Metro is not running at the start time; choose walking, motorbike or auto.",
+            "metro_not_running");
+
+        // Giờ chuyến đầu/cuối ở ga lên để FE ghi câu cụ thể (null khi ngày đó không có chuyến nào).
+        problem.Extensions["metroServiceHours"] = result.MetroServiceHours;
         return problem;
     }
 

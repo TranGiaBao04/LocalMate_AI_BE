@@ -99,6 +99,7 @@ public sealed class TripOriginResolverService(
         var plannedDate = request.PlannedDate ?? DateOnly.FromDateTime(VietnamTime.Now(timeProvider));
 
         MetroBoarding? metroBoarding = null;
+        MetroServiceHoursDto? metroServiceHours = null;
         if (travelsByMetro)
         {
             // Lịch tàu theo ngày đi (thứ trong tuần quyết định giờ chuyến cuối).
@@ -114,6 +115,15 @@ public sealed class TripOriginResolverService(
                 && !metroBoarding.Timetable.IsRunningAt(boardingStationSummary.Order, startMinute))
             {
                 serviceAreaFailure = TripInsufficiencyReasons.MetroNotRunning;
+
+                // Giờ chuyến đầu/cuối ở ga lên để FE giải thích; lịch tàu ngày đó trống thì để null.
+                metroServiceHours = metroBoarding.Timetable.ServiceHoursAt(boardingStationSummary.Order) is { } hours
+                    ? new MetroServiceHoursDto(
+                        boardingStationSummary.Order,
+                        boardingStationSummary.Name,
+                        TimeOnly.FromTimeSpan(TimeSpan.FromMinutes(hours.First)),
+                        TimeOnly.FromTimeSpan(TimeSpan.FromMinutes(hours.Last)))
+                    : null;
             }
         }
 
@@ -126,6 +136,7 @@ public sealed class TripOriginResolverService(
             destinationStation?.Id,
             serviceAreaFailure,
             plannedDate,
-            metroBoarding);
+            metroBoarding,
+            metroServiceHours);
     }
 }

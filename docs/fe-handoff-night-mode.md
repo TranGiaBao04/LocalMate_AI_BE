@@ -85,11 +85,23 @@ Chỉ khi `travelMode: "Metro"`: lúc `startTime`, **không có chuyến tàu n�
   "title": "The Metro is not running at the start time; choose walking, motorbike or auto.",
   "status": 409,
   "instance": "/api/trips/generate",
-  "code": "metro_not_running"
+  "code": "metro_not_running",
+  "metroServiceHours": {
+    "stationOrder": 1,
+    "stationName": "Bến Thành",
+    "firstDeparture": "05:00:00",
+    "lastDeparture": "22:00:00"
+  }
 }
 ```
 
-Gợi ý câu hiển thị: *"Metro không chạy vào giờ này. Bạn chọn Đi bộ, Xe máy hoặc Tự động nhé."*, kèm nút đổi phương tiện.
+**`metroServiceHours`** (giờ chuyến đầu/cuối rời ga lên trong ngày đi) có ở cả 4 API trên khi lý do là `MetroNotRunning`: ở 409 nằm trong body ProblemDetails (cạnh `code`), ở 3 API còn lại là field ở gốc response. Lý do khác ⇒ `null`.
+- Giờ tính theo lịch tàu của **ngày đi** (thứ 6–CN chạy muộn hơn thứ 2–5), tại **ga lên** (ga gần điểm xuất phát, hoặc `startStationOrder`).
+- Ga giữa tuyến gộp cả hai chiều; ga đầu/cuối tuyến chỉ tính chiều rời ga đó. Ví dụ thứ Bảy ga 2 Nhà hát Thành phố: `05:02:00`–`23:28:00`.
+- Là số **dự kiến** (lịch tàu đang dùng số ước tính).
+- Bắt đầu sớm hơn chuyến đầu chưa tới 60 phút vẫn được coi là có tàu (không bị chặn).
+
+Gợi ý câu hiển thị: *"Metro ở ga {stationName} chạy từ {firstDeparture} đến {lastDeparture}. Bạn chọn giờ khác, hoặc đi Bộ, Xe máy, Tự động nhé."*, kèm nút đổi phương tiện.
 
 Giờ tàu theo **lịch của ngày đi**: hiện thứ 2–5 chuyến cuối khoảng 22:00, thứ 6–CN khoảng 23:00, chuyến đầu khoảng 05:00. Lịch tàu là số giữ chỗ, có thể đổi.
 
@@ -335,7 +347,7 @@ Dòng có cảnh báo này **vẫn hợp lệ** (`isValid: true`) và vẫn đư
 **Màn tạo lịch**
 - [ ] Bỏ giới hạn số giờ theo giờ bắt đầu; `maxDurationHours` giờ là 24 cho mọi khung.
 - [ ] Xử lý 409 `no_places_open` (gợi ý chọn giờ sớm hơn).
-- [ ] Xử lý 409 `metro_not_running` (gợi ý đổi phương tiện, có nút đổi nhanh).
+- [ ] Xử lý 409 `metro_not_running` (gợi ý đổi phương tiện, có nút đổi nhanh; hiện giờ chạy từ `metroServiceHours`).
 - [ ] `feasibility-check` / `match`: hiện câu tương ứng cho `NoPlacesOpen`, `MetroNotRunning`.
 
 **Màn chi tiết lịch**
