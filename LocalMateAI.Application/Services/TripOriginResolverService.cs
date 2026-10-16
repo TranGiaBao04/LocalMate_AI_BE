@@ -107,6 +107,14 @@ public sealed class TripOriginResolverService(
                 boardingStation.DistanceMeters,
                 StartsAtStation: startStation is not null,
                 MetroDayTimetable.For(metroTimetableSource.Timetable, plannedDate));
+
+            // Cách A: bắt đầu lúc ga lên không có tàu thì chặn; đã bắt đầu lúc tàu còn chạy thì đoạn sau tự đổi xe.
+            var startMinute = TripClock.MinuteOfDay(request.StartTime ?? ItineraryScheduler.DefaultStartTime);
+            if (serviceAreaFailure is null
+                && !metroBoarding.Timetable.IsRunningAt(boardingStationSummary.Order, startMinute))
+            {
+                serviceAreaFailure = TripInsufficiencyReasons.MetroNotRunning;
+            }
         }
 
         return new TripOriginResolution(

@@ -19,4 +19,7 @@ public static class TripInsufficiencyReasons
 
     /// <summary>Có địa điểm vừa thời gian và ngân sách nhưng không nơi nào mở cửa vào giờ đó.</summary>
     public const string NoPlacesOpen = "NoPlacesOpen";
+
+    /// <summary>Chọn đi Metro nhưng lúc bắt đầu ga lên không có tàu chạy (đêm khuya hoặc trước chuyến đầu).</summary>
+    public const string MetroNotRunning = "MetroNotRunning";
 }

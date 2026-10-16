@@ -148,6 +148,11 @@ public sealed class TripsController(
                     StatusCodes.Status409Conflict,
                     "No place is open at the planned time.",
                     "no_places_open")),
+            GenerateTripResultStatus.NoPlaces when result.Reason == TripInsufficiencyReasons.MetroNotRunning =>
+                Conflict(CreateProblem(
+                    StatusCodes.Status409Conflict,
+                    "The Metro is not running at the start time; choose walking, motorbike or auto.",
+                    "metro_not_running")),
             GenerateTripResultStatus.NoPlaces =>
                 Conflict(CreateInsufficientCandidatesProblem(result)),
             _ => throw new InvalidOperationException("Unsupported generate trip result status.")

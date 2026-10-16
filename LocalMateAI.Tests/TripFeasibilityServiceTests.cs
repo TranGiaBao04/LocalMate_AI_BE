@@ -64,6 +64,21 @@ public sealed class TripFeasibilityServiceTests
     }
 
     [Fact]
+    public async Task Check_MetroNotRunningAtStart_IsNotFeasible_WithoutLoadingCandidates()
+    {
+        var fixture = new Fixture(
+            [Place("A", AnchorStationId, 100)],
+            origin: TestTripOrigins.At(AnchorStation, serviceAreaFailure: TripInsufficiencyReasons.MetroNotRunning));
+
+        var response = (await fixture.Service.CheckFeasibilityAsync(Request())).Response!;
+
+        Assert.False(response.IsFeasible);
+        Assert.Equal(TripInsufficiencyReasons.MetroNotRunning, response.Reason);
+        Assert.Equal(0, fixture.Matching.Calls);
+        Assert.Empty(response.SuggestedStations);
+    }
+
+    [Fact]
     public async Task Check_OnlyCandidateClosedAtThatTime_ReportsNoPlacesOpen()
     {
         var fixture = new Fixture(
