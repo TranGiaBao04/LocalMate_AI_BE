@@ -5,4 +5,6 @@ public sealed record NearestStationResult(
     string StationName,
     double StationLatitude,
     double StationLongitude,
-    double DistanceMeters);
+    double DistanceMeters,
+    int StationOrder = 0);
+
