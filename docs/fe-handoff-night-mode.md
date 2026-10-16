@@ -148,7 +148,36 @@ Hiển thị gợi ý:
 - Khung giờ đầu trang: **"22:00 – 01:18 (hôm sau)"**.
 - Chặng 3: **"00:18 (hôm sau)"**, hoặc chèn một dòng phân cách "Sang ngày Chủ nhật 18/10" trước chặng đầu tiên có `isNextDay: true`.
 
-### 3.4. Mail lịch trình
+### 3.4. Giờ mở cửa ở trang địa điểm công khai
+
+`GET /api/places/{id}` có thêm **`openingHours`**, **cùng khuôn với API admin** `GET /api/admin/places/{id}/opening-hours` (mục 5.1), nên dùng chung một component:
+
+```json
+{
+  "id": "f3630944-…",
+  "name": "Tonkin Specialty Coffee",
+  "averageRating": null,
+  "reviewCount": 0,
+  "openingHours": {
+    "placeId": "f3630944-…",
+    "hasData": true,
+    "days": [
+      { "dayOfWeek": "Monday", "isClosed": true, "openTime": null, "closeTime": null },
+      { "dayOfWeek": "Tuesday", "isClosed": false, "openTime": "17:00:00", "closeTime": "02:00:00" },
+      { "dayOfWeek": "Wednesday", "isClosed": false, "openTime": null, "closeTime": null }
+    ]
+  }
+}
+```
+
+(Rút gọn: `days` luôn đủ 7 thứ; các field cũ của chi tiết địa điểm giữ nguyên.)
+
+- `hasData: false` ⇒ hiện "Chưa có thông tin giờ mở cửa" hoặc ẩn khối.
+- `isClosed: false` mà giờ `null` ⇒ thứ đó chưa nhập, hiện "Chưa rõ".
+- `closeTime < openTime` ⇒ mở qua đêm, ví dụ "17:00 – 02:00 (hôm sau)".
+- BE **không** tính sẵn "đang mở / đã đóng lúc này". FE tự tính từ `days` theo giờ `Asia/Ho_Chi_Minh`, nhớ xét cả khung qua đêm của **hôm trước** (quán mở thứ Hai 17:00–02:00 vẫn đang mở lúc 01:00 thứ Ba).
+
+### 3.5. Mail lịch trình
 
 BE tự ghi "(hôm sau)" trong mail khi chốt lịch. FE không phải làm gì.
 
@@ -304,6 +333,9 @@ Dòng có cảnh báo này **vẫn hợp lệ** (`isValid: true`) và vẫn đư
 - [ ] Ghi "(hôm sau)" cho chặng `isNextDay: true` và cho `endTime` khi `endsNextDay: true`.
 - [ ] Cảnh báo đỏ cho chặng `openingStatus: "Closed"`, kèm nút Thay địa điểm.
 - [ ] `Unknown` hiện nhạt hoặc không hiện.
+
+**Trang địa điểm (`PlacePreviewPage`)**
+- [ ] Hiện `openingHours` (bảng 7 thứ hoặc dòng "Hôm nay: …"), xử lý `hasData: false` và giờ qua đêm.
 
 **Thay địa điểm**
 - [ ] Đổi `replacement_crosses_midnight` → `replacement_too_long`.

@@ -135,8 +135,11 @@ internal sealed class StubPlaceRepository : IPlaceRepository
     public Task<DeletePlacePersistenceResult> DeleteForAdminAsync(Guid placeId,
         CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
+    // Địa điểm đang Active theo Id (chi tiết địa điểm công khai); không có thì trả null.
+    public IReadOnlyList<PlaceReadModel> ActivePlaces { get; init; } = [];
+
     public Task<PlaceReadModel?> GetActiveByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
-        throw new NotSupportedException();
+        Task.FromResult(ActivePlaces.FirstOrDefault(place => place.Id == id));
 }
 
 internal sealed class StubMetroTimetableSource(MetroTimetable? timetable = null) : IMetroTimetableSource

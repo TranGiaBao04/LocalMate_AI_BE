@@ -20,4 +20,5 @@ public sealed record PlaceDetailResponse(
     NearestStationResult NearestStation,
     string? GooglePlaceId = null, // mã địa điểm Google Maps; null thì FE mở bản đồ theo toạ độ
     decimal? AverageRating = null, // làm tròn 1 chữ số; null khi chưa có đánh giá nào
-    int ReviewCount = 0);
+    int ReviewCount = 0,
+    PlaceOpeningHoursResponse? OpeningHours = null); // đủ 7 thứ; HasData = false khi chưa có giờ mở cửa
