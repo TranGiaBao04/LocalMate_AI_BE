@@ -1,3 +1,4 @@
+using LocalMateAI.Application.DTOs.Places;
 using LocalMateAI.Application.DTOs.Trips;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Interfaces.Services;
@@ -10,7 +11,8 @@ public sealed class TripDetailService(
     IUserRepository userRepository,
     ITripRepository tripRepository,
     ISystemSettingProvider settings,
-    IMetroTimetableSource metroTimetableSource) : ITripDetailService
+    IMetroTimetableSource metroTimetableSource,
+    IPlaceOpeningHourRepository openingHourRepository) : ITripDetailService
 {
     public async Task<GetTripDetailResult> GetAsync(
         Guid userId,
@@ -41,15 +43,22 @@ public sealed class TripDetailService(
             ? MetroDayTimetable.For(metroTimetableSource.Timetable, DateOnly.FromDateTime(plannedStart))
             : null;
 
-        return GetTripDetailResult.Succeeded(ToResponse(trip, planning, metroTimetable));
+        // Giờ mở cửa HIỆN TẠI của các địa điểm trong trip, để báo chặng nào rơi vào giờ đóng cửa.
+        var openingHours = await openingHourRepository.GetForPlacesAsync(
+            trip.Items.Select(item => item.PlaceId).Distinct().ToList(),
+            cancellationToken);
+
+        return GetTripDetailResult.Succeeded(ToResponse(trip, planning, metroTimetable, openingHours));
     }
 
     // Dựng response từ read model (logic thuần). FinalizeTripCommand dùng lại để mail lịch trình khớp đúng số liệu API.
     // Trip Metro mà không truyền metroTimetable thì không có Leg (mail lịch trình không dùng Leg).
+    // Không truyền openingHours thì OpeningStatus của mọi chặng là null (mail lịch trình không dùng).
     public static TripDetailResponse ToResponse(
         TripDetailReadModel trip,
         TripPlanningSettings? settings = null,
-        MetroDayTimetable? metroTimetable = null)
+        MetroDayTimetable? metroTimetable = null,
+        IReadOnlyDictionary<Guid, IReadOnlyList<PlaceOpeningHourDto>>? openingHours = null)
     {
         var planning = settings ?? TripPlanningSettings.Default;
         var stops = trip.Items
@@ -130,6 +139,17 @@ public sealed class TripDetailService(
                         ToStationRef(item.StationOrder, item.StationName));
                 }
 
+                // Trip cũ chưa đặt ngày đi thì không biết là thứ mấy nên không kết luận được.
+                PlaceOpeningStatus? openingStatus = openingHours is null
+                    ? null
+                    : trip.PlannedStartAt is not { } plannedAt
+                        ? PlaceOpeningStatus.Unknown
+                        : OpeningWindows.StatusFor(
+                            openingHours.GetValueOrDefault(item.PlaceId) ?? [],
+                            DateOnly.FromDateTime(plannedAt),
+                            startMinutes[index],
+                            startMinutes[index] + item.EstimatedDurationMinutes);
+
                 return new TripItemResponse(
                     item.ItemId,
                     item.PlaceId,
@@ -151,7 +171,8 @@ public sealed class TripDetailService(
                     walkingMinutes,
                     motorbikeMinutes,
                     leg,
-                    item.GooglePlaceId);
+                    item.GooglePlaceId,
+                    openingStatus);
             })
             .ToList();
 

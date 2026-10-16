@@ -14,7 +14,7 @@ public sealed class TripDetailServiceTests
     public async Task Get_EmptyTripId_ReturnsInvalidWithoutRepositoryCall()
     {
         var repository = new FakeTripRepository(null);
-        var service = new TripDetailService(new FakeUserRepository(UserId), repository, new FakeSystemSettingProvider(), new StubMetroTimetableSource());
+        var service = new TripDetailService(new FakeUserRepository(UserId), repository, new FakeSystemSettingProvider(), new StubMetroTimetableSource(), new FakePlaceOpeningHourRepository());
 
         var result = await service.GetAsync(UserId, Guid.Empty);
 
@@ -26,7 +26,7 @@ public sealed class TripDetailServiceTests
     public async Task Get_NonPersistedUser_ReturnsUserNotFoundBeforeTripLookup()
     {
         var repository = new FakeTripRepository(null);
-        var service = new TripDetailService(new FakeUserRepository(), repository, new FakeSystemSettingProvider(), new StubMetroTimetableSource());
+        var service = new TripDetailService(new FakeUserRepository(), repository, new FakeSystemSettingProvider(), new StubMetroTimetableSource(), new FakePlaceOpeningHourRepository());
 
         var result = await service.GetAsync(Guid.NewGuid(), Guid.NewGuid());
 
@@ -38,7 +38,7 @@ public sealed class TripDetailServiceTests
     public async Task Get_MissingOrForeignOrDeletedTrip_ReturnsTripNotFound()
     {
         var repository = new FakeTripRepository(null);
-        var service = new TripDetailService(new FakeUserRepository(UserId), repository, new FakeSystemSettingProvider(), new StubMetroTimetableSource());
+        var service = new TripDetailService(new FakeUserRepository(UserId), repository, new FakeSystemSettingProvider(), new StubMetroTimetableSource(), new FakePlaceOpeningHourRepository());
 
         var result = await service.GetAsync(UserId, Guid.NewGuid());
 
@@ -68,7 +68,7 @@ public sealed class TripDetailServiceTests
             new DateTime(2026, 9, 24, 1, 0, 0, DateTimeKind.Utc),
             new DateTime(2026, 9, 24, 2, 0, 0, DateTimeKind.Utc),
             new DateTime(2026, 9, 24, 2, 0, 0, DateTimeKind.Utc));
-        var service = new TripDetailService(new FakeUserRepository(UserId), new FakeTripRepository(model), new FakeSystemSettingProvider(), new StubMetroTimetableSource());
+        var service = new TripDetailService(new FakeUserRepository(UserId), new FakeTripRepository(model), new FakeSystemSettingProvider(), new StubMetroTimetableSource(), new FakePlaceOpeningHourRepository());
 
         var result = await service.GetAsync(UserId, tripId);
 
@@ -108,7 +108,7 @@ public sealed class TripDetailServiceTests
             DateTime.UtcNow,
             null,
             TravelMode.Motorbike);
-        var service = new TripDetailService(new FakeUserRepository(UserId), new FakeTripRepository(model), new FakeSystemSettingProvider(), new StubMetroTimetableSource());
+        var service = new TripDetailService(new FakeUserRepository(UserId), new FakeTripRepository(model), new FakeSystemSettingProvider(), new StubMetroTimetableSource(), new FakePlaceOpeningHourRepository());
 
         var response = (await service.GetAsync(UserId, tripId)).Response!;
 
@@ -231,7 +231,7 @@ public sealed class TripDetailServiceTests
 
     private static TripDetailService Service(TripDetailReadModel model) =>
         new(new FakeUserRepository(UserId), new FakeTripRepository(model), new FakeSystemSettingProvider(),
-            new StubMetroTimetableSource());
+            new StubMetroTimetableSource(), new FakePlaceOpeningHourRepository());
 
     private static TripDetailReadModel MetroModel(
         Guid tripId,
@@ -300,7 +300,7 @@ public sealed class TripDetailServiceTests
     {
         var tripId = Guid.NewGuid();
         var model = Model(tripId, new DateTime(2026, 10, 3, 8, 0, 0), new TimeOnly(8, 20));
-        var service = new TripDetailService(new FakeUserRepository(UserId), new FakeTripRepository(model), new FakeSystemSettingProvider(), new StubMetroTimetableSource());
+        var service = new TripDetailService(new FakeUserRepository(UserId), new FakeTripRepository(model), new FakeSystemSettingProvider(), new StubMetroTimetableSource(), new FakePlaceOpeningHourRepository());
 
         var response = (await service.GetAsync(UserId, tripId)).Response!;
 
@@ -320,8 +320,8 @@ public sealed class TripDetailServiceTests
         var withNote = Model(tripId, null, new TimeOnly(8, 20)) with { Note = "muốn chỗ yên tĩnh", NoteApplied = true };
         var withoutNote = Model(tripId, null, new TimeOnly(8, 20));
 
-        var first = (await new TripDetailService(new FakeUserRepository(UserId), new FakeTripRepository(withNote), new FakeSystemSettingProvider(), new StubMetroTimetableSource()).GetAsync(UserId, tripId)).Response!;
-        var second = (await new TripDetailService(new FakeUserRepository(UserId), new FakeTripRepository(withoutNote), new FakeSystemSettingProvider(), new StubMetroTimetableSource()).GetAsync(UserId, tripId)).Response!;
+        var first = (await new TripDetailService(new FakeUserRepository(UserId), new FakeTripRepository(withNote), new FakeSystemSettingProvider(), new StubMetroTimetableSource(), new FakePlaceOpeningHourRepository()).GetAsync(UserId, tripId)).Response!;
+        var second = (await new TripDetailService(new FakeUserRepository(UserId), new FakeTripRepository(withoutNote), new FakeSystemSettingProvider(), new StubMetroTimetableSource(), new FakePlaceOpeningHourRepository()).GetAsync(UserId, tripId)).Response!;
 
         Assert.Equal("muốn chỗ yên tĩnh", first.Note);
         Assert.True(first.NoteApplied);
@@ -338,7 +338,7 @@ public sealed class TripDetailServiceTests
         {
             Items = [model.Items[0] with { GooglePlaceId = "ChIJzaevQMcvdTERYE3UhLKg5NE" }, .. model.Items.Skip(1)]
         };
-        var service = new TripDetailService(new FakeUserRepository(UserId), new FakeTripRepository(model), new FakeSystemSettingProvider(), new StubMetroTimetableSource());
+        var service = new TripDetailService(new FakeUserRepository(UserId), new FakeTripRepository(model), new FakeSystemSettingProvider(), new StubMetroTimetableSource(), new FakePlaceOpeningHourRepository());
 
         var response = (await service.GetAsync(UserId, tripId)).Response!;
 
@@ -351,7 +351,7 @@ public sealed class TripDetailServiceTests
     {
         var tripId = Guid.NewGuid();
         var model = Model(tripId, null, new TimeOnly(8, 20));
-        var service = new TripDetailService(new FakeUserRepository(UserId), new FakeTripRepository(model), new FakeSystemSettingProvider(), new StubMetroTimetableSource());
+        var service = new TripDetailService(new FakeUserRepository(UserId), new FakeTripRepository(model), new FakeSystemSettingProvider(), new StubMetroTimetableSource(), new FakePlaceOpeningHourRepository());
 
         var response = (await service.GetAsync(UserId, tripId)).Response!;
 
@@ -367,7 +367,7 @@ public sealed class TripDetailServiceTests
     {
         var tripId = Guid.NewGuid();
         var model = Model(tripId, new DateTime(2026, 10, 3, 9, 0, 0), new TimeOnly(8, 20));
-        var service = new TripDetailService(new FakeUserRepository(UserId), new FakeTripRepository(model), new FakeSystemSettingProvider(), new StubMetroTimetableSource());
+        var service = new TripDetailService(new FakeUserRepository(UserId), new FakeTripRepository(model), new FakeSystemSettingProvider(), new StubMetroTimetableSource(), new FakePlaceOpeningHourRepository());
 
         var response = (await service.GetAsync(UserId, tripId)).Response!;
 
@@ -388,7 +388,7 @@ public sealed class TripDetailServiceTests
                 Item(1, new TimeOnly(1, 50), 60, 0m, isVisited: false) // đi 15'
             ]
         };
-        var service = new TripDetailService(new FakeUserRepository(UserId), new FakeTripRepository(model), new FakeSystemSettingProvider(), new StubMetroTimetableSource());
+        var service = new TripDetailService(new FakeUserRepository(UserId), new FakeTripRepository(model), new FakeSystemSettingProvider(), new StubMetroTimetableSource(), new FakePlaceOpeningHourRepository());
 
         var response = (await service.GetAsync(UserId, tripId)).Response!;
 
@@ -397,6 +397,49 @@ public sealed class TripDetailServiceTests
         Assert.Equal(25 + 15, response.TotalTravelMinutes);
         Assert.Equal(150 + 40, response.TotalMinutes);
         Assert.Equal(new TimeOnly(2, 50), response.EndTime);
+    }
+
+    [Fact]
+    public async Task Get_ReportsWhetherEachStopIsOpenDuringTheVisit()
+    {
+        // Thứ Bảy 17/10/2026, rời 08:40.
+        var tripId = Guid.NewGuid();
+        var model = Model(tripId, new DateTime(2026, 10, 17, 8, 40, 0), new TimeOnly(9, 0)) with
+        {
+            Items =
+            [
+                Item(0, new TimeOnly(9, 0), 90, 0m, isVisited: false),   // mở 08:00–17:00 ⇒ Open
+                Item(1, new TimeOnly(17, 0), 60, 0m, isVisited: false),  // mở 08:00–17:00 ⇒ Closed
+                Item(2, new TimeOnly(18, 30), 60, 0m, isVisited: false)  // chưa có dữ liệu ⇒ Unknown
+            ]
+        };
+        var hours = new FakePlaceOpeningHourRepository();
+        hours.Hours[model.Items[0].PlaceId] = TestOpeningHours.EveryDay(8, 17);
+        hours.Hours[model.Items[1].PlaceId] = TestOpeningHours.EveryDay(8, 17);
+        var service = new TripDetailService(new FakeUserRepository(UserId), new FakeTripRepository(model),
+            new FakeSystemSettingProvider(), new StubMetroTimetableSource(), hours);
+
+        var response = (await service.GetAsync(UserId, tripId)).Response!;
+
+        Assert.Equal(
+            [PlaceOpeningStatus.Open, PlaceOpeningStatus.Closed, PlaceOpeningStatus.Unknown],
+            response.Items.Select(item => item.OpeningStatus));
+    }
+
+    [Fact]
+    public async Task Get_TripWithoutPlannedDate_ReportsUnknown_AndToResponseWithoutHoursLeavesItNull()
+    {
+        var tripId = Guid.NewGuid();
+        var model = Model(tripId, null, new TimeOnly(9, 0));
+        var hours = new FakePlaceOpeningHourRepository();
+        hours.Hours[model.Items[0].PlaceId] = TestOpeningHours.EveryDay(8, 17);
+        var service = new TripDetailService(new FakeUserRepository(UserId), new FakeTripRepository(model),
+            new FakeSystemSettingProvider(), new StubMetroTimetableSource(), hours);
+
+        var response = (await service.GetAsync(UserId, tripId)).Response!;
+
+        Assert.All(response.Items, item => Assert.Equal(PlaceOpeningStatus.Unknown, item.OpeningStatus));
+        Assert.All(TripDetailService.ToResponse(model).Items, item => Assert.Null(item.OpeningStatus));
     }
 
     private static TripItemReadModel Item(

@@ -21,4 +21,5 @@ public sealed record TripItemResponse(
     int? WalkingMinutes,
     int? MotorbikeMinutes,
     TripLegResponse? Leg = null, // cách đi tới chặng này; null khi không có đoạn đi (chặng đầu của trip không đặt giờ)
-    string? GooglePlaceId = null); // mã địa điểm Google Maps; null thì FE mở bản đồ theo toạ độ
+    string? GooglePlaceId = null, // mã địa điểm Google Maps; null thì FE mở bản đồ theo toạ độ
+    PlaceOpeningStatus? OpeningStatus = null); // null chỉ khi không nạp giờ mở cửa (mail lịch trình); API luôn có

@@ -1,4 +1,5 @@
 using LocalMateAI.Application.DTOs.Places;
+using LocalMateAI.Application.DTOs.Trips;
 using LocalMateAI.Application.Services;
 
 namespace LocalMateAI.Tests;
@@ -73,6 +74,51 @@ public sealed class OpeningWindowsTests
         var windows = OpeningWindows.Build(week, Sunday);
 
         Assert.True(OpeningWindows.Covers(windows, 1410, 1470));
+    }
+
+    [Fact]
+    public void StatusFor_NoData_IsUnknown()
+    {
+        Assert.Equal(PlaceOpeningStatus.Unknown, OpeningWindows.StatusFor([], Sunday, 600, 660));
+    }
+
+    [Theory]
+    [InlineData(540, 600, PlaceOpeningStatus.Open)]     // 09:00–10:00
+    [InlineData(990, 1050, PlaceOpeningStatus.Closed)]  // 16:30–17:30, quá giờ đóng 17:00
+    [InlineData(1380, 1440, PlaceOpeningStatus.Closed)] // 23:00
+    public void StatusFor_KnownWeek(int start, int end, PlaceOpeningStatus expected)
+    {
+        Assert.Equal(expected, OpeningWindows.StatusFor(TestOpeningHours.EveryDay(8, 17), Sunday, start, end));
+    }
+
+    [Fact]
+    public void StatusFor_ClosedDay_IsClosed()
+    {
+        Assert.Equal(
+            PlaceOpeningStatus.Closed,
+            OpeningWindows.StatusFor(TestOpeningHours.ClosedEveryDay(), Sunday, 600, 660));
+    }
+
+    [Fact]
+    public void StatusFor_VisitOnADayWithoutData_IsUnknown()
+    {
+        // Chỉ nhập thứ Bảy; chuyến đi Chủ nhật.
+        IReadOnlyList<PlaceOpeningHourDto> week = [new(DayOfWeek.Saturday, false, new TimeOnly(8, 0), new TimeOnly(17, 0))];
+
+        Assert.Equal(PlaceOpeningStatus.Unknown, OpeningWindows.StatusFor(week, Sunday, 600, 660));
+    }
+
+    [Fact]
+    public void StatusFor_OvernightFromThePreviousDay_IsOpenAfterMidnight()
+    {
+        // Thứ Bảy 17:00 → 02:00 Chủ nhật; chuyến đi thứ Bảy, chặng 01:00 Chủ nhật (phút 1500).
+        IReadOnlyList<PlaceOpeningHourDto> week =
+        [
+            new(DayOfWeek.Saturday, false, new TimeOnly(17, 0), new TimeOnly(2, 0)),
+            new(DayOfWeek.Sunday, true, null, null)
+        ];
+
+        Assert.Equal(PlaceOpeningStatus.Open, OpeningWindows.StatusFor(week, Sunday.AddDays(-1), 1500, 1560));
     }
 
     [Theory]
