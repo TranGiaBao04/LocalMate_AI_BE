@@ -92,7 +92,21 @@ public sealed class PlaceOpeningHoursSchemaTests
         };
 
         Assert.False(openingHour.Validate(out var error));
-        Assert.Equal("Giờ mở và giờ đóng không được bằng nhau.", error);
+        Assert.Equal("Giờ mở và giờ đóng không được bằng nhau (mở cả ngày thì nhập 00:00–00:00).", error);
+    }
+
+    [Fact]
+    public void Validate_MidnightToMidnight_IsOpenAllDay()
+    {
+        var openingHour = new PlaceOpeningHour
+        {
+            DayOfWeek = DayOfWeek.Monday,
+            OpenTime = TimeOnly.MinValue,
+            CloseTime = TimeOnly.MinValue
+        };
+
+        Assert.True(openingHour.Validate(out var error));
+        Assert.Equal(string.Empty, error);
     }
 
     [Fact]
