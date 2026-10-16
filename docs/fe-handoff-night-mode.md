@@ -295,6 +295,15 @@ Hai admin cùng lưu một địa điểm: lưu lần lượt, người lưu sau
 
 ---
 
+### 5.3. Tìm địa điểm chưa có giờ mở cửa
+
+- `GET /api/admin/places` nhận thêm **`hasOpeningHours=true|false`** (bỏ trống = không lọc). Kết hợp được với các bộ lọc khác, ví dụ `?hasOpeningHours=false&status=Active` = các địa điểm đang hiển thị mà chưa có giờ mở cửa.
+- Mỗi dòng của danh sách và `GET /api/admin/places/{id}` (kể cả response sau khi tạo/sửa/đổi trạng thái) có thêm field **`hasOpeningHours`** (bool).
+- `true` = có **ít nhất một thứ** đã nhập. Địa điểm mới nhập vài thứ cũng là `true`; muốn biết thứ nào còn trống thì mở màn giờ mở cửa.
+- Giá trị không phải `true`/`false` (ví dụ `maybe`) ⇒ 400 tự động của framework.
+
+Gợi ý: thêm nhãn "Chưa có giờ mở cửa" trên dòng có `hasOpeningHours: false` và một ô lọc tương ứng ở màn danh sách.
+
 ## 6. Admin: import địa điểm
 
 Đường dẫn và contract của `GET /api/admin/places/import-template`, `POST .../import/preview`, `POST .../import/commit` **không đổi**. Chỉ đổi cách đọc cột **"OpeningHours"** (giờ mở cửa) khi tạo địa điểm mới:
@@ -343,4 +352,5 @@ Dòng có cảnh báo này **vẫn hợp lệ** (`isValid: true`) và vẫn đư
 
 **Admin Portal**
 - [ ] Khối "Giờ mở cửa" (bảng 7 thứ) trong trang sửa địa điểm, gọi GET/PUT `opening-hours`.
+- [ ] Danh sách địa điểm: nhãn "Chưa có giờ mở cửa" theo `hasOpeningHours` + ô lọc `?hasOpeningHours=false`.
 - [ ] Màn import: hiện cảnh báo giờ mở cửa trong `rows[].warnings`; cập nhật hướng dẫn định dạng cột giờ.
