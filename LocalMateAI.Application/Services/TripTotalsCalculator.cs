@@ -9,13 +9,18 @@ namespace LocalMateAI.Application.Services;
 /// </summary>
 public static class TripTotalsCalculator
 {
-    /// <summary>Khoảng trống giữa lúc chặng trước kết thúc và chặng sau bắt đầu, chính là thời gian di chuyển.</summary>
-    public static int TravelGapMinutes(TripStopSnapshot previous, TripStopSnapshot next)
+    /// <summary>
+    /// Thời gian di chuyển tới từng chặng = khoảng trống giữa lúc chặng trước kết thúc và chặng này bắt đầu
+    /// (tính qua nửa đêm đúng nhờ TripClock). Phần tử đầu luôn 0; giờ chồng lấn thì coi như không di chuyển.
+    /// </summary>
+    public static IReadOnlyList<int> TravelGaps(IReadOnlyList<TripStopSnapshot> orderedStops)
     {
-        var previousEnd = previous.ScheduledTime.ToTimeSpan()
-                          + TimeSpan.FromMinutes(previous.EstimatedDurationMinutes);
-        var gap = (int)(next.ScheduledTime.ToTimeSpan() - previousEnd).TotalMinutes;
-        return Math.Max(0, gap); // giờ chồng lấn thì coi như không di chuyển
+        var starts = TripClock.StartMinutes(leaveAt: null, orderedStops);
+        return starts
+            .Select((start, index) => index == 0
+                ? 0
+                : Math.Max(0, start - starts[index - 1] - orderedStops[index - 1].EstimatedDurationMinutes))
+            .ToList();
     }
 
     /// <param name="orderedStops">Các chặng đã xếp theo OrderIndex tăng dần.</param>
@@ -26,30 +31,16 @@ public static class TripTotalsCalculator
             return new TripTotals(0, 0, 0, 0, null);
         }
 
-        var visitMinutes = 0;
-        var travelMinutes = 0;
-        decimal budget = 0;
-
-        for (var index = 0; index < orderedStops.Count; index++)
-        {
-            var stop = orderedStops[index];
-            visitMinutes += stop.EstimatedDurationMinutes;
-            budget += stop.EstimatedBudget;
-
-            if (index == 0)
-            {
-                continue;
-            }
-
-            travelMinutes += TravelGapMinutes(orderedStops[index - 1], stop);
-        }
-
+        var visitMinutes = orderedStops.Sum(stop => stop.EstimatedDurationMinutes);
+        var travelMinutes = TravelGaps(orderedStops).Sum();
+        var budget = orderedStops.Sum(stop => stop.EstimatedBudget);
         var last = orderedStops[^1];
+
         return new TripTotals(
             budget,
             visitMinutes,
             travelMinutes,
             visitMinutes + travelMinutes,
-            last.ScheduledTime.AddMinutes(last.EstimatedDurationMinutes));
+            last.ScheduledTime.AddMinutes(last.EstimatedDurationMinutes)); // giờ trong ngày; "hôm sau" thêm ở Phần 6
     }
 }

@@ -22,7 +22,8 @@ public sealed record FallbackItineraryPayload(
     string BudgetTier,
     IReadOnlyList<FallbackStopDto> Stops,
     StationRefDto AnchorStation,
-    bool NoteApplied = false);
+    bool NoteApplied = false,
+    MetroServiceHoursDto? MetroServiceHours = null); // chỉ có khi InsufficiencyReason là MetroNotRunning
 
 public enum FallbackItineraryStatus
 {

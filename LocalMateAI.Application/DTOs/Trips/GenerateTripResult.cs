@@ -18,7 +18,8 @@ public sealed record GenerateTripResult(
     int? Used = null,
     int? Limit = null,
     DateTime? ResetAt = null,
-    IReadOnlyList<SuggestedStationDto>? SuggestedStations = null) // NoPlaces + InsufficientCandidates
+    IReadOnlyList<SuggestedStationDto>? SuggestedStations = null, // NoPlaces + InsufficientCandidates
+    MetroServiceHoursDto? MetroServiceHours = null) // NoPlaces + MetroNotRunning
 {
     public static GenerateTripResult Succeeded(TripDetailResponse response) =>
         new(GenerateTripResultStatus.Success, response);
@@ -32,8 +33,10 @@ public sealed record GenerateTripResult(
 
     public static GenerateTripResult NoSuitablePlaces(
         string reason,
-        IReadOnlyList<SuggestedStationDto>? suggestedStations = null) =>
-        new(GenerateTripResultStatus.NoPlaces, Reason: reason, SuggestedStations: suggestedStations);
+        IReadOnlyList<SuggestedStationDto>? suggestedStations = null,
+        MetroServiceHoursDto? metroServiceHours = null) =>
+        new(GenerateTripResultStatus.NoPlaces, Reason: reason, SuggestedStations: suggestedStations,
+            MetroServiceHours: metroServiceHours);
 
     public static GenerateTripResult QuotaExceeded(int used, int limit, DateTime resetAt) =>
         new(

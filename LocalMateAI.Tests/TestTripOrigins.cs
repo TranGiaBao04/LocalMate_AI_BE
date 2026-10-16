@@ -17,6 +17,9 @@ namespace LocalMateAI.Tests;
 /// <summary>Dựng nhanh TripOriginResolution cho test. Mặc định: xuất phát bằng toạ độ ngay tại ga Bến Thành.</summary>
 internal static class TestTripOrigins
 {
+    /// <summary>Ngày đi mặc định của TestTripOrigins.At (Chủ nhật).</summary>
+    public static readonly DateOnly DefaultPlannedDate = new(2026, 10, 4);
+
     public static readonly MetroStationSummaryResponse BenThanh =
         new(Guid.NewGuid(), "Bến Thành", 1, 10.7721, 106.6980);
 
@@ -29,7 +32,8 @@ internal static class TestTripOrigins
         Guid? startStationId = null,
         Guid? destinationStationId = null,
         string? serviceAreaFailure = null,
-        MetroBoarding? metroBoarding = null)
+        MetroBoarding? metroBoarding = null,
+        DateOnly? plannedDate = null)
     {
         var boarding = boardingStation ?? BenThanh;
 
@@ -41,6 +45,7 @@ internal static class TestTripOrigins
             startStationId,
             destinationStationId,
             serviceAreaFailure ?? (withinServiceArea ? null : TripInsufficiencyReasons.OutOfServiceArea),
+            plannedDate ?? DefaultPlannedDate,
             metroBoarding);
     }
 
@@ -130,8 +135,11 @@ internal sealed class StubPlaceRepository : IPlaceRepository
     public Task<DeletePlacePersistenceResult> DeleteForAdminAsync(Guid placeId,
         CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
+    // Địa điểm đang Active theo Id (chi tiết địa điểm công khai); không có thì trả null.
+    public IReadOnlyList<PlaceReadModel> ActivePlaces { get; init; } = [];
+
     public Task<PlaceReadModel?> GetActiveByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
-        throw new NotSupportedException();
+        Task.FromResult(ActivePlaces.FirstOrDefault(place => place.Id == id));
 }
 
 internal sealed class StubMetroTimetableSource(MetroTimetable? timetable = null) : IMetroTimetableSource

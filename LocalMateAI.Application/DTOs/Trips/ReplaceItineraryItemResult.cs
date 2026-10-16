@@ -11,7 +11,7 @@ public enum ReplaceItineraryItemResultStatus
     SamePlace,
     PlaceAlreadyInTrip,
     PlaceNotFound,
-    CrossesMidnight
+    TooLong
 }
 
 public sealed record ReplaceItineraryItemResult(
@@ -45,6 +45,6 @@ public sealed record ReplaceItineraryItemResult(
     public static ReplaceItineraryItemResult MissingPlace() =>
         new(ReplaceItineraryItemResultStatus.PlaceNotFound);
 
-    public static ReplaceItineraryItemResult WouldCrossMidnight() =>
-        new(ReplaceItineraryItemResultStatus.CrossesMidnight);
+    public static ReplaceItineraryItemResult TooLong() =>
+        new(ReplaceItineraryItemResultStatus.TooLong);
 }

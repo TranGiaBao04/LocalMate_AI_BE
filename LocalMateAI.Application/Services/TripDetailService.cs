@@ -1,3 +1,4 @@
+using LocalMateAI.Application.DTOs.Places;
 using LocalMateAI.Application.DTOs.Trips;
 using LocalMateAI.Application.Interfaces.Repositories;
 using LocalMateAI.Application.Interfaces.Services;
@@ -10,7 +11,8 @@ public sealed class TripDetailService(
     IUserRepository userRepository,
     ITripRepository tripRepository,
     ISystemSettingProvider settings,
-    IMetroTimetableSource metroTimetableSource) : ITripDetailService
+    IMetroTimetableSource metroTimetableSource,
+    IPlaceOpeningHourRepository openingHourRepository) : ITripDetailService
 {
     public async Task<GetTripDetailResult> GetAsync(
         Guid userId,
@@ -41,30 +43,38 @@ public sealed class TripDetailService(
             ? MetroDayTimetable.For(metroTimetableSource.Timetable, DateOnly.FromDateTime(plannedStart))
             : null;
 
-        return GetTripDetailResult.Succeeded(ToResponse(trip, planning, metroTimetable));
+        // Giờ mở cửa HIỆN TẠI của các địa điểm trong trip, để báo chặng nào rơi vào giờ đóng cửa.
+        var openingHours = await openingHourRepository.GetForPlacesAsync(
+            trip.Items.Select(item => item.PlaceId).Distinct().ToList(),
+            cancellationToken);
+
+        return GetTripDetailResult.Succeeded(ToResponse(trip, planning, metroTimetable, openingHours));
     }
 
     // Dựng response từ read model (logic thuần). FinalizeTripCommand dùng lại để mail lịch trình khớp đúng số liệu API.
     // Trip Metro mà không truyền metroTimetable thì không có Leg (mail lịch trình không dùng Leg).
+    // Không truyền openingHours thì OpeningStatus của mọi chặng là null (mail lịch trình không dùng).
     public static TripDetailResponse ToResponse(
         TripDetailReadModel trip,
         TripPlanningSettings? settings = null,
-        MetroDayTimetable? metroTimetable = null)
+        MetroDayTimetable? metroTimetable = null,
+        IReadOnlyDictionary<Guid, IReadOnlyList<PlaceOpeningHourDto>>? openingHours = null)
     {
         var planning = settings ?? TripPlanningSettings.Default;
         var stops = trip.Items
             .Select(item => new TripStopSnapshot(item.ScheduledTime, item.EstimatedDurationMinutes, item.EstimatedBudget))
             .ToList();
 
+        // Số phút tính từ 00:00 ngày đi (chặng sau nửa đêm ≥ 1440), dùng chung cho đoạn đi tới chặng đầu, khoảng đi và leg.
+        TimeOnly? leaveTime = trip.PlannedStartAt is { } plannedStart ? TimeOnly.FromDateTime(plannedStart) : null;
+        var startMinutes = TripClock.StartMinutes(leaveTime, stops);
+        var travelGaps = TripTotalsCalculator.TravelGaps(stops);
+
         // Đoạn đi từ điểm xuất phát tới chặng đầu = giờ chặng đầu - giờ rời. Không lưu riêng nên suy ra như đoạn giữa
         // các chặng; trip cũ chưa có PlannedStartAt thì để null và không đổi các tổng.
-        int? originMinutes = null;
-        if (trip.PlannedStartAt is { } plannedStart && trip.Items.Count > 0)
-        {
-            var gap = (int)(trip.Items[0].ScheduledTime.ToTimeSpan()
-                            - TimeOnly.FromDateTime(plannedStart).ToTimeSpan()).TotalMinutes;
-            originMinutes = Math.Max(0, gap);
-        }
+        int? originMinutes = leaveTime is { } leave && trip.Items.Count > 0
+            ? Math.Max(0, startMinutes[0] - TripClock.MinuteOfDay(leave))
+            : null;
 
         // Cách đi từng đoạn tính lại bằng đúng bộ luật lúc xếp giờ (TripLegPlanner), theo giờ đã lưu của lịch.
         var legInputs = trip.Items
@@ -96,7 +106,7 @@ public sealed class TripDetailService(
                     var previous = trip.Items[index - 1];
                     var roadKm = TravelTimeEstimator.RoadDistanceKm(
                         previous.Latitude, previous.Longitude, item.Latitude, item.Longitude, settings);
-                    travelMinutes = TripTotalsCalculator.TravelGapMinutes(stops[index - 1], stops[index]);
+                    travelMinutes = travelGaps[index];
                     distanceMeters = (int)Math.Round(roadKm * 1000);
                     walkingMinutes = TravelTimeEstimator.WalkingMinutes(roadKm, settings);
                     motorbikeMinutes = TravelTimeEstimator.MotorbikeMinutes(roadKm, settings);
@@ -107,7 +117,7 @@ public sealed class TripDetailService(
                             TripLegPlanner.BetweenStops(
                                 legInputs[index - 1],
                                 legInputs[index],
-                                MinuteOfDay(previous.ScheduledTime) + previous.EstimatedDurationMinutes,
+                                startMinutes[index - 1] + previous.EstimatedDurationMinutes, // có thể ≥ 1440
                                 trip.TravelMode,
                                 metroTimetable,
                                 planning),
@@ -122,12 +132,23 @@ public sealed class TripDetailService(
                         TripLegPlanner.FromOrigin(
                             new ScheduleOrigin(trip.StartLatitude, trip.StartLongitude, metroBoarding),
                             legInputs[0],
-                            MinuteOfDay(TimeOnly.FromDateTime(leaveAt)),
+                            TripClock.MinuteOfDay(TimeOnly.FromDateTime(leaveAt)),
                             trip.TravelMode,
                             planning),
                         boardingStation,
                         ToStationRef(item.StationOrder, item.StationName));
                 }
+
+                // Trip cũ chưa đặt ngày đi thì không biết là thứ mấy nên không kết luận được.
+                PlaceOpeningStatus? openingStatus = openingHours is null
+                    ? null
+                    : trip.PlannedStartAt is not { } plannedAt
+                        ? PlaceOpeningStatus.Unknown
+                        : OpeningWindows.StatusFor(
+                            openingHours.GetValueOrDefault(item.PlaceId) ?? [],
+                            DateOnly.FromDateTime(plannedAt),
+                            startMinutes[index],
+                            startMinutes[index] + item.EstimatedDurationMinutes);
 
                 return new TripItemResponse(
                     item.ItemId,
@@ -150,7 +171,9 @@ public sealed class TripDetailService(
                     walkingMinutes,
                     motorbikeMinutes,
                     leg,
-                    item.GooglePlaceId);
+                    item.GooglePlaceId,
+                    openingStatus,
+                    startMinutes[index] >= TripClock.MinutesPerDay);
             })
             .ToList();
 
@@ -185,7 +208,9 @@ public sealed class TripDetailService(
             trip.DestinationStation,
             trip.Note,
             trip.NoteApplied,
-            trip.AiExplainedAt);
+            trip.AiExplainedAt,
+            trip.Items.Count > 0
+            && startMinutes[^1] + trip.Items[^1].EstimatedDurationMinutes >= TripClock.MinutesPerDay);
     }
 
     private static TripLegResponse ToLegResponse(
@@ -208,6 +233,4 @@ public sealed class TripDetailService(
 
     private static StationRefDto? ToStationRef(int? order, string? name) =>
         order is { } stationOrder && name is not null ? new StationRefDto(stationOrder, name) : null;
-
-    private static int MinuteOfDay(TimeOnly time) => time.Hour * 60 + time.Minute;
 }

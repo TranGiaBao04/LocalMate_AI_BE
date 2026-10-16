@@ -10,7 +10,8 @@ public sealed class PlaceQueryService(
     IPlaceRepository placeRepository,
     IGeoService geoService,
     ISystemSettingProvider settings,
-    IPlaceReviewRepository placeReviewRepository) : IPlaceQueryService
+    IPlaceReviewRepository placeReviewRepository,
+    IPlaceOpeningHourRepository openingHourRepository) : IPlaceQueryService
 {
     public async Task<IReadOnlyList<MetroExperienceClusterResponse>> GetMetroClustersAsync(
         CancellationToken cancellationToken = default)
@@ -92,6 +93,9 @@ public sealed class PlaceQueryService(
             ?? throw new InvalidOperationException("No metro stations found.");
         var reviews = await placeReviewRepository.GetSummaryAsync(id, cancellationToken);
 
+        // Đã biết địa điểm đang Active nên đọc thẳng giờ mở cửa (1 truy vấn), không kiểm tra tồn tại lần nữa.
+        var openingHours = await openingHourRepository.GetForPlacesAsync([id], cancellationToken);
+
         return new PlaceDetailResponse(
             place.Id,
             place.Name,
@@ -109,6 +113,7 @@ public sealed class PlaceQueryService(
             nearestStation,
             place.GooglePlaceId,
             reviews.AverageRating,
-            reviews.ReviewCount);
+            reviews.ReviewCount,
+            PlaceOpeningHourRules.ToResponse(id, openingHours.GetValueOrDefault(id) ?? []));
     }
 }

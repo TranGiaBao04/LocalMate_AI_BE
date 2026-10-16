@@ -90,14 +90,14 @@ public sealed class TripRequestParsingBaseTests
     }
 
     [Fact]
-    public void NewStartTimeThatNoLongerFitsTheBaseDuration_KeepsTheTime_AndDropsTheDuration()
+    public void LateNewStartTime_KeepsTheBaseDuration()
     {
-        // Người dùng vừa nói "bắt đầu lúc 22h" trên lịch 5 giờ: giữ điều họ vừa nói, để họ chọn lại số giờ.
+        // Người dùng nói "bắt đầu lúc 22h" trên lịch 5 giờ: lịch được đi qua nửa đêm nên giữ nguyên số giờ.
         var answer = Parse(new { isTripRequest = true, startTime = "22:00" });
 
         Assert.Equal(new TimeOnly(22, 0), answer!.Fields.StartTime);
-        Assert.Null(answer.Fields.DurationHours);
-        Assert.Equal(["durationHours", "startTime"], answer.Changed);
+        Assert.Equal(5, answer.Fields.DurationHours);
+        Assert.Equal(["startTime"], answer.Changed);
     }
 
     [Fact]

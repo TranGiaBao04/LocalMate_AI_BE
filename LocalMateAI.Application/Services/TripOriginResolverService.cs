@@ -95,16 +95,36 @@ public sealed class TripOriginResolverService(
             return null;
         }
 
+        // Ngày đi dùng cho lịch tàu và giờ mở cửa theo thứ; bỏ trống ngày = hôm nay giờ Việt Nam.
+        var plannedDate = request.PlannedDate ?? DateOnly.FromDateTime(VietnamTime.Now(timeProvider));
+
         MetroBoarding? metroBoarding = null;
+        MetroServiceHoursDto? metroServiceHours = null;
         if (travelsByMetro)
         {
-            // Lịch tàu theo ngày đi (thứ trong tuần quyết định giờ chuyến cuối); bỏ trống ngày = hôm nay giờ Việt Nam.
-            var plannedDate = request.PlannedDate ?? DateOnly.FromDateTime(VietnamTime.Now(timeProvider));
+            // Lịch tàu theo ngày đi (thứ trong tuần quyết định giờ chuyến cuối).
             metroBoarding = new MetroBoarding(
                 boardingStationSummary.Order,
                 boardingStation.DistanceMeters,
                 StartsAtStation: startStation is not null,
                 MetroDayTimetable.For(metroTimetableSource.Timetable, plannedDate));
+
+            // Cách A: bắt đầu lúc ga lên không có tàu thì chặn; đã bắt đầu lúc tàu còn chạy thì đoạn sau tự đổi xe.
+            var startMinute = TripClock.MinuteOfDay(request.StartTime ?? ItineraryScheduler.DefaultStartTime);
+            if (serviceAreaFailure is null
+                && !metroBoarding.Timetable.IsRunningAt(boardingStationSummary.Order, startMinute))
+            {
+                serviceAreaFailure = TripInsufficiencyReasons.MetroNotRunning;
+
+                // Giờ chuyến đầu/cuối ở ga lên để FE giải thích; lịch tàu ngày đó trống thì để null.
+                metroServiceHours = metroBoarding.Timetable.ServiceHoursAt(boardingStationSummary.Order) is { } hours
+                    ? new MetroServiceHoursDto(
+                        boardingStationSummary.Order,
+                        boardingStationSummary.Name,
+                        TimeOnly.FromTimeSpan(TimeSpan.FromMinutes(hours.First)),
+                        TimeOnly.FromTimeSpan(TimeSpan.FromMinutes(hours.Last)))
+                    : null;
+            }
         }
 
         return new TripOriginResolution(
@@ -115,6 +135,8 @@ public sealed class TripOriginResolverService(
             startStation?.Id,
             destinationStation?.Id,
             serviceAreaFailure,
-            metroBoarding);
+            plannedDate,
+            metroBoarding,
+            metroServiceHours);
     }
 }

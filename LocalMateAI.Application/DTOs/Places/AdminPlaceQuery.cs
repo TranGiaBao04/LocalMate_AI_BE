@@ -25,4 +25,7 @@ public sealed record AdminPlaceQuery : PagedQuery
     public PlaceStatus? Status { get; init; }
     public bool? IsVerified { get; init; }
     public Guid? StationId { get; init; }
+
+    /// <summary>true: chỉ địa điểm đã có giờ mở cửa (ít nhất một thứ); false: chỉ địa điểm chưa có; null: không lọc.</summary>
+    public bool? HasOpeningHours { get; init; }
 }

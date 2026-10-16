@@ -15,7 +15,8 @@ public sealed record TripMatchingResponse(
     IReadOnlyList<ScoredPlaceDto> Candidates,
     IReadOnlyList<ExcludedCandidateDto> Excluded,
     StationRefDto AnchorStation,
-    bool NoteApplied = false);
+    bool NoteApplied = false,
+    MetroServiceHoursDto? MetroServiceHours = null); // chỉ có khi InsufficiencyReason là MetroNotRunning
 
 /// <param name="Origin">Điểm xuất phát đã xác định; chỉ dùng nội bộ (không nằm trong response trả cho client).</param>
 public sealed record TripMatchingResult(

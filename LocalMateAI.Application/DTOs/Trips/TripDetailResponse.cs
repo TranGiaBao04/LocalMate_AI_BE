@@ -28,4 +28,5 @@ public sealed record TripDetailResponse(
     StationRefDto? DestinationStation = null, // ga người dùng chọn để chơi quanh đó; null = "gần tôi"
     string? Note = null, // ghi chú người dùng nhập khi tạo lịch; null = không ghi chú
     bool NoteApplied = false, // true khi ghi chú đã được dùng để ưu tiên địa điểm
-    DateTime? AiExplainedAt = null); // lần gần nhất AI viết lý do cho các chặng; null = lý do mặc định
+    DateTime? AiExplainedAt = null, // lần gần nhất AI viết lý do cho các chặng; null = lý do mặc định
+    bool EndsNextDay = false); // chặng cuối kết thúc từ 00:00 của ngày hôm sau trở đi (EndTime là giờ của ngày hôm sau)

@@ -15,4 +15,5 @@ public sealed record TripFeasibilityResponse(
     int EstimatedStopCount,
     int CandidatePlaceCount,
     StationRefDto AnchorStation,
-    IReadOnlyList<SuggestedStationDto> SuggestedStations);
+    IReadOnlyList<SuggestedStationDto> SuggestedStations,
+    MetroServiceHoursDto? MetroServiceHours = null); // chỉ có khi Reason là MetroNotRunning

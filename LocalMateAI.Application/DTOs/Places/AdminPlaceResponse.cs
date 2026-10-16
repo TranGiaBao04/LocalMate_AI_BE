@@ -15,4 +15,5 @@ public sealed record AdminPlaceResponse(
     string? ImageUrl,
     DateTime CreatedAt,
     DateTime UpdatedAt,
-    string? GooglePlaceId = null); // mã địa điểm Google Maps; null thì FE mở bản đồ theo toạ độ
+    string? GooglePlaceId = null, // mã địa điểm Google Maps; null thì FE mở bản đồ theo toạ độ
+    bool HasOpeningHours = false); // có ít nhất một dòng giờ mở cửa

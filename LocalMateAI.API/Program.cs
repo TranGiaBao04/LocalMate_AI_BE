@@ -292,6 +292,8 @@ builder.Services.AddScoped<ICuratedItineraryRepository, CuratedItineraryReposito
 builder.Services.AddScoped<ICuratedItineraryService, CuratedItineraryService>();
 builder.Services.AddScoped<IAdminCuratedItineraryRepository, AdminCuratedItineraryRepository>();
 builder.Services.AddScoped<IAdminCuratedItineraryService, AdminCuratedItineraryService>();
+builder.Services.AddScoped<IPlaceOpeningHourRepository, PlaceOpeningHourRepository>();
+builder.Services.AddScoped<IPlaceOpeningHourService, PlaceOpeningHourService>();
 builder.Services.AddValidatorsFromAssemblyContaining<TripRequestValidator>();
 builder.Services.AddScoped<ITripCriteriaNormalizationService, TripCriteriaNormalizationService>();
 builder.Services.AddScoped<ITripOriginResolverService, TripOriginResolverService>();

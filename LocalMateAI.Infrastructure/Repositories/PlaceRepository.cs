@@ -205,7 +205,8 @@ public sealed class PlaceRepository(AppDbContext dbContext) : IPlaceRepository
                 place.ImageUrl,
                 place.CreatedAt,
                 place.UpdatedAt,
-                place.GooglePlaceId))
+                place.GooglePlaceId,
+                place.OpeningHours.Any()))
             .ToListAsync(cancellationToken);
     }
 
@@ -242,6 +243,11 @@ public sealed class PlaceRepository(AppDbContext dbContext) : IPlaceRepository
             places = places.Where(place => place.IsVerified == isVerified);
         }
 
+        if (query.HasOpeningHours is { } hasOpeningHours)
+        {
+            places = places.Where(place => place.OpeningHours.Any() == hasOpeningHours);
+        }
+
         if (query.StationId is { } stationId)
         {
             var stationLocation = await dbContext.MetroStations
@@ -273,7 +279,8 @@ public sealed class PlaceRepository(AppDbContext dbContext) : IPlaceRepository
                 place.ImageUrl,
                 place.CreatedAt,
                 place.UpdatedAt,
-                place.GooglePlaceId))
+                place.GooglePlaceId,
+                place.OpeningHours.Any()))
             .ToPagedResultAsync(query, cancellationToken);
     }
 
@@ -299,7 +306,8 @@ public sealed class PlaceRepository(AppDbContext dbContext) : IPlaceRepository
                 place.ImageUrl,
                 place.CreatedAt,
                 place.UpdatedAt,
-                place.GooglePlaceId))
+                place.GooglePlaceId,
+                place.OpeningHours.Any()))
             .SingleOrDefaultAsync(cancellationToken);
     }
 

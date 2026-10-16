@@ -17,10 +17,12 @@ public static class FallbackItineraryBuilder
         TravelMode travelMode = TravelMode.Auto,
         TimeOnly? startTime = null,
         ScheduleOrigin? origin = null,
-        TripPlanningSettings? settings = null)
+        TripPlanningSettings? settings = null,
+        DateOnly? plannedDate = null)
     {
+        // Cùng luật giờ mở cửa với lúc chọn chặng ở TripMatchingService, để giờ hai lần xếp khớp nhau.
         var inputs = rankedCandidates
-            .Select(scored => ItineraryScheduler.ToScheduleInput(scored.Candidate, settings))
+            .Select(scored => ItineraryScheduler.ToScheduleInput(scored.Candidate, settings, plannedDate))
             .ToList();
 
         return ItineraryScheduler

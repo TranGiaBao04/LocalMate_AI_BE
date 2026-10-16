@@ -53,7 +53,8 @@ public sealed class TripMatchingService(
                     criteria.BudgetTier.ToString(),
                     [],
                     [],
-                    anchorStation),
+                    anchorStation,
+                    MetroServiceHours: origin.MetroServiceHours),
                 Origin: origin);
         }
 
@@ -91,10 +92,15 @@ public sealed class TripMatchingService(
             .ToList();
 
         // ItineraryScheduler là nơi duy nhất quyết định số chặng: chọn theo thứ hạng tới khi hết thời lượng hoặc ngân sách.
+        // Mỗi chặng còn phải mở cửa suốt lúc tham quan (theo giờ mở cửa của ngày đi).
         var planning = await TripPlanningSettings.LoadAsync(settings, cancellationToken);
+        var inputs = ranked
+            .Select(place => ItineraryScheduler.ToScheduleInput(place.Candidate, planning, origin.PlannedDate))
+            .ToList();
+        var startTime = request.StartTime ?? ItineraryScheduler.DefaultStartTime;
         var slots = ItineraryScheduler.Schedule(
-            ranked.Select(place => ItineraryScheduler.ToScheduleInput(place.Candidate, planning)).ToList(),
-            request.StartTime ?? ItineraryScheduler.DefaultStartTime,
+            inputs,
+            startTime,
             request.DurationHours,
             request.TravelMode,
             request.BudgetMax,
@@ -109,12 +115,15 @@ public sealed class TripMatchingService(
 
         var isSufficient = selected.Count >= 1;
 
-        // Không có ứng viên nào trong ngân sách = thiếu địa điểm; có ứng viên mà không chặng nào vừa = thiếu giờ.
+        // Không có ứng viên nào trong ngân sách = thiếu địa điểm; có ứng viên mà không xếp được chặng nào thì
+        // phân biệt vướng giờ mở cửa với thiếu thời gian.
         var insufficiencyReason = isSufficient
             ? null
             : filtered.Passed.Count == 0
                 ? TripInsufficiencyReasons.InsufficientCandidates
-                : TripInsufficiencyReasons.DurationTooShort;
+                : ItineraryScheduler.ExplainEmptySchedule(
+                    inputs, startTime, request.DurationHours, request.TravelMode, request.BudgetMax,
+                    origin.ToScheduleOrigin(), planning);
 
         return new TripMatchingResult(
             TripMatchingResultStatus.Success,
