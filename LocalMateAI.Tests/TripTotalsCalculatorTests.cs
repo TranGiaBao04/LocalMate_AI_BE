@@ -54,6 +54,31 @@ public sealed class TripTotalsCalculatorTests
     }
 
     [Fact]
+    public void Calculate_StopsAcrossMidnight_CountsTravelGap()
+    {
+        var totals = TripTotalsCalculator.Calculate([
+            Stop(23, 0, 60, 0), // kết thúc 00:00
+            Stop(0, 20, 45, 0)  // đi 20', kết thúc 01:05
+        ]);
+
+        Assert.Equal(20, totals.TotalTravelMinutes);
+        Assert.Equal(125, totals.TotalMinutes);
+        Assert.Equal(new TimeOnly(1, 5), totals.EndTime);
+    }
+
+    [Fact]
+    public void TravelGaps_FirstStopIsZeroAndOthersAreGaps()
+    {
+        var gaps = TripTotalsCalculator.TravelGaps([
+            Stop(8, 0, 60, 0),
+            Stop(9, 15, 75, 0),
+            Stop(10, 40, 45, 0)
+        ]);
+
+        Assert.Equal([0, 15, 10], gaps);
+    }
+
+    [Fact]
     public void Calculate_SumsBudgetIncludingFreeStops()
     {
         var totals = TripTotalsCalculator.Calculate([

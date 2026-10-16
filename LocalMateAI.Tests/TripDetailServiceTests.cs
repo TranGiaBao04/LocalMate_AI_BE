@@ -375,6 +375,30 @@ public sealed class TripDetailServiceTests
         Assert.Equal(15, response.TotalTravelMinutes);
     }
 
+    [Fact]
+    public async Task Get_TripAcrossMidnight_ReportsTravelFromOriginAndBetweenStops()
+    {
+        var tripId = Guid.NewGuid();
+        var model = Model(tripId, new DateTime(2026, 10, 3, 23, 40, 0), new TimeOnly(0, 5));
+        model = model with
+        {
+            Items =
+            [
+                Item(0, new TimeOnly(0, 5), 90, 0m, isVisited: false),  // kết thúc 01:35
+                Item(1, new TimeOnly(1, 50), 60, 0m, isVisited: false) // đi 15'
+            ]
+        };
+        var service = new TripDetailService(new FakeUserRepository(UserId), new FakeTripRepository(model), new FakeSystemSettingProvider(), new StubMetroTimetableSource());
+
+        var response = (await service.GetAsync(UserId, tripId)).Response!;
+
+        Assert.Equal(25, response.TravelMinutesFromOrigin);
+        Assert.Equal(15, response.Items[1].TravelMinutesFromPrevious);
+        Assert.Equal(25 + 15, response.TotalTravelMinutes);
+        Assert.Equal(150 + 40, response.TotalMinutes);
+        Assert.Equal(new TimeOnly(2, 50), response.EndTime);
+    }
+
     private static TripItemReadModel Item(
         int order,
         TimeOnly time,
