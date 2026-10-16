@@ -37,20 +37,39 @@ public sealed class ItineraryItemRepository(AppDbContext dbContext) : IItinerary
             return null;
         }
 
-        var tripPlaceIds = await dbContext.ItineraryItems
+        var stops = await dbContext.ItineraryItems
             .AsNoTracking()
             .Where(candidate => candidate.TripId == tripId)
-            .Select(candidate => candidate.PlaceId)
+            .OrderBy(candidate => candidate.OrderIndex)
+            .Select(candidate => new
+            {
+                candidate.Id,
+                candidate.PlaceId,
+                candidate.ScheduledTime,
+                candidate.EstimatedDurationMinutes,
+                candidate.EstimatedBudget
+            })
             .ToListAsync(cancellationToken);
+
+        // Phút bắt đầu của từng chặng tính từ 00:00 ngày đi (chặng sau nửa đêm ≥ 1440).
+        var startMinutes = TripClock.StartMinutes(
+            item.PlannedStartAt is { } leave ? TimeOnly.FromDateTime(leave) : null,
+            stops
+                .Select(stop => new TripStopSnapshot(
+                    stop.ScheduledTime, stop.EstimatedDurationMinutes, stop.EstimatedBudget))
+                .ToList());
+        var position = stops.FindIndex(stop => stop.Id == item.Id);
 
         return new OwnedItemAlternativesReadModel(
             item.Id,
             item.TripId,
             item.Status,
             item.PlaceId,
-            tripPlaceIds,
+            stops.Select(stop => stop.PlaceId).ToList(),
             item.PlannedStartAt,
-            item.DurationHours);
+            item.DurationHours,
+            startMinutes[position],
+            stops[position].EstimatedDurationMinutes);
     }
 
     public async Task<ReplaceItemPersistenceResult> ReplaceItemPlaceAndRecalculateTimelineAsync(

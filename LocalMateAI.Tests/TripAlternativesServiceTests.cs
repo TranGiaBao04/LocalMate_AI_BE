@@ -152,6 +152,61 @@ public sealed class TripAlternativesServiceTests
         Assert.Equal(TripAlternativesService.DefaultLimit, result.Alternatives!.Count);
     }
 
+    [Fact]
+    public async Task GetAlternativesAsync_ReportsOpeningStatus_AndPutsClosedPlacesLast()
+    {
+        // Chặng 23:00–00:00 thứ Bảy 17/10/2026.
+        var current = MakeCandidate(distance: 50);
+        var closedNear = MakeCandidate(distance: 100) with { OpeningHours = TestOpeningHours.EveryDay(8, 22) };
+        var unknown = MakeCandidate(distance: 150) with { OpeningHours = [] };
+        var openFar = MakeCandidate(distance: 200) with { OpeningHours = TestOpeningHours.EveryDay(17, 2) };
+        var item = NightItem(current.PlaceId);
+
+        var result = await CreateSut(UserId, item, Station(), [current, closedNear, unknown, openFar])
+            .GetAlternativesAsync(UserId, TripId, ItemId, null);
+
+        Assert.Equal(
+            [(openFar.PlaceId, PlaceOpeningStatus.Open), (unknown.PlaceId, PlaceOpeningStatus.Unknown),
+             (closedNear.PlaceId, PlaceOpeningStatus.Closed)],
+            result.Alternatives!.Select(alternative => (alternative.PlaceId, alternative.OpeningStatus!.Value)));
+    }
+
+    [Fact]
+    public async Task GetAlternativesAsync_LimitIsAppliedAfterMovingClosedPlacesDown()
+    {
+        var current = MakeCandidate(distance: 50);
+        var closedNear = MakeCandidate(distance: 100) with { OpeningHours = TestOpeningHours.EveryDay(8, 22) };
+        var openFar = MakeCandidate(distance: 200) with { OpeningHours = TestOpeningHours.EveryDay(17, 2) };
+
+        var result = await CreateSut(UserId, NightItem(current.PlaceId), Station(), [current, closedNear, openFar])
+            .GetAlternativesAsync(UserId, TripId, ItemId, 1);
+
+        Assert.Equal(openFar.PlaceId, Assert.Single(result.Alternatives!).PlaceId);
+    }
+
+    [Fact]
+    public async Task GetAlternativesAsync_TripWithoutPlannedDate_IsUnknown_AndKeepsTheRanking()
+    {
+        var current = MakeCandidate(distance: 50);
+        var closedNear = MakeCandidate(distance: 100) with { OpeningHours = TestOpeningHours.EveryDay(8, 22) };
+        var openFar = MakeCandidate(distance: 200) with { OpeningHours = TestOpeningHours.EveryDay(17, 2) };
+        var item = NightItem(current.PlaceId) with { TripPlannedStartAt = null };
+
+        var result = await CreateSut(UserId, item, Station(), [current, closedNear, openFar])
+            .GetAlternativesAsync(UserId, TripId, ItemId, null);
+
+        Assert.Equal([closedNear.PlaceId, openFar.PlaceId], result.Alternatives!.Select(alternative => alternative.PlaceId));
+        Assert.All(result.Alternatives!, alternative => Assert.Equal(PlaceOpeningStatus.Unknown, alternative.OpeningStatus));
+    }
+
+    private static OwnedItemAlternativesReadModel NightItem(Guid placeId) =>
+        MakeItem(placeId) with
+        {
+            TripPlannedStartAt = new DateTime(2026, 10, 17, 22, 30, 0),
+            VisitStartMinute = 23 * 60,
+            VisitDurationMinutes = 60
+        };
+
     private static TripAlternativesService CreateSut(
         Guid? userId = null,
         OwnedItemAlternativesReadModel? item = null,

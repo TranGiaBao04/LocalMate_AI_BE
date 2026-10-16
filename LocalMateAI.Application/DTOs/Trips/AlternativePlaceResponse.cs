@@ -12,4 +12,5 @@ public sealed record AlternativePlaceResponse(
     string? ImageUrl,
     string StationName,
     double DistanceFromStationMeters,
-    double MatchScore);
+    double MatchScore,
+    PlaceOpeningStatus? OpeningStatus = null); // mở cửa trong khung giờ của chặng đang thay không
