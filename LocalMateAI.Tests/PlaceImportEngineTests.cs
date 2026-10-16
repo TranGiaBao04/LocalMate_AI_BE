@@ -79,6 +79,29 @@ public sealed class PlaceImportEngineTests
     }
 
     [Fact]
+    public async Task CommitAsync_TemplateRows_StoreTheirOpeningHoursInsteadOfADefault()
+    {
+        var (engine, _, placeRepo) = CreateEngine();
+        var template = await new PlaceImportService().GetImportTemplateAsync("xlsx");
+
+        await using var stream = new MemoryStream(template.Content);
+        var preview = await engine.PreviewAsync(stream, template.FileName);
+        await engine.CommitAsync(new CommitPlaceImportRequest(preview.ImportId));
+
+        Assert.All(preview.Rows, row => Assert.Empty(row.Warnings));
+
+        // "Mon-Sun 06:00-21:00": mở cả tuần đúng giờ trong file (trước đây rơi về 08:00–22:00).
+        var pho = placeRepo.AddedPlaces.Single(place => place.Name == "Phở Phượng Sài Gòn");
+        Assert.Equal(7, pho.OpeningHours.Count);
+        Assert.All(pho.OpeningHours, hour => Assert.Equal(new TimeOnly(6, 0), hour.OpenTime));
+
+        // "Tue-Sun 08:00-17:00": thứ 2 nghỉ.
+        var museum = placeRepo.AddedPlaces.Single(place => place.Name == "Bảo Tàng Lịch Sử TP.HCM");
+        Assert.True(museum.OpeningHours.Single(hour => hour.DayOfWeek == DayOfWeek.Monday).IsClosed);
+        Assert.Equal(6, museum.OpeningHours.Count(hour => !hour.IsClosed && hour.CloseTime == new TimeOnly(17, 0)));
+    }
+
+    [Fact]
     public async Task CommitAsync_IdempotencyGuard_PreventsDoubleSubmit()
     {
         var (engine, cache, _) = CreateEngine();

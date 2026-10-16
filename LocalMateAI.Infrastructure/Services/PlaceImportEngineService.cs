@@ -85,6 +85,13 @@ public sealed class PlaceImportEngineService(
                 errors.Add(stationRes.ErrorMessage ?? "Ga Metro không hợp lệ.");
             }
 
+            // Giờ mở cửa: đọc không được thì chỉ cảnh báo (không chặn dòng), địa điểm được tạo không có giờ.
+            var (_, openHoursWarning) = PlaceOpeningHourRules.ParseImportText(raw.RawOpenHours);
+            if (openHoursWarning is not null)
+            {
+                warnings.Add(openHoursWarning);
+            }
+
             // Duplicate detection check (<50m and similar name)
             bool isDuplicateCandidate = false;
             if (coordRes.IsValid && coordRes.Latitude.HasValue && coordRes.Longitude.HasValue && !string.IsNullOrWhiteSpace(raw.RawName))
@@ -291,34 +298,15 @@ public sealed class PlaceImportEngineService(
     private static string GetLockCacheKey(string importId) => $"import_lock_{importId}";
     private static string EscapeCsv(string? val) => (val ?? string.Empty).Replace("\"", "\"\"");
 
-    private static List<PlaceOpeningHour> BuildOpeningHours(string? rawOpenHours)
-    {
-        var days = Enum.GetValues<DayOfWeek>();
-        var defaultOpen = new TimeOnly(8, 0);
-        var defaultClose = new TimeOnly(22, 0);
-
-        var open = defaultOpen;
-        var close = defaultClose;
-
-        if (!string.IsNullOrWhiteSpace(rawOpenHours))
-        {
-            var parts = rawOpenHours.Split(new[] { "-", "–", "—", "to", "Đến", "đến" }, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length == 2)
+    // Trống hoặc không đọc được ⇒ không ghi giờ (trước đây tự điền 08:00–22:00, làm sai bộ lọc giờ mở cửa).
+    private static List<PlaceOpeningHour> BuildOpeningHours(string? rawOpenHours) =>
+        PlaceOpeningHourRules.ParseImportText(rawOpenHours).Days
+            .Select(day => new PlaceOpeningHour
             {
-                if (TimeOnly.TryParse(parts[0], out var parsedOpen) && TimeOnly.TryParse(parts[1], out var parsedClose) && parsedOpen != parsedClose)
-                {
-                    open = parsedOpen;
-                    close = parsedClose;
-                }
-            }
-        }
-
-        return days.Select(day => new PlaceOpeningHour
-        {
-            DayOfWeek = day,
-            OpenTime = open,
-            CloseTime = close,
-            IsClosed = false
-        }).ToList();
-    }
+                DayOfWeek = day.DayOfWeek,
+                IsClosed = day.IsClosed,
+                OpenTime = day.OpenTime,
+                CloseTime = day.CloseTime
+            })
+            .ToList();
 }
