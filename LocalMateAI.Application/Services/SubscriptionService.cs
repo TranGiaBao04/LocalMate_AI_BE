@@ -27,6 +27,7 @@ public sealed class SubscriptionService(
             result.Add(new(PlanIdentity.PublicCode(plan.Code), version.Price, version.DurationDays,
                 version.GenerateLimit, version.SavedTripLimit)
             {
+                Name = plan.Name,
                 AiDailyCallLimit = version.AiDailyCallLimit,
                 AiExplainCallsPerTripLimit = version.AiExplainCallsPerTripLimit,
                 Features = features.Select(f => new SubscriptionFeatureResponse(f.Code, f.Name, f.Description)).ToArray()
@@ -61,6 +62,10 @@ public sealed class SubscriptionService(
             new SubscriptionUsageResponse(generateUsed, plan.GenerateLimit, effective.GenerateResetAt ?? month.NextStartUtc),
             new SubscriptionSavedTripsResponse(savedTripsUsed, plan.SavedTripLimit),
             new SubscriptionAiResponse(dailyUsed, dailyLimit, dayStartUtc.AddDays(1)))
-        { EffectiveUntil = effective.EffectiveUntil, IsTrial = effective.IsTrial };
+        {
+            PlanName = effective.Plan.Name,
+            EffectiveUntil = effective.EffectiveUntil,
+            IsTrial = effective.IsTrial
+        };
     }
 }
