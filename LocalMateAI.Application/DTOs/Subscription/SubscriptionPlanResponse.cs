@@ -7,6 +7,7 @@ public sealed record SubscriptionPlanResponse(
     int? GenerateLimit,
     int? SavedTripLimit)
 {
+    public string Name { get; init; } = "";
     public int? AiDailyCallLimit { get; init; }
     public int? AiExplainCallsPerTripLimit { get; init; }
     public IReadOnlyList<SubscriptionFeatureResponse> Features { get; init; } = [];

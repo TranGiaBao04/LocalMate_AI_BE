@@ -13,6 +13,7 @@ public sealed record SubscriptionMeResponse(
     SubscriptionSavedTripsResponse SavedTrips,
     SubscriptionAiResponse Ai)
 {
+    public string PlanName { get; init; } = "";
     public DateTime? EffectiveUntil { get; init; }
     public bool IsTrial { get; init; }
 }
