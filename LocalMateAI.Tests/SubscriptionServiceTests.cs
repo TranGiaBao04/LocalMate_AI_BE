@@ -22,6 +22,7 @@ public sealed class SubscriptionServiceTests
         var plans = await service.GetPlansAsync();
 
         Assert.Equal(["Free", "TripPass", "Membership"], plans.Select(plan => plan.Code));
+        Assert.Equal(["Free", "Trip Pass", "Membership"], plans.Select(plan => plan.Name));
         Assert.Equal(0, plans[0].Price);
         Assert.Equal(19_000, plans[1].Price);
         Assert.Equal(59_000, plans[2].Price);
@@ -60,6 +61,18 @@ public sealed class SubscriptionServiceTests
     {
         var response = new LocalMateAI.Application.DTOs.Subscription.SubscriptionPlanResponse("Free", 0, null, 1, 1);
         Assert.Empty(response.Features);
+    }
+
+    [Fact]
+    public async Task PlanName_FollowsTheNameStoredInTheCatalog()
+    {
+        var repo = new FakeSubscriptionRepository([]);
+        repo.Plans.Single(p => p.Code == "FREE").Name = "Free Explorer";
+        repo.Plans.Single(p => p.Code == "TRIP_PASS").Name = "Weekly Pass";
+        var service = CreateService(subscriptions: repo);
+
+        Assert.Equal("Weekly Pass", (await service.GetPlansAsync()).Single(p => p.Code == "TripPass").Name);
+        Assert.Equal("Free Explorer", (await service.GetMySubscriptionAsync(UserId))!.PlanName);
     }
 
     [Fact]
