@@ -321,6 +321,8 @@ builder.Services.AddScoped<IPlaceReviewService, PlaceReviewService>();
 builder.Services.AddScoped<IPlaceReviewQueryService, PlaceReviewQueryService>();
 builder.Services.AddScoped<IAdminFeedbackRepository, AdminFeedbackRepository>();
 builder.Services.AddScoped<IAdminFeedbackService, AdminFeedbackService>();
+builder.Services.AddScoped<IAppFeedbackRepository, AppFeedbackRepository>();
+builder.Services.AddScoped<IAppFeedbackService, AppFeedbackService>();
 
 // Register Application Services for Google Maps & Navigation (BE-60, BE-61, BE-62, BE-63)
 builder.Services.AddSingleton<IGoogleMapsUrlBuilderService, GoogleMapsUrlBuilderService>();
